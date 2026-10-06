@@ -45,6 +45,12 @@ def test_classify_miss():
     assert analyze.classify(50, 25, is_best=False, opponent_drop=3) == "blunder"
 
 
+def test_classify_special_moves_win():
+    assert analyze.classify(50, 50, is_best=True, special="great") == "great"
+    assert analyze.classify(50, 50, is_best=True, special="brilliant") == "brilliant"
+    assert analyze.classify(50, 50, is_best=True) == "best"
+
+
 def test_phase_and_time_control():
     assert analyze.phase(chess.Board(), 1) == "opening"
     assert analyze.phase(chess.Board(), 25) == "middlegame"

@@ -145,9 +145,10 @@ CREATE TABLE IF NOT EXISTS moves (
     win_pct_before  REAL,                   -- 0-100, mover POV (Lichess win% curve)
     win_pct_after   REAL,
     accuracy        REAL,                   -- 0-100, Lichess per-move accuracy formula
-    classification  TEXT,                   -- best | good | inaccuracy | mistake | blunder
+    classification  TEXT,                   -- brilliant | great | best | excellent | good | inaccuracy | mistake | blunder | miss
     clock_left      REAL,                   -- seconds on mover's clock after the move, if recorded
     time_spent      REAL,                   -- seconds spent on this move (increment-adjusted)
+    eval_second     INTEGER,                -- eval of the engine's 2nd choice in fen_before, White POV; NULL if one legal move
     PRIMARY KEY (game_id, ply)
 );
 CREATE INDEX IF NOT EXISTS moves_user_class ON moves (is_user, classification);

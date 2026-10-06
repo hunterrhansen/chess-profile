@@ -18,6 +18,8 @@ import chess
 import chess.engine
 import chess.pgn
 
+from . import brilliance
+
 MATE_CP = 10000   # mate-in-N stored as +/-(MATE_CP - N)
 CLAMP_CP = 1000   # evals clamped to this for cp_loss / win% so mates don't dominate averages
 PIECE_VALUES = {chess.KNIGHT: 3, chess.BISHOP: 3, chess.ROOK: 5, chess.QUEEN: 9}
@@ -28,11 +30,14 @@ THRESHOLDS = [(20, "blunder"), (10, "mistake"), (5, "inaccuracy"), (2, "good")]
 # A "miss": the opponent's previous move lost at least this much and the reply gave up at
 # least this much too, instead of cashing in.
 MISS_DROP = 10
+# Great and Brilliant (brilliance.py) need the top move, or one losing less than this.
+TOP_DROP = 1
 
 MOVE_COLUMNS = [
     "game_id", "ply", "move_number", "color", "is_user", "phase", "fen_before", "san", "uci",
     "best_san", "best_uci", "eval_before", "eval_after", "mate_before", "mate_after", "cp_loss",
     "win_pct_before", "win_pct_after", "accuracy", "classification", "clock_left", "time_spent",
+    "eval_second",
 ]
 SUMMARY_COLUMNS = [
     "game_id", "engine", "depth", "user_acpl", "opponent_acpl", "user_accuracy",
@@ -57,8 +62,11 @@ def move_accuracy(win_before: float, win_after: float) -> float:
 
 
 def classify(win_before: float, win_after: float, is_best: bool,
-             opponent_drop: float | None = None) -> str:
-    """Label one move. `opponent_drop` is how much win% the opponent's previous move lost."""
+             opponent_drop: float | None = None, special: str | None = None) -> str:
+    """Label one move. `opponent_drop` is how much win% the opponent's previous move lost;
+    `special` is "brilliant" or "great" when brilliance.py found the move to be one."""
+    if special:
+        return special
     if is_best:
         return "best"
     drop = win_before - win_after
@@ -68,6 +76,19 @@ def classify(win_before: float, win_after: float, is_best: bool,
         if drop >= threshold:
             return label
     return "excellent"
+
+
+def special(before: chess.Board, move: chess.Move, is_best: bool, win_before: float,
+            win_after: float, cp_after: int, cp_second: int | None) -> str | None:
+    """"brilliant", "great" or None for one move; evals in centipawns from the mover's side."""
+    if not is_best and win_before - win_after >= TOP_DROP:
+        return None
+    if brilliance.is_brilliant(before, move, cp_after, cp_second):
+        return "brilliant"
+    win_second = win_pct(cp_second) if cp_second is not None else None
+    if brilliance.is_great(before, move, is_best, win_before, win_second, cp_after, cp_second):
+        return "great"
+    return None
 
 
 def phase(board: chess.Board, move_number: int) -> str:
@@ -88,16 +109,20 @@ def parse_time_control(tc: str | None) -> tuple[float | None, float]:
     return float(m.group(1)), float(m.group(2) or 0)
 
 
-def _evaluate(engine, board: chess.Board, depth: int) -> tuple[int, int | None, chess.Move | None]:
-    """(cp White POV, mate-in-N White POV or None, best move) for one position."""
+def _evaluate(engine, board: chess.Board, depth: int) -> dict:
+    """For one position, White POV: cp and mate-in-N for the best move, cp for the second
+    best (None with only one legal move), and the best move."""
     if board.is_checkmate():  # side to move has been mated
-        return (-MATE_CP if board.turn == chess.WHITE else MATE_CP), None, None
+        return {"cp": -MATE_CP if board.turn == chess.WHITE else MATE_CP, "mate": None,
+                "second": None, "best": None}
     if board.is_game_over():  # stalemate, insufficient material, ...
-        return 0, None, None
-    info = engine.analyse(board, chess.engine.Limit(depth=depth))
-    score = info["score"].white()
-    pv = info.get("pv")
-    return score.score(mate_score=MATE_CP), score.mate(), (pv[0] if pv else None)
+        return {"cp": 0, "mate": None, "second": None, "best": None}
+    infos = engine.analyse(board, chess.engine.Limit(depth=depth), multipv=2)
+    score = infos[0]["score"].white()
+    pv = infos[0].get("pv") or []
+    second = infos[1]["score"].white().score(mate_score=MATE_CP) if len(infos) > 1 else None
+    return {"cp": score.score(mate_score=MATE_CP), "mate": score.mate(), "second": second,
+            "best": pv[0] if pv else None}
 
 
 def analyze_game(engine, game_id: int, pgn: str, user_color: str | None,
@@ -124,8 +149,9 @@ def analyze_game(engine, game_id: int, pgn: str, user_color: str | None,
         before = boards[i]
         mover = before.turn
         sign = 1 if mover == chess.WHITE else -1
-        cp_before, mate_before, best = evals[i]
-        cp_after, mate_after, _ = evals[i + 1]
+        cp_before, mate_before, best = evals[i]["cp"], evals[i]["mate"], evals[i]["best"]
+        cp_after, mate_after = evals[i + 1]["cp"], evals[i + 1]["mate"]
+        cp_second = evals[i]["second"]
 
         wb, wa = win_pct(sign * cp_before), win_pct(sign * cp_after)
         is_best = best is not None and node.move == best
@@ -158,9 +184,12 @@ def analyze_game(engine, game_id: int, pgn: str, user_color: str | None,
             "win_pct_before": round(wb, 2),
             "win_pct_after": round(wa, 2),
             "accuracy": round(move_accuracy(wb, wa), 2),
-            "classification": classify(wb, wa, is_best, prev_drop),
+            "classification": classify(wb, wa, is_best, prev_drop, special(
+                before, node.move, is_best, wb, wa, sign * cp_after,
+                sign * cp_second if cp_second is not None else None)),
             "clock_left": clock,
             "time_spent": round(spent, 2) if spent is not None else None,
+            "eval_second": cp_second,
         })
         prev_drop = wb - wa
     return rows
@@ -197,12 +226,18 @@ def reclassify(conn, log=print) -> int:
     with conn:
         for game_id in game_ids:
             rows = [dict(r) for r in conn.execute(
-                """SELECT ply, is_user, uci, best_uci, win_pct_before, win_pct_after,
-                          cp_loss, accuracy FROM moves WHERE game_id = ? ORDER BY ply""", (game_id,))]
+                """SELECT ply, is_user, color, fen_before, uci, best_uci, win_pct_before,
+                          win_pct_after, cp_loss, accuracy, eval_after, eval_second
+                   FROM moves WHERE game_id = ? ORDER BY ply""", (game_id,))]
             prev_drop = None
             for r in rows:
                 wb, wa = r["win_pct_before"], r["win_pct_after"]
-                r["classification"] = classify(wb, wa, r["uci"] == r["best_uci"], prev_drop)
+                sign = 1 if r["color"] == "white" else -1
+                move = chess.Move.from_uci(r["uci"])
+                second = r["eval_second"]
+                r["classification"] = classify(wb, wa, r["uci"] == r["best_uci"], prev_drop, special(
+                    chess.Board(r["fen_before"]), move, r["uci"] == r["best_uci"], wb, wa,
+                    sign * r["eval_after"], sign * second if second is not None else None))
                 prev_drop = wb - wa
             conn.executemany("UPDATE moves SET classification = ? WHERE game_id = ? AND ply = ?",
                              [(r["classification"], game_id, r["ply"]) for r in rows])
