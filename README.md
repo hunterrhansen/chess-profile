@@ -180,6 +180,16 @@ the Settings depth), are cached in `engine_lines`, and come with a one-line expl
 written from what the line actually does: mate, material won or lost, or the swing in win
 chance ([`lines.py`](src/chessprofile/lines.py)). ← → step through the line, Esc returns.
 
+**Play** (`/play`) is a game against Stockfish in the same layout as game review: pick a
+strength from 250 to full strength and a color, then move by dragging or clicking (legal
+moves show as dots; promotions make a queen). Resign, take back, and hint (the engine's best
+move as a green arrow) sit under the move list. Stockfish only plays as weak as about 1320
+Elo, so below that the bot picks among its top moves at random, more loosely the lower the
+rating ([`play.py`](src/chessprofile/play.py)). A game in progress survives leaving the page
+or reloading. A finished game is saved as an unrated game with source `bot`, so it stays out
+of the overview's stats, and analysed straight away (spread over every core, about 20s for a
+40-move game at depth 18); **Review game** opens it in game review.
+
 **Settings** (the gear at the bottom of the sidebar):
 
 - *Appearance*: theme, board colors, whether the best move shows automatically in game
@@ -193,7 +203,8 @@ chance ([`lines.py`](src/chessprofile/lines.py)). ← → step through the line,
   unless `--depth` is passed).
 - *Data*: database and backup locations and sizes.
 
-These are the app's only writes to the database.
+These, notes, cached engine lines and games played on Play are the app's only writes to the
+database.
 
 ## Example queries
 
