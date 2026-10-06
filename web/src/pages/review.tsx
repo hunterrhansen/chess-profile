@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js'
-import { ArrowLeft, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
+import { ArrowLeft, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ExternalLink, LoaderCircle, Play, Undo2 } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { type Arrow, Chessboard } from 'react-chessboard'
 import { Link, useParams, useSearchParams } from 'react-router'
@@ -9,13 +9,17 @@ import { MoveText } from '@/components/move-text'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { type Classification, type GameDetail, type MoveRow, useApi } from '@/lib/api'
+import { type Classification, type EngineLine, type EngineLines, type GameDetail, type LineKind, type MoveRow, useApi } from '@/lib/api'
 import { CLASSIFICATION, isSound } from '@/lib/classification'
 import { clock, longDate, thinkTime, timeControl } from '@/lib/format'
 import { BOARDS, usePreferences } from '@/lib/preferences'
 import { cn } from '@/lib/utils'
 
 const BEST_ARROW = 'rgba(99, 153, 34, 0.85)'
+// Engine lines are drawn in blue so they never look like the real game's yellow.
+const LINE_ARROW = 'rgba(70, 130, 220, 0.75)'
+const LINE_LIGHT = '#B7D2EE'
+const LINE_DARK = '#86A9CF'
 const TIME_BAR_FULL = 100 // seconds of thinking that fill a time bar
 const BLUNDER_DROP = 20 // keep in step with analyze.THRESHOLDS
 
@@ -49,6 +53,27 @@ function useReplay(game: GameDetail | null) {
   }, [game])
 }
 
+/** "Why" / "Best line" for one move, fetched the first time it's asked for, then kept. */
+function useEngineLines(gameId: string | undefined, ply: number | null) {
+  const [cache, setCache] = useState<Record<number, { data?: EngineLines; error?: string }>>({})
+  const entry = ply == null ? undefined : cache[ply]
+  useEffect(() => {
+    if (ply == null || entry) return
+    const ctrl = new AbortController()
+    fetch(`/api/games/${gameId}/lines/${ply}`, { signal: ctrl.signal })
+      .then(async (res) => {
+        const body = await res.json()
+        if (!res.ok) throw new Error(body.detail ?? res.status)
+        setCache((c) => ({ ...c, [ply]: { data: body } }))
+      })
+      .catch((e: Error) => {
+        if (e.name !== 'AbortError') setCache((c) => ({ ...c, [ply]: { error: e.message } }))
+      })
+    return () => ctrl.abort()
+  }, [gameId, ply, entry])
+  return entry ?? null
+}
+
 export function ReviewPage() {
   const { id } = useParams()
   const { data: game, error } = useApi<GameDetail>(`/api/games/${id}`)
@@ -61,10 +86,33 @@ export function ReviewPage() {
   // With the "on request" preference, the best move stays hidden until asked for, per move.
   const [revealedPly, setRevealedPly] = useState<number | null>(null)
   const showBest = prefs.bestArrow === 'auto' || revealedPly === ply
+  // An engine line shown on the board in place of the game; leaving the move closes it.
+  const [line, setLine] = useState<{ kind: LineKind; step: number } | null>(null)
+  const lineEntry = useEngineLines(id, line ? ply : null)
+  const lineView = useMemo(() => {
+    const data = line && lineEntry?.data?.[line.kind]
+    if (!data) return null
+    const chess = new Chess(data.start_fen)
+    const fens = [chess.fen()]
+    const squares: { from: string; to: string }[] = []
+    for (const uci of data.moves) {
+      const m = chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] })
+      fens.push(chess.fen())
+      squares.push({ from: m.from, to: m.to })
+    }
+    return { data, fens, squares, firstPly: data.kind === 'best' ? ply : ply + 1 }
+  }, [line, lineEntry, ply])
+  const lineLength = lineView?.squares.length ?? 0
+  const step = line ? Math.min(Math.max(line.step, 1), Math.max(lineLength, 1)) : 0
+  const setStep = useCallback(
+    (s: number) => setLine((l) => (l ? { ...l, step: Math.max(1, Math.min(lineLength, s)) } : l)),
+    [lineLength],
+  )
 
   const setPly = useCallback(
-    (p: number) =>
-      setParams(
+    (p: number) => {
+      setLine(null)
+      return setParams(
         (prev) => {
           const next = new URLSearchParams(prev)
           if (p > 0) next.set('ply', String(p))
@@ -72,13 +120,22 @@ export function ReviewPage() {
           return next
         },
         { replace: true },
-      ),
+      )
+    },
     [setParams],
   )
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.metaKey || e.ctrlKey || e.altKey) return
+      if (line) {
+        // While a line is open the keys step through it; Escape goes back to the game.
+        if (e.key === 'Escape') setLine(null)
+        const to = { ArrowLeft: step - 1, ArrowRight: step + 1, Home: 1, End: lineLength }[e.key]
+        if (to !== undefined) setStep(to)
+        if (to !== undefined || e.key === 'Escape') e.preventDefault()
+        return
+      }
       const to = { ArrowLeft: ply - 1, ArrowRight: ply + 1, Home: 0, End: last }[e.key]
       if (to === undefined) return
       e.preventDefault()
@@ -86,7 +143,7 @@ export function ReviewPage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [ply, last, setPly])
+  }, [ply, last, setPly, line, step, lineLength, setStep])
 
   if (error) return <p className="text-sm text-destructive">Couldn't load this game. {error}</p>
   if (!game || !replay) return <ReviewSkeleton />
@@ -95,6 +152,14 @@ export function ReviewPage() {
   const them: Side = me === 'white' ? 'black' : 'white'
   const move = replay.moves[ply - 1] as MoveRow | undefined
   const san = game.san[ply - 1]
+  const mine = ply > 0 && (ply % 2 === 1) === (me === 'white')
+  const moverWhite = ply % 2 === 1
+  // Your win chance (not the mover's): before the move, and at the end of the open line.
+  const yours = (moverPct: number | null | undefined) =>
+    moverPct == null ? null : Math.round(mine ? moverPct : 100 - moverPct)
+  const inLine = !!lineView
+  const lineWhiteWin =
+    lineView?.data.win_pct != null ? (moverWhite ? lineView.data.win_pct : 100 - lineView.data.win_pct) : null
 
   return (
     <div className="flex flex-col gap-3">
@@ -107,22 +172,45 @@ export function ReviewPage() {
             name={me === 'white' ? game.black : game.white}
             rating={me === 'white' ? game.black_elo : game.white_elo}
             seconds={clockAt(replay.moves, them, ply, replay.baseClock)}
+            dim={inLine}
+            tag={inLine ? 'Engine line · not played' : undefined}
           />
           <div className="flex gap-2">
-            <EvalBar whiteWin={replay.whiteWin[ply]} move={move} orientation={me} />
-            <Board
-              fen={replay.fens[ply]}
-              orientation={me}
-              lastMove={replay.squares[ply - 1]}
-              move={move}
-              showBest={showBest}
-              palette={BOARDS[prefs.board]}
-            />
+            {lineView ? (
+              <EvalBar
+                whiteWin={lineWhiteWin ?? replay.whiteWin[ply]}
+                label={lineView.data.mate != null ? `M${Math.abs(lineView.data.mate)}` : null}
+                orientation={me}
+              />
+            ) : (
+              <EvalBar whiteWin={replay.whiteWin[ply]} move={move} orientation={me} />
+            )}
+            {lineView ? (
+              <Board
+                fen={lineView.fens[step]}
+                orientation={me}
+                lastMove={lineView.squares[step - 1]}
+                nextMove={lineView.squares[step]}
+                showBest={false}
+                palette={BOARDS[prefs.board]}
+                inLine
+              />
+            ) : (
+              <Board
+                fen={replay.fens[ply]}
+                orientation={me}
+                lastMove={replay.squares[ply - 1]}
+                move={move}
+                showBest={showBest}
+                palette={BOARDS[prefs.board]}
+              />
+            )}
           </div>
           <PlayerStrip
             name={me === 'white' ? game.white : game.black}
             rating={me === 'white' ? game.white_elo : game.black_elo}
             seconds={clockAt(replay.moves, me, ply, replay.baseClock)}
+            dim={inLine}
             you
           />
         </div>
@@ -142,21 +230,39 @@ export function ReviewPage() {
                 </Button>
               )}
             </div>
-            {replay.moves.length > 0 && (
+            {prefs.showGraph && replay.moves.length > 0 && (
               <WinGraph replay={replay} me={me} ply={ply} onSelect={setPly} />
             )}
+            {line && move && san ? (
+              <LinePanel
+                kind={line.kind}
+                view={lineView}
+                error={lineEntry?.error ?? null}
+                step={step}
+                onStep={setStep}
+                ply={ply}
+                san={san}
+                classification={move.classification}
+                yourBefore={yours(move.win_pct_before)}
+                yourEnd={yours(lineView?.data.win_pct)}
+                onBack={() => setLine(null)}
+                onSwitch={() => setLine({ kind: line.kind === 'why' ? 'best' : 'why', step: 1 })}
+              />
+            ) : (
             <MovePanel
               ply={ply}
               san={san}
               move={move}
               analysed={replay.moves.length > 0}
-              mine={ply > 0 && (ply % 2 === 1) === (me === 'white')}
+              mine={mine}
               opponent={me === 'white' ? game.black : game.white}
               clockBefore={ply ? clockAt(replay.moves, ply % 2 === 1 ? 'white' : 'black', ply - 1, replay.baseClock) : null}
               clockAfter={ply ? clockAt(replay.moves, ply % 2 === 1 ? 'white' : 'black', ply, replay.baseClock) : null}
               showBest={showBest}
               onReveal={() => setRevealedPly(ply)}
+              onShow={(kind) => setLine({ kind, step: 1 })}
             />
+            )}
             <Tabs
               value={tab}
               onValueChange={(v) =>
@@ -179,16 +285,27 @@ export function ReviewPage() {
                 </TabsTrigger>
               </TabsList>
             </Tabs>
-            {tab === 'moves' ? (
-              <MoveList san={game.san} moves={replay.moves} ply={ply} onSelect={setPly} />
-            ) : (
-              <KeyMoments game={game} moves={replay.moves} whiteWin={replay.whiteWin} me={me} ply={ply} onSelect={setPly} />
-            )}
+            <div className={cn('flex min-h-0 flex-1 flex-col transition-opacity', inLine && 'opacity-40')}>
+              {tab === 'moves' ? (
+                <MoveList san={game.san} moves={replay.moves} ply={ply} onSelect={setPly} />
+              ) : (
+                <KeyMoments game={game} moves={replay.moves} whiteWin={replay.whiteWin} me={me} ply={ply} onSelect={setPly} />
+              )}
+            </div>
+            {/* While a line is open these step through the line instead of the game. */}
             <div className="grid grid-cols-4 gap-2 border-t p-2">
-              <NavButton label="First move" onClick={() => setPly(0)} icon={<ChevronFirst />} />
-              <NavButton label="Previous move" onClick={() => setPly(Math.max(0, ply - 1))} icon={<ChevronLeft />} />
-              <NavButton label="Next move" onClick={() => setPly(Math.min(last, ply + 1))} icon={<ChevronRight />} />
-              <NavButton label="Last move" onClick={() => setPly(last)} icon={<ChevronLast />} />
+              <NavButton label="First move" onClick={() => (line ? setStep(1) : setPly(0))} icon={<ChevronFirst />} />
+              <NavButton
+                label="Previous move"
+                onClick={() => (line ? setStep(step - 1) : setPly(Math.max(0, ply - 1)))}
+                icon={<ChevronLeft />}
+              />
+              <NavButton
+                label="Next move"
+                onClick={() => (line ? setStep(step + 1) : setPly(Math.min(last, ply + 1)))}
+                icon={<ChevronRight />}
+              />
+              <NavButton label="Last move" onClick={() => (line ? setStep(lineLength) : setPly(last))} icon={<ChevronLast />} />
             </div>
           </aside>
         </div>
@@ -209,11 +326,15 @@ function PlayerStrip({
   rating,
   seconds,
   you,
+  dim,
+  tag,
 }: {
   name: string
   rating: number | null
   seconds: number | null
   you?: boolean
+  dim?: boolean
+  tag?: string
 }) {
   return (
     <div className="flex h-9 items-center gap-2 pl-6 text-sm">
@@ -222,14 +343,33 @@ function PlayerStrip({
         {rating}
         {you && ' · you'}
       </span>
-      {seconds != null && <ClockChip seconds={seconds} className="ml-auto text-base" />}
+      {tag && (
+        <span className="ml-1 rounded-full bg-blue-500/15 px-2 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-300">
+          {tag}
+        </span>
+      )}
+      {seconds != null && (
+        <ClockChip seconds={seconds} className={cn('ml-auto text-base transition-opacity', dim && 'opacity-40')} />
+      )}
     </div>
   )
 }
 
-function EvalBar({ whiteWin, move, orientation }: { whiteWin: number; move?: MoveRow; orientation: Side }) {
+function EvalBar({
+  whiteWin,
+  move,
+  label,
+  orientation,
+}: {
+  whiteWin: number
+  move?: MoveRow
+  label?: string | null
+  orientation: Side
+}) {
   const score =
-    move?.mate_after != null
+    label !== undefined
+      ? label
+      : move?.mate_after != null
       ? `M${Math.abs(move.mate_after)}`
       : move?.eval_after != null
         ? (Math.abs(move.eval_after) / 100).toFixed(1)
@@ -271,32 +411,47 @@ function Board({
   orientation,
   lastMove,
   move,
+  nextMove,
   showBest,
   palette,
+  inLine,
 }: {
   fen: string
   orientation: Side
   lastMove?: { from: string; to: string }
   move?: MoveRow
+  nextMove?: { from: string; to: string }
   showBest: boolean
   palette: (typeof BOARDS)[keyof typeof BOARDS]
+  inLine?: boolean
 }) {
   const squareStyles = lastMove
     ? Object.fromEntries(
         [lastMove.from, lastMove.to].map((sq) => [
           sq,
-          { backgroundColor: isLightSquare(sq) ? palette.lightHl : palette.darkHl },
+          {
+            backgroundColor: isLightSquare(sq)
+              ? inLine ? LINE_LIGHT : palette.lightHl
+              : inLine ? LINE_DARK : palette.darkHl,
+          },
         ]),
       )
     : {}
-  const arrows: Arrow[] =
-    showBest && move && !isSound(move.classification) && move.best_uci
+  // In the game: the engine's better move in green. In a line: the line's next move in blue.
+  const arrows: Arrow[] = inLine
+    ? nextMove ? [{ startSquare: nextMove.from, endSquare: nextMove.to, color: LINE_ARROW }] : []
+    : showBest && move && !isSound(move.classification) && move.best_uci
       ? [{ startSquare: move.best_uci.slice(0, 2), endSquare: move.best_uci.slice(2, 4), color: BEST_ARROW }]
       : []
   const badge = move?.classification && lastMove ? { square: lastMove.to, kind: move.classification } : null
 
   return (
-    <div className="min-w-0 flex-1 overflow-visible rounded-sm">
+    <div
+      className={cn(
+        'min-w-0 flex-1 overflow-visible rounded-sm',
+        inLine && 'outline-3 outline-offset-2 outline-blue-500',
+      )}
+    >
       <Chessboard
         options={{
           position: fen,
@@ -418,6 +573,7 @@ function MovePanel({
   clockAfter,
   showBest,
   onReveal,
+  onShow,
 }: {
   ply: number
   san?: string
@@ -429,6 +585,7 @@ function MovePanel({
   clockAfter: number | null
   showBest: boolean
   onReveal: () => void
+  onShow: (kind: LineKind) => void
 }) {
   if (!ply || !san) {
     return (
@@ -506,6 +663,14 @@ function MovePanel({
                     Show best move
                   </button>
                 )}
+                <span className="ml-auto flex gap-1.5">
+                  <Button variant="outline" size="sm" className="h-7 px-2.5 text-foreground" onClick={() => onShow('why')}>
+                    <Play className="size-3 fill-current" /> Why
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-7 px-2.5 text-foreground" onClick={() => onShow('best')}>
+                    <Play className="size-3 fill-current" /> Best line
+                  </Button>
+                </span>
               </span>
             ) : kind === 'best' ? (
               "The engine's top choice"
@@ -517,6 +682,108 @@ function MovePanel({
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+/** An engine line in place of the move panel: title, the moves as steps, why it matters. */
+function LinePanel({
+  kind,
+  view,
+  error,
+  step,
+  onStep,
+  ply,
+  san,
+  classification,
+  yourBefore,
+  yourEnd,
+  onBack,
+  onSwitch,
+}: {
+  kind: LineKind
+  view: { data: EngineLine; firstPly: number; squares: unknown[] } | null
+  error: string | null
+  step: number
+  onStep: (step: number) => void
+  ply: number
+  san: string
+  classification: Classification | null
+  yourBefore: number | null
+  yourEnd: number | null
+  onBack: () => void
+  onSwitch: () => void
+}) {
+  const label = classification ? CLASSIFICATION[classification].label.toLowerCase() : 'move'
+  const article = /^[aeiou]/.test(label) ? 'an' : 'a'
+  return (
+    <div className="border-b bg-blue-500/10 px-3 py-2.5 text-sm">
+      <div className="flex items-center gap-2 font-medium">
+        {kind === 'why' ? (
+          <span>
+            Why <MoveText ply={ply} san={san} number /> is {article} {label}
+          </span>
+        ) : (
+          <span>
+            Best line{view && <>: <MoveText ply={ply} san={view.data.san[0]} number /></>}
+          </span>
+        )}
+        {view && (
+          <span className="ml-auto text-xs font-normal text-muted-foreground tabular-nums">
+            {step} / {view.squares.length}
+          </span>
+        )}
+      </div>
+
+      {error ? (
+        <p className="mt-2 text-destructive">Couldn't get the line. {error}</p>
+      ) : !view ? (
+        <p className="mt-2 flex items-center gap-2 text-muted-foreground">
+          <LoaderCircle className="size-4 animate-spin" /> Asking Stockfish…
+        </p>
+      ) : (
+        <>
+          <ol className="mt-2 flex flex-wrap gap-1" aria-label="Engine line">
+            {view.data.san.map((s, i) => {
+              const linePly = view.firstPly + i
+              return (
+                <li key={i}>
+                  <button
+                    onClick={() => onStep(i + 1)}
+                    aria-current={i + 1 === step ? 'step' : undefined}
+                    className={cn(
+                      'rounded-md px-2 py-0.5 tabular-nums',
+                      i + 1 === step
+                        ? 'bg-blue-500/20 font-semibold text-blue-700 dark:text-blue-300'
+                        : 'bg-muted hover:bg-foreground/10',
+                      i + 1 > step && 'opacity-60',
+                    )}
+                  >
+                    <MoveText ply={linePly} san={s} number={linePly % 2 === 1 || i === 0} />
+                  </button>
+                </li>
+              )
+            })}
+          </ol>
+          {view.data.summary && <p className="mt-2 leading-relaxed">{view.data.summary}</p>}
+          {yourBefore != null && yourEnd != null && (
+            <p className="mt-1 text-muted-foreground">
+              Your chance{' '}
+              <span className="text-foreground tabular-nums">
+                {yourBefore}% → {yourEnd}%
+              </span>
+            </p>
+          )}
+        </>
+      )}
+      <div className="mt-2.5 flex gap-2">
+        <Button size="sm" onClick={onBack}>
+          <Undo2 /> Back to game
+        </Button>
+        <Button size="sm" variant="outline" onClick={onSwitch}>
+          {kind === 'why' ? 'Show best line' : 'Show why'}
+        </Button>
+      </div>
     </div>
   )
 }

@@ -65,6 +65,8 @@ SQLite, one file. Tables in [`schema.sql`](src/chessprofile/schema.sql):
 - `game_analysis`: per-game engine summary (accuracy, ACPL, blunder/mistake counts).
 - `runs`: one row per `update` (status, counts, errors).
 - `settings`: app settings changed from the web app, e.g. `analysis_depth`.
+- `engine_lines`: cached "Why" / "Best line" engine lines per move, filled on demand by game
+  review.
 - `accounts`, `sync_state`: which handles are yours and the incremental-sync cursors.
 
 Principles:
@@ -156,8 +158,16 @@ review it.
 **Game review** (`/games/<id>?ply=<n>`) replays a game from your side: eval bar, both
 clocks as they stood at that move, the last move in yellow with its classification badge,
 and the engine's better move as a green arrow when you (or they) went wrong. The sidebar
-has a win-chance graph (click to jump), the selected move explained, and Moves / Key
-moments tabs. ← → step through the game, Home / End jump to the ends.
+shows the selected move (your win chance before and after, and the mover's clock), and
+Moves / Key moments tabs; a win-chance graph can be turned on in Settings. ← → step through
+the game, Home / End jump to the ends.
+
+For any move worse than Good, **Why** and **Best line** play an engine line on the board
+(drawn in blue, so it never looks like the real game): how the move gets punished, or what
+should have been played. Lines come from Stockfish on the first click (about a second, at
+the Settings depth), are cached in `engine_lines`, and come with a one-line explanation
+written from what the line actually does: mate, material won or lost, or the swing in win
+chance ([`lines.py`](src/chessprofile/lines.py)). ← → step through the line, Esc returns.
 
 **Settings** (the gear at the bottom of the sidebar):
 

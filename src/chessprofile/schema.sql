@@ -174,3 +174,14 @@ CREATE TABLE IF NOT EXISTS settings (
     value       TEXT NOT NULL,
     updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
+
+-- Engine lines for game review's "Why" / "Best line" buttons, computed on first request
+-- and kept. kind: best (from the position before the move) | why (from the one after it).
+CREATE TABLE IF NOT EXISTS engine_lines (
+    game_id     INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+    ply         INTEGER NOT NULL,
+    depth       INTEGER NOT NULL,
+    data        TEXT NOT NULL,          -- JSON: {"best": {...}, "why": {...}} (see lines.py)
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    PRIMARY KEY (game_id, ply, depth)
+);

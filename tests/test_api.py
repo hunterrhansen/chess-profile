@@ -218,3 +218,31 @@ def test_settings_shows_the_live_run(client, system, tmp_path):
     assert s["current_run"]["progress"]["detail"] == "1 of 3 games"
     assert s["last_run"]["errors"] == ["backup: disk full"]
     assert s["last_run"]["progress"]["done"][0]["error"] == "disk full"
+
+
+def test_engine_lines_are_computed_once_then_cached(client, tmp_path, monkeypatch):
+    import chess
+    import chess.engine
+
+    calls = []
+
+    class FakeEngine:
+        def __init__(self, depth, engine_path=None):
+            calls.append(depth)
+
+        def __enter__(self):
+            return lambda board: (chess.engine.PovScore(chess.engine.Cp(30), chess.WHITE),
+                                  [next(iter(board.legal_moves))])
+
+        def __exit__(self, *exc):
+            pass
+
+    monkeypatch.setattr(api.lines, "Engine", FakeEngine)
+    with db.connect(tmp_path / "chess.db") as conn:
+        conn.execute("UPDATE moves SET fen_before = ?, uci = 'e2e4' WHERE game_id = 2 AND ply = 1",
+                     (chess.STARTING_FEN,))
+    first = client.get("/api/games/2/lines/1").json()
+    assert set(first) == {"best", "why"} and first["why"]["start_fen"].split()[1] == "b"
+    assert client.get("/api/games/2/lines/1").json() == first
+    assert calls == [18]  # second request came from the cache
+    assert client.get("/api/games/2/lines/99").status_code == 404

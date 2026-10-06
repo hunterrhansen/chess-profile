@@ -8,6 +8,7 @@ export interface Preferences {
   bestArrow: 'auto' | 'request'
   overviewRange: Range
   sidebarCollapsed: boolean
+  showGraph: boolean
 }
 
 export const BOARDS = {
@@ -22,6 +23,7 @@ const DEFAULTS: Preferences = {
   bestArrow: 'auto',
   overviewRange: '90d',
   sidebarCollapsed: false,
+  showGraph: false,
 }
 const KEY = 'chessprofile.preferences'
 

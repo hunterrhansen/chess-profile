@@ -151,6 +151,17 @@ function AppearanceSection() {
           ]}
         />
       </Row>
+      <Row label="Win-chance graph in game review" hint="A graph of your chances across the game, above the move. Click it to jump.">
+        <Segmented
+          label="Win-chance graph in game review"
+          value={prefs.showGraph ? 'on' : 'off'}
+          onChange={(v) => set({ showGraph: v === 'on' })}
+          options={[
+            { value: 'off', label: 'Hidden' },
+            { value: 'on', label: 'Shown' },
+          ]}
+        />
+      </Row>
       <Row label="Overview opens on">
         <Segmented<Preferences['overviewRange']>
           label="Overview opens on"

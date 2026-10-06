@@ -181,6 +181,21 @@ export interface MoveRow {
   time_spent: number | null
 }
 
+export type LineKind = 'why' | 'best'
+
+/** An engine line for game review's "Why" / "Best line" (see lines.py). */
+export interface EngineLine {
+  kind: LineKind
+  start_fen: string
+  moves: string[] // UCI
+  san: string[]
+  win_pct: number | null // the reviewed move's mover's win chance at the end of the line
+  mate: number | null
+  summary: string | null
+}
+
+export type EngineLines = Partial<Record<LineKind, EngineLine>>
+
 export interface GameDetail extends Game {
   account: string | null
   white: string

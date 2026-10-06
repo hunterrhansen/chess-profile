@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import db, schedule, update
+from . import db, lines, schedule, update
 from .analyze import THRESHOLDS
 
 # A position counts as "winning" once the user's win chance reaches this after one of
@@ -286,6 +286,34 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
         # Games already imported stay; the account just stops being synced.
         with write() as conn, conn:
             conn.execute("DELETE FROM accounts WHERE source = ? AND handle = ?", (source, handle))
+
+    @app.get("/api/games/{game_id}/lines/{ply}")
+    def engine_lines(game_id: int, ply: int):
+        """The "Why" and "Best line" for one move. Computed with Stockfish the first time
+        (about a second) at the Settings depth, then served from the engine_lines table."""
+        depth_row = query("SELECT value FROM settings WHERE key = 'analysis_depth'")
+        depth = int(depth_row[0]["value"]) if depth_row else db.DEFAULT_DEPTH
+        cached = query("SELECT data FROM engine_lines WHERE game_id = ? AND ply = ? AND depth = ?",
+                       (game_id, ply, depth))
+        if cached:
+            return json.loads(cached[0]["data"])
+        move = query("""SELECT m.fen_before, m.uci, m.is_user, g.opponent
+                        FROM moves m JOIN games g ON g.id = m.game_id
+                        WHERE m.game_id = ? AND m.ply = ?""", (game_id, ply))
+        if not move:
+            raise HTTPException(404, "No analysed move there; run `chessprofile analyze` first.")
+        m = move[0]
+        # Who answers the move in the "why" line: you, after the opponent's moves.
+        other_side = "you" if m["is_user"] == 0 else (m["opponent"] or "your opponent")
+        try:
+            with lines.Engine(depth) as engine:
+                data = lines.compute(m["fen_before"], m["uci"], other_side, engine)
+        except SystemExit as e:  # Stockfish not installed
+            raise HTTPException(503, str(e)) from None
+        with write() as conn, conn:
+            conn.execute("INSERT OR REPLACE INTO engine_lines (game_id, ply, depth, data) VALUES (?, ?, ?, ?)",
+                         (game_id, ply, depth, json.dumps(data)))
+        return data
 
     @app.get("/api/settings")
     def settings():
