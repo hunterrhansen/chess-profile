@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js'
-import { ArrowLeft, ArrowRight, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
+import { ArrowLeft, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { type Arrow, Chessboard } from 'react-chessboard'
 import { Link, useParams, useSearchParams } from 'react-router'
@@ -391,16 +391,21 @@ function ClockChip({ seconds, className }: { seconds: number; className?: string
   )
 }
 
-/** Win chance for a classification's "after" value: red for errors, amber for inaccuracies. */
-function afterTone(kind: Classification | null | undefined) {
-  if (kind === 'mistake' || kind === 'blunder' || kind === 'miss') return 'text-loss'
-  if (kind === 'inaccuracy') return 'text-amber-600 dark:text-amber-400'
-  return ''
+/**
+ * Color for a change in YOUR win chance, whoever moved: what it means for you, not how good
+ * the move was (the badge says that). +10 or more green, -10 or more red, -5 to -10 amber.
+ */
+function changeTone(change: number) {
+  if (change >= 10) return { text: 'text-win', chip: 'bg-win/15 text-win' }
+  if (change <= -10) return { text: 'text-loss', chip: 'bg-loss/15 text-loss' }
+  if (change <= -5) return { text: 'text-amber-600 dark:text-amber-400', chip: 'text-amber-600 dark:text-amber-400' }
+  return { text: '', chip: 'text-muted-foreground' }
 }
 
 /**
- * The selected move, "then and now": the mover's win chance and clock before the move,
- * the thinking time in between, and both after it.
+ * The selected move: your win chance before and after it (from your side even on the
+ * opponent's moves, like the graph), then the mover's clock before and after with the
+ * thinking time.
  */
 function MovePanel({
   ply,
@@ -434,7 +439,12 @@ function MovePanel({
     )
   }
   const kind = move?.classification
-  const pct = (v: number | null) => `${Math.round(v ?? 0)}%`
+  // Stored win%s are the mover's; flip the opponent's moves to your side.
+  const yours = (v: number | null) => Math.round(mine ? (v ?? 50) : 100 - (v ?? 50))
+  const before = yours(move?.win_pct_before ?? null)
+  const after = yours(move?.win_pct_after ?? null)
+  const change = after - before
+  const tone = changeTone(change)
   return (
     <div className="min-h-24 border-b px-3 py-2.5 text-sm">
       <div className="flex items-center gap-2 text-base font-medium">
@@ -451,23 +461,34 @@ function MovePanel({
         <p className="mt-1 text-muted-foreground">Not analysed yet. Run `chessprofile analyze`.</p>
       ) : (
         <>
-          <div className="mt-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-center">
-            <div className="flex flex-col items-center gap-1">
-              <span className="text-[11px] text-muted-foreground">Before</span>
-              <span className="text-xl font-medium tabular-nums">{pct(move.win_pct_before)}</span>
-              {clockBefore != null && <ClockChip seconds={clockBefore} className="text-xs" />}
-            </div>
-            <div className="flex flex-col items-center text-[11px] text-muted-foreground">
-              <ArrowRight className="size-4" />
-              {move.time_spent != null && <span className="tabular-nums">{thinkTime(move.time_spent)}</span>}
-            </div>
-            <div className="flex flex-col items-center gap-1">
-              <span className="text-[11px] text-muted-foreground">After</span>
-              <span className={cn('text-xl font-medium tabular-nums', afterTone(kind))}>
-                {pct(move.win_pct_after)}
+          <div className="mt-2.5 grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-0.5 rounded-lg bg-muted px-2.5 py-2">
+              <span className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                Chance
+                <span className={cn('rounded px-1 font-medium tabular-nums', tone.chip)}>
+                  {change > 0 ? '+' : change < 0 ? '−' : '±'}
+                  {Math.abs(change)}%
+                </span>
               </span>
-              {clockAfter != null && <ClockChip seconds={clockAfter} className="text-xs" />}
+              <span className="whitespace-nowrap tabular-nums">
+                <span className="text-base font-medium">{before}</span>
+                <span className="text-muted-foreground"> → </span>
+                <span className={cn('text-base font-medium', tone.text)}>{after}%</span>
+              </span>
             </div>
+            {clockBefore != null && clockAfter != null && (
+              <div className="flex flex-col gap-0.5 rounded-lg bg-muted px-2.5 py-2">
+                <span className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                  {mine ? 'Your clock' : 'Their clock'}
+                  {move.time_spent != null && <span className="tabular-nums">{thinkTime(move.time_spent)}</span>}
+                </span>
+                <span className="whitespace-nowrap font-mono text-[15px] tabular-nums">
+                  <span className={cn(clockBefore < 60 && 'text-loss')}>{clock(clockBefore)}</span>
+                  <span className="text-muted-foreground"> → </span>
+                  <span className={cn(clockAfter < 60 && 'text-loss')}>{clock(clockAfter)}</span>
+                </span>
+              </div>
+            )}
           </div>
           <div className="mt-2.5 text-muted-foreground">
             {!isSound(kind ?? null) && move.best_san ? (
