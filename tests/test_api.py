@@ -250,3 +250,43 @@ def test_engine_lines_are_computed_once_then_cached(client, tmp_path, monkeypatc
     client.get("/api/games/2/lines/1")
     assert calls == [18, 18]  # ...is recomputed
     assert client.get("/api/games/2/lines/99").status_code == 404
+
+
+def test_position_key_ignores_move_counters_and_en_passant():
+    a = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2"
+    b = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 4 7"
+    assert api.position_key(a) == api.position_key(b)
+    assert api.position_key(a) != api.position_key(a.replace(" w ", " b "))
+
+
+def test_notes(client, tmp_path):
+    # Games 1 and 2 reach the same position after 1.e4 e5, by different move orders for 2.
+    with db.connect(tmp_path / "chess.db") as conn:
+        conn.execute("UPDATE games SET moves_san = 'e4 e5 Nf3' WHERE id = 1")
+        conn.execute("UPDATE games SET moves_san = 'e3 e6 e4 e5' WHERE id = 2")
+    after_e5 = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2"
+
+    r = client.post("/api/notes", json={"body": "  Symmetrical: think about Nf3  ", "tags": ["#Opening", "opening", " "],
+                                        "game_id": 1, "ply": 2, "fen": after_e5})
+    assert r.status_code == 201
+    note = r.json()
+    assert note["body"] == "Symmetrical: think about Nf3" and note["tags"] == ["opening"]
+    assert note["plies"] == [2] and note["game"]["id"] == 1 and note["game"]["ply"] == 2
+    client.post("/api/notes", json={"body": "Lost this one on time", "game_id": 1})  # whole-game note
+
+    in_1 = client.get("/api/games/1/notes").json()
+    assert [(n["body"], n["plies"]) for n in in_1] == [
+        ("Symmetrical: think about Nf3", [2]), ("Lost this one on time", [])]
+    # The same position shows up in game 2 (at ply 4), linking back to game 1.
+    in_2 = client.get("/api/games/2/notes").json()
+    assert [(n["body"], n["plies"], n["game"]["id"]) for n in in_2] == [("Symmetrical: think about Nf3", [4], 1)]
+    assert client.get("/api/games/3/notes").json() == []
+    assert client.get("/api/games/999/notes").status_code == 404
+
+    assert client.post("/api/notes", json={"body": "   "}).status_code == 400
+    assert client.post("/api/notes", json={"body": "x", "fen": "not a fen"}).status_code == 400
+    assert client.post("/api/notes", json={"body": "x", "game_id": 999}).status_code == 400
+
+    assert client.delete(f"/api/notes/{note['id']}").status_code == 204
+    assert client.delete(f"/api/notes/{note['id']}").status_code == 404
+    assert client.get("/api/games/2/notes").json() == []

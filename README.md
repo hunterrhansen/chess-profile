@@ -57,7 +57,8 @@ SQLite, one file. Tables in [`schema.sql`](src/chessprofile/schema.sql):
   `speed`, and the full original `pgn` (with clock and eval comments).
 - `puzzle_attempts`: one row per attempt (`success`, `fen`, `solution`, `themes` JSON).
 - `snapshots`: point-in-time copies of profile/stats endpoints (rating history).
-- `notes`: your learnings, optionally linked to a game or FEN.
+- `notes`: your learnings, optionally linked to a game or FEN. Notes written in game review
+  store the position, so they also show up in any other game that reaches it.
 - `moves`: one row per half-move of every analysed game: position, your move vs. the
   engine's best, evals before/after, centipawn loss, win% before/after, accuracy,
   `classification` (best / excellent / good / inaccuracy / mistake / blunder / miss), `phase`, clock left and
