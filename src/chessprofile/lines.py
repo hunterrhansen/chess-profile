@@ -11,6 +11,7 @@ import chess.engine
 
 from .analyze import MATE_CP, find_engine, win_pct
 
+VERSION = 2     # bump when the output changes, so cached lines are recomputed
 MIN_PLIES = 4   # show at least this much of a line...
 MAX_PLIES = 8   # ...and at most this, stopping early at the first quiet move after MIN_PLIES
 VALUES = {chess.PAWN: 1, chess.KNIGHT: 3, chess.BISHOP: 3, chess.ROOK: 5, chess.QUEEN: 9}
@@ -41,11 +42,17 @@ def _amount(points: int) -> str:
             6: "a rook and a pawn", 9: "the queen"}.get(points, f"{points} points of material")
 
 
+def _mark(board: chess.Board, move: chess.Move) -> str:
+    """A move in the explanation, tagged with who plays it ("[[b:Rb3]]") so the web app can
+    draw the piece icon in that side's style."""
+    return f"[[{'w' if board.turn == chess.WHITE else 'b'}:{board.san(move)}]]"
+
+
 def _san_line(board: chess.Board, moves: list[chess.Move], limit: int = 3) -> str:
     b = board.copy()
     out = []
     for move in moves[:limit]:
-        out.append(b.san(move))
+        out.append(_mark(b, move))
         b.push(move)
     return " ".join(out)
 
@@ -61,10 +68,10 @@ def explain(kind: str, before: chess.Board, played: chess.Move, start: chess.Boa
         end.push(move)
     gained = material(end, mover) - material(before, mover)
     mate = score.pov(mover).mate()
-    played_san = before.san(played)
+    played_san = _mark(before, played)
 
     if kind == "best":
-        best_san = before.san(moves[0])
+        best_san = _mark(before, moves[0])
         if mate is not None and mate > 0:
             return f"{best_san} mates in {mate}: {_san_line(start, moves, 5)}."
         if gained > 0:
@@ -76,7 +83,7 @@ def explain(kind: str, before: chess.Board, played: chess.Move, start: chess.Boa
             return f"{best_san} gives up {_amount(-gained)} for a stronger position."
         return f"{best_san} keeps the balance where it was, unlike {played_san}."
 
-    reply = start.san(moves[0])
+    reply = _mark(start, moves[0])
     if mate is not None and mate < 0:
         return f"{played_san} allows mate in {-mate}, starting with {reply}."
     if gained < 0:
@@ -97,6 +104,7 @@ def line_json(kind: str, before: chess.Board, played: chess.Move, start: chess.B
     mover = before.turn
     cp = score.pov(mover).score(mate_score=MATE_CP)
     return {
+        "v": VERSION,
         "kind": kind,
         "start_fen": start.fen(),
         "moves": [m.uci() for m in moves],

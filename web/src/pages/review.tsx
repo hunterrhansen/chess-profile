@@ -5,7 +5,7 @@ import { type Arrow, Chessboard } from 'react-chessboard'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { ResultBadge } from '@/components/game-bits'
 import { MoveBadge } from '@/components/move-badge'
-import { MoveText } from '@/components/move-text'
+import { MarkedText, MoveText } from '@/components/move-text'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -765,7 +765,11 @@ function LinePanel({
               )
             })}
           </ol>
-          {view.data.summary && <p className="mt-2 leading-relaxed">{view.data.summary}</p>}
+          {view.data.summary && (
+            <p className="mt-2 leading-relaxed">
+              <MarkedText text={view.data.summary} />
+            </p>
+          )}
           {yourBefore != null && yourEnd != null && (
             <p className="mt-1 text-muted-foreground">
               Your chance{' '}

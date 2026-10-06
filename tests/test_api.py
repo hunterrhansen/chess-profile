@@ -245,4 +245,8 @@ def test_engine_lines_are_computed_once_then_cached(client, tmp_path, monkeypatc
     assert set(first) == {"best", "why"} and first["why"]["start_fen"].split()[1] == "b"
     assert client.get("/api/games/2/lines/1").json() == first
     assert calls == [18]  # second request came from the cache
+    with db.connect(tmp_path / "chess.db") as conn:  # a line cached by an older lines.py...
+        conn.execute("""UPDATE engine_lines SET data = json_set(data, '$.best.v', 1)""")
+    client.get("/api/games/2/lines/1")
+    assert calls == [18, 18]  # ...is recomputed
     assert client.get("/api/games/2/lines/99").status_code == 404

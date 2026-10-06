@@ -25,8 +25,8 @@ def test_both_lines_with_explanations():
     # Trimmed to whole exchanges: the best line runs on through the Rc8+ check, then stops.
     assert best["san"] == ["Rb3", "Rxc4", "Rxf3+", "Kg2", "Rxf4", "Rc8+"]
     assert why["san"] == ["fxg5", "Rd5", "Rxc4", "Rxg5"]
-    assert best["summary"] == "Rb3 wins a pawn, after Rxc4 Rxf3+ Kg2…"
-    assert why["summary"] == "After Rd2, Kylawot plays fxg5 and wins a pawn."
+    assert best["summary"] == "[[b:Rb3]] wins a pawn, after [[w:Rxc4]] [[b:Rxf3+]] [[w:Kg2]]…"
+    assert why["summary"] == "After [[b:Rd2]], Kylawot plays [[w:fxg5]] and wins a pawn."
     assert best["win_pct"] > 85 and 45 < why["win_pct"] < 55  # from Black's (the mover's) side
     assert why["start_fen"].split()[1] == "w" and best["start_fen"] == BEFORE_RD2
 
@@ -41,7 +41,7 @@ def test_mate_wording():
         return chess.engine.PovScore(chess.engine.Mate(1), chess.WHITE), [chess.Move.from_uci("h5f7")]
 
     why = lines.compute(before, "g8f6", "your opponent", analyse)["why"]
-    assert why["summary"] == "Nf6 allows mate in 1, starting with Qxf7#."
+    assert why["summary"] == "[[b:Nf6]] allows mate in 1, starting with [[w:Qxf7#]]."
     assert why["mate"] == -1
 
 

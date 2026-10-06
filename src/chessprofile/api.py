@@ -296,7 +296,9 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
         cached = query("SELECT data FROM engine_lines WHERE game_id = ? AND ply = ? AND depth = ?",
                        (game_id, ply, depth))
         if cached:
-            return json.loads(cached[0]["data"])
+            data = json.loads(cached[0]["data"])
+            if all(line.get("v") == lines.VERSION for line in data.values()):
+                return data  # else written by an older lines.py: recompute below
         move = query("""SELECT m.fen_before, m.uci, m.is_user, g.opponent
                         FROM moves m JOIN games g ON g.id = m.game_id
                         WHERE m.game_id = ? AND m.ply = ?""", (game_id, ply))
