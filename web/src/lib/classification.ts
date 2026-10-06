@@ -1,16 +1,17 @@
 import type { Classification } from './api'
 
-/** Badge look for each move classification (thresholds live in analyze.py). */
+/** Badge look for each move classification (thresholds live in analyze.py). Colors are the
+ * --move-* tokens in styles/tokens.css; use them in CSS (style), not SVG attributes. */
 export const CLASSIFICATION: Record<Classification, { label: string; color: string; symbol?: string }> = {
-  brilliant: { label: 'Brilliant', color: '#1BA39C', symbol: '!!' },
-  great: { label: 'Great', color: '#4A7FD0', symbol: '!' },
-  best: { label: 'Best', color: '#639922' },
-  excellent: { label: 'Excellent', color: '#97C459' },
-  good: { label: 'Good', color: '#888780' },
-  inaccuracy: { label: 'Inaccuracy', color: '#EF9F27', symbol: '?!' },
-  mistake: { label: 'Mistake', color: '#D85A30', symbol: '?' },
-  blunder: { label: 'Blunder', color: '#E24B4A', symbol: '??' },
-  miss: { label: 'Miss', color: '#D4537E' },
+  brilliant: { label: 'Brilliant', color: 'var(--move-brilliant)', symbol: '!!' },
+  great: { label: 'Great', color: 'var(--move-great)', symbol: '!' },
+  best: { label: 'Best', color: 'var(--move-best)' },
+  excellent: { label: 'Excellent', color: 'var(--move-excellent)' },
+  good: { label: 'Good', color: 'var(--move-good)' },
+  inaccuracy: { label: 'Inaccuracy', color: 'var(--move-inaccuracy)', symbol: '?!' },
+  mistake: { label: 'Mistake', color: 'var(--move-mistake)', symbol: '?' },
+  blunder: { label: 'Blunder', color: 'var(--move-blunder)', symbol: '??' },
+  miss: { label: 'Miss', color: 'var(--move-miss)' },
 }
 
 /** Moves good enough that there's no better move worth drawing. */

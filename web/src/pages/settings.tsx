@@ -1,5 +1,6 @@
 import { Check, Circle, LoaderCircle, Play, Plus, X } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
+import { Link } from 'react-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -41,13 +42,16 @@ export function SettingsPage() {
           <DataSection settings={data} />
         </>
       )}
+      <Link to="/styleguide" className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
+        Style guide
+      </Link>
     </div>
   )
 }
 
 function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
-    <section className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
+    <section className="panel overflow-hidden">
       <header className="border-b px-4 py-3">
         <h2 className="font-medium">{title}</h2>
         {description && <p className="text-sm text-muted-foreground">{description}</p>}
@@ -472,9 +476,9 @@ function StepList({ progress }: { progress: RunProgress }) {
           <li key={key} className="flex items-start gap-2.5">
             <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
               {result?.error ? (
-                <X className="size-4 text-loss" />
+                <X className="size-4 text-danger-text" />
               ) : result ? (
-                <Check className="size-4 text-win" />
+                <Check className="size-4 text-brand-text" />
               ) : active ? (
                 <LoaderCircle className="size-4 animate-spin" />
               ) : (
@@ -484,7 +488,7 @@ function StepList({ progress }: { progress: RunProgress }) {
             <span className="min-w-0">
               <span className={cn(!result && !active && 'text-muted-foreground')}>{stepLabel(key)}</span>
               {(result || active) && (
-                <span className={cn('block text-muted-foreground', result?.error && 'text-loss')}>
+                <span className={cn('block text-muted-foreground', result?.error && 'text-danger-text')}>
                   {result ? (result.error ?? result.summary) : (progress.detail ?? 'Working…')}
                 </span>
               )}
@@ -509,9 +513,9 @@ function Elapsed({ since }: { since: string }) {
 
 function RunStatus({ status }: { status: 'ok' | 'partial' | 'failed' }) {
   const look = {
-    ok: { label: 'OK', className: 'bg-win/15 text-win' },
-    partial: { label: 'Partly failed', className: 'bg-amber-500/15 text-amber-600 dark:text-amber-400' },
-    failed: { label: 'Failed', className: 'bg-loss/15 text-loss' },
+    ok: { label: 'OK', className: 'bg-win/15 text-brand-text' },
+    partial: { label: 'Partly failed', className: 'bg-gold/15 text-gold-text' },
+    failed: { label: 'Failed', className: 'bg-loss/15 text-danger-text' },
   }[status]
   return (
     <span className={cn('rounded px-1.5 text-xs', look.className)}>

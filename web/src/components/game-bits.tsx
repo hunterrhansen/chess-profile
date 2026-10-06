@@ -2,9 +2,9 @@ import type { Outcome } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 const RESULT = {
-  win: { letter: 'W', className: 'bg-win/15 text-win' },
-  loss: { letter: 'L', className: 'bg-loss/15 text-loss' },
-  draw: { letter: 'D', className: 'bg-draw/15 text-draw' },
+  win: { letter: 'W', className: 'bg-win/15 text-brand-text' },
+  loss: { letter: 'L', className: 'bg-loss/15 text-danger-text' },
+  draw: { letter: 'D', className: 'bg-draw/15 text-ink-muted' },
 } as const
 
 export function ResultBadge({ outcome }: { outcome: Outcome | null }) {
@@ -13,7 +13,7 @@ export function ResultBadge({ outcome }: { outcome: Outcome | null }) {
   return (
     <span
       aria-label={outcome}
-      className={cn('inline-flex size-6 items-center justify-center rounded-md text-xs font-medium', className)}
+      className={cn('inline-flex size-6 items-center justify-center rounded-md text-xs font-extrabold', className)}
     >
       {letter}
     </span>

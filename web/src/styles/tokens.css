@@ -26,6 +26,7 @@
   --gold: #ffc233;
   --gold-lip: #d39a00;
   --on-gold: #2a1d00;
+  --gold-text: #8a6100;
   --sky: #49a8f2;
   --sky-lip: #2a83cc;
   --on-sky: #08192a;
@@ -39,6 +40,12 @@
   --board-dark: #7da35a;
   --eval-white: #f7f6f1;
   --eval-black: #2b2926;
+  --board-highlight-light: #f3e77e;
+  --board-highlight-dark: #c3c449;
+  --line-highlight-light: #b7d2ee;
+  --line-highlight-dark: #86a9cf;
+  --arrow-best: rgba(99, 153, 34, 0.85);
+  --arrow-line: rgba(70, 130, 220, 0.75);
 
   /* move classifications (the badge fills; the symbol on them is white) */
   --move-brilliant: #1ba39c;
@@ -50,6 +57,11 @@
   --move-mistake: #d85a30;
   --move-blunder: #e24b4a;
   --move-miss: #d4537e;
+  --on-move: #ffffff;
+  --move-shade: rgba(0, 0, 0, 0.18);
+
+  /* the light stripe along the top of a progress fill */
+  --sheen: rgba(255, 255, 255, 0.4);
 
   /* game results */
   --win: oklch(0.6 0.15 150);
@@ -71,6 +83,7 @@
   --brand-lip: #3f8a18;
   --brand-text: #8ad850;
   --gold-lip: #c28c00;
+  --gold-text: #ffc233;
   --sky-lip: #2577bb;
   --danger: #ff7a6e;
   --danger-lip: #c94236;
