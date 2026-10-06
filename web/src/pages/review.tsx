@@ -12,6 +12,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { type Classification, type EngineLine, type EngineLines, type GameDetail, type LineKind, type MoveRow, useApi } from '@/lib/api'
 import { CLASSIFICATION, isSound } from '@/lib/classification'
 import { clock, longDate, thinkTime, timeControl } from '@/lib/format'
+import { lastLocation } from '@/lib/last-location'
 import { BOARDS, usePreferences } from '@/lib/preferences'
 import { cn } from '@/lib/utils'
 
@@ -163,9 +164,37 @@ export function ReviewPage() {
 
   return (
     <div className="flex flex-col gap-3">
-      <Link to="/games" className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" /> Games
-      </Link>
+      {/* Title row: which game this is, so the analysis sidebar can start with the move. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+        <Link
+          to={lastLocation('games-list', '/games')}
+          className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" /> Games
+        </Link>
+        <span className="flex min-w-0 items-center gap-2">
+          <ResultBadge outcome={game.outcome} />
+          <span className="font-medium">
+            vs {me === 'white' ? game.black : game.white}{' '}
+            <span className="font-normal text-muted-foreground">{me === 'white' ? game.black_elo : game.white_elo}</span>
+          </span>
+          <span className="truncate text-muted-foreground">
+            {[resultPhrase(game.outcome, game.ended_by), longDate(game.played_at), timeControl(game.time_control)]
+              .filter(Boolean)
+              .join(' · ')}
+          </span>
+        </span>
+        {game.url && (
+          <a
+            href={game.url}
+            target="_blank"
+            rel="noreferrer"
+            className="ml-auto flex items-center gap-1 text-muted-foreground hover:text-foreground"
+          >
+            Chess.com <ExternalLink className="size-3.5" />
+          </a>
+        )}
+      </div>
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="mx-auto flex w-full max-w-[calc(100svh-170px)] min-w-72 flex-col gap-1.5">
           <PlayerStrip
@@ -217,19 +246,6 @@ export function ReviewPage() {
 
         <div className="relative min-h-[28rem]">
           <aside className="flex flex-col overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 lg:absolute lg:inset-0">
-            <div className="flex items-center gap-2 border-b px-3 py-2 text-sm">
-              <ResultBadge outcome={game.outcome} />
-              <span className="min-w-0 truncate">
-                {[game.ended_by, longDate(game.played_at), timeControl(game.time_control)].filter(Boolean).join(' · ')}
-              </span>
-              {game.url && (
-                <Button variant="ghost" size="icon-sm" className="ml-auto" asChild>
-                  <a href={game.url} target="_blank" rel="noreferrer" aria-label="Open on Chess.com">
-                    <ExternalLink />
-                  </a>
-                </Button>
-              )}
-            </div>
             {prefs.showGraph && replay.moves.length > 0 && (
               <WinGraph replay={replay} me={me} ply={ply} onSelect={setPly} />
             )}
@@ -312,6 +328,26 @@ export function ReviewPage() {
       </div>
     </div>
   )
+}
+
+/** "Lost on time", "Won by checkmate", "Draw by repetition" from the outcome and ending. */
+function resultPhrase(outcome: GameDetail['outcome'], endedBy: string | null) {
+  if (!outcome) return null
+  if (outcome === 'draw') {
+    const how: Record<string, string> = {
+      'Time vs material': 'timeout vs insufficient material',
+      Material: 'insufficient material',
+    }
+    return endedBy ? `Draw by ${how[endedBy] ?? endedBy.toLowerCase()}` : 'Draw'
+  }
+  const verb = outcome === 'win' ? 'Won' : 'Lost'
+  const how: Record<string, string> = {
+    Checkmate: 'by checkmate',
+    Resigned: 'by resignation',
+    Time: 'on time',
+    Abandoned: 'by abandonment',
+  }
+  return endedBy ? `${verb} ${how[endedBy] ?? `· ${endedBy}`}` : verb
 }
 
 /** Seconds left on `side`'s clock after `ply` half-moves, from the last clock it recorded. */

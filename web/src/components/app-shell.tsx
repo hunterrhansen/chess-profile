@@ -1,14 +1,16 @@
 import { ChartLine, ChessKnight, ListChecks, PanelLeftClose, PanelLeftOpen, Settings } from 'lucide-react'
 import { useEffect } from 'react'
-import { NavLink, Outlet } from 'react-router'
+import { Link, Outlet, useLocation } from 'react-router'
 import { useApi } from '@/lib/api'
+import { lastLocation, rememberLocation, type Section, sectionsOf } from '@/lib/last-location'
 import { usePreferences } from '@/lib/preferences'
 import { cn } from '@/lib/utils'
 
-const NAV = [
-  { to: '/', label: 'Overview', icon: ChartLine },
-  { to: '/games', label: 'Games', icon: ListChecks },
+const NAV: { section: Section; root: string; label: string; icon: typeof Settings }[] = [
+  { section: 'overview', root: '/', label: 'Overview', icon: ChartLine },
+  { section: 'games', root: '/games', label: 'Games', icon: ListChecks },
 ]
+const SETTINGS = { section: 'settings' as const, root: '/settings', label: 'Settings', icon: Settings }
 
 const SOURCE_LABEL: Record<string, string> = { chesscom: 'Chess.com', lichess: 'Lichess' }
 
@@ -23,6 +25,19 @@ export function AppShell() {
   const { prefs, set } = usePreferences()
   const collapsed = prefs.sidebarCollapsed
   const toggle = () => set({ sidebarCollapsed: !collapsed })
+
+  // Remember where you are in each section, so its tab brings you back here later.
+  const location = useLocation()
+  useEffect(() => rememberLocation(location.pathname, location.search), [location.pathname, location.search])
+  const here = sectionsOf(location.pathname)
+  /** A tab returns you to where you left that section; inside it, it goes up a level
+   * (from a game review back to the list as you left it). */
+  const target = (section: Section, root: string) =>
+    here.includes(section)
+      ? section === 'games' && location.pathname !== '/games'
+        ? lastLocation('games-list', root)
+        : location.pathname + location.search
+      : lastLocation(section, root)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -56,7 +71,14 @@ export function AppShell() {
 
         <nav className="flex flex-col gap-1 px-2 pt-2">
           {NAV.map((item) => (
-            <NavItem key={item.to} {...item} labelClass={label} />
+            <NavItem
+              key={item.section}
+              to={target(item.section, item.root)}
+              active={here.includes(item.section)}
+              label={item.label}
+              icon={item.icon}
+              labelClass={label}
+            />
           ))}
         </nav>
 
@@ -72,7 +94,13 @@ export function AppShell() {
             {collapsed ? <PanelLeftOpen className="size-5 shrink-0" /> : <PanelLeftClose className="size-5 shrink-0" />}
             <span className={label}>Collapse</span>
           </button>
-          <NavItem to="/settings" label="Settings" icon={Settings} labelClass={label} />
+          <NavItem
+            to={target(SETTINGS.section, SETTINGS.root)}
+            active={here.includes(SETTINGS.section)}
+            label={SETTINGS.label}
+            icon={SETTINGS.icon}
+            labelClass={label}
+          />
         </div>
 
         {!!accounts?.length && (
@@ -107,29 +135,29 @@ export function AppShell() {
 
 function NavItem({
   to,
+  active,
   label,
   icon: Icon,
   labelClass,
 }: {
   to: string
+  active: boolean
   label: string
   icon: typeof Settings
   labelClass: string
 }) {
   return (
-    <NavLink
+    <Link
       to={to}
-      end={to === '/'}
       title={label}
-      className={({ isActive }) =>
-        cn(
-          'flex h-11 items-center gap-3 rounded-md px-3 text-[15px] font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground',
-          isActive && 'bg-sidebar-accent text-sidebar-foreground',
-        )
-      }
+      aria-current={active ? 'page' : undefined}
+      className={cn(
+        'flex h-11 items-center gap-3 rounded-md px-3 text-[15px] font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground',
+        active && 'bg-sidebar-accent text-sidebar-foreground',
+      )}
     >
       <Icon className="size-5 shrink-0" />
       <span className={labelClass}>{label}</span>
-    </NavLink>
+    </Link>
   )
 }
