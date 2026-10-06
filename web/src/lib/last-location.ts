@@ -3,7 +3,7 @@
  * to the same game and move, or the same filtered list, instead of starting over. Kept for
  * the browser session; falls back to memory if storage is blocked.
  */
-export type Section = 'overview' | 'games' | 'games-list' | 'settings'
+export type Section = 'overview' | 'games' | 'games-list' | 'play' | 'settings'
 
 const KEY = 'chessprofile.lastLocation'
 let memory: Partial<Record<Section, string>> = {}
@@ -21,6 +21,7 @@ export function sectionsOf(pathname: string): Section[] {
   if (pathname === '/') return ['overview']
   if (pathname === '/games') return ['games', 'games-list']
   if (pathname.startsWith('/games/')) return ['games']
+  if (pathname === '/play') return ['play']
   if (pathname === '/settings') return ['settings']
   return []
 }

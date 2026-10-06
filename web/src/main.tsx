@@ -6,6 +6,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { GamesPage } from '@/pages/games'
 import { PreferencesProvider } from '@/lib/preferences'
 import { OverviewPage } from '@/pages/overview'
+import { PlayPage } from '@/pages/play'
 import { ReviewPage } from '@/pages/review'
 import { SettingsPage } from '@/pages/settings'
 import { StyleguidePage } from '@/pages/styleguide'
@@ -21,6 +22,7 @@ createRoot(document.getElementById('root')!).render(
               <Route index element={<OverviewPage />} />
               <Route path="games" element={<GamesPage />} />
               <Route path="games/:id" element={<ReviewPage />} />
+              <Route path="play" element={<PlayPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="styleguide" element={<StyleguidePage />} />
             </Route>

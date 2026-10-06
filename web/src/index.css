@@ -40,6 +40,7 @@
     --color-board-dark: var(--board-dark);
     --color-eval-white: var(--eval-white);
     --color-eval-black: var(--eval-black);
+    --color-move-hint: var(--move-hint);
     --color-move-brilliant: var(--move-brilliant);
     --color-move-great: var(--move-great);
     --color-move-best: var(--move-best);

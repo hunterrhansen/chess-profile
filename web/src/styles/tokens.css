@@ -46,6 +46,9 @@
   --line-highlight-dark: #86a9cf;
   --arrow-best: rgba(99, 153, 34, 0.85);
   --arrow-line: rgba(70, 130, 220, 0.75);
+  --check-glow: rgba(220, 38, 38, 0.85);
+  --check-glow-soft: rgba(220, 38, 38, 0.5);
+  --move-hint: rgba(0, 0, 0, 0.15);
 
   /* move classifications (the badge fills; the symbol on them is white) */
   --move-brilliant: #1ba39c;
