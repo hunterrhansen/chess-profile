@@ -7,6 +7,7 @@ export interface Preferences {
   board: keyof typeof BOARDS
   bestArrow: 'auto' | 'request'
   overviewRange: Range
+  sidebarCollapsed: boolean
 }
 
 export const BOARDS = {
@@ -15,7 +16,13 @@ export const BOARDS = {
   blue: { label: 'Blue', light: '#DEE3E6', dark: '#8CA2AD', lightHl: '#CDD26A', darkHl: '#AAA23A' },
 } as const
 
-const DEFAULTS: Preferences = { theme: 'system', board: 'brown', bestArrow: 'auto', overviewRange: '90d' }
+const DEFAULTS: Preferences = {
+  theme: 'system',
+  board: 'brown',
+  bestArrow: 'auto',
+  overviewRange: '90d',
+  sidebarCollapsed: false,
+}
 const KEY = 'chessprofile.preferences'
 
 function load(): Preferences {
