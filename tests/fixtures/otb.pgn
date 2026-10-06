@@ -1,0 +1,33 @@
+[Event "Club Championship"]
+[Site "Denver CO USA"]
+[Date "2025.03.14"]
+[Round "1"]
+[White "Hansen, Hunter"]
+[Black "Smith, Alex"]
+[Result "1-0"]
+[WhiteElo "1650"]
+[BlackElo "1580"]
+[ECO "C50"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. c3 Nf6 5. d4 exd4 6. cxd4 Bb4+ 7. Nc3 Nxe4
+8. O-O Bxc3 9. d5 Bf6 10. Re1 Ne7 11. Rxe4 d6 12. Bg5 Bxg5 13. Nxg5 h6 14. Qe2
+hxg5 15. Re1 Be6 16. dxe6 f6 17. Re3 c6 18. Rh3 Rxh3 19. gxh3 g6 20. Qf3 Qa5
+21. Rd1 Qf5 22. Qb3 O-O-O 23. Qa3 Qc5 24. Qb3 1-0
+
+[Event "Club Championship"]
+[Site "Denver CO USA"]
+[Date "2025.03.21"]
+[Round "2"]
+[White "Lee, Jordan"]
+[Black "Hansen, Hunter"]
+[Result "1/2-1/2"]
+
+1. d4 d5 2. c4 e6 3. Nc3 Nf6 4. Bg5 Be7 5. e3 O-O 6. Nf3 h6 7. Bh4 b6 1/2-1/2
+
+[Event "Casual"]
+[Date "2025.??.??"]
+[White "Someone"]
+[Black "Else"]
+[Result "0-1"]
+
+1. f3 e5 2. g4 Qh4# 0-1

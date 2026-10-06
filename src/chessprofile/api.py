@@ -1,0 +1,346 @@
+"""Read-only HTTP API over chess.db for the web frontend (`chessprofile serve`).
+
+Every number on the overview is computed from one row per game (GAME_FACTS), and the
+games list filters on the same rows, so a KPI and the games it links to always agree.
+"""
+import sqlite3
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+from . import db
+from .analyze import THRESHOLDS
+
+# A position counts as "winning" once the user's win chance reaches this after one of
+# their own moves, and as "lost" once it falls to LOST_PCT. Lichess win% scale, 0-100.
+WINNING_PCT = 80
+LOST_PCT = 20
+BLUNDER_DROP = THRESHOLDS[0][0]  # win% lost that makes a move a blunder
+RANGES = {"30d": 30, "90d": 90, "all": None}
+MIN_SAMPLE = 10  # fewer games than this and a KPI is too noisy to show or compare
+PAGE_SIZE = 50
+
+# One row per game with everything the overview and filters need. Engine columns are NULL
+# for games that haven't been analysed yet.
+GAME_FACTS = f"""
+WITH peaks AS (
+    SELECT game_id,
+           max(CASE WHEN is_user = 1 THEN win_pct_after END) AS peak,
+           min(CASE WHEN is_user = 1 THEN win_pct_after END) AS trough,
+           -- Blunder-sized moves of yours, whatever their label: a "miss" that throws away
+           -- 20+ points is as costly as any other blunder.
+           sum(is_user = 1 AND win_pct_before - win_pct_after >= {BLUNDER_DROP}) AS big_drops
+    FROM moves GROUP BY game_id
+), punish AS (
+    -- Opponent blunders (by size, since a blunder that answers your own error is labelled
+    -- "miss"), and how many the user answered with a best, excellent or good move.
+    SELECT o.game_id, count(*) AS opp_blunders,
+           sum(n.classification IN ('best', 'excellent', 'good')) AS punished
+    FROM moves o JOIN moves n ON n.game_id = o.game_id AND n.ply = o.ply + 1
+    WHERE o.is_user = 0 AND o.win_pct_before - o.win_pct_after >= {BLUNDER_DROP} AND n.is_user = 1
+    GROUP BY o.game_id
+), move10 AS (
+    -- Eval after Black's 10th move, from the user's side, clamped like cp_loss.
+    SELECT m.game_id,
+           max(-1000, min(1000, CASE WHEN g.user_color = 'white' THEN m.eval_after
+                                     ELSE -m.eval_after END)) AS eval10
+    FROM moves m JOIN games g ON g.id = m.game_id WHERE m.ply = 20
+)
+SELECT g.id, g.played_at, g.speed, g.rated, g.time_control, g.url, g.user_color,
+       g.user_outcome, g.user_rating, g.opponent, g.opponent_rating, g.eco, g.opening,
+       g.termination, g.ply_count,
+       a.game_id IS NOT NULL AS analysed,
+       coalesce(a.user_accuracy, g.user_accuracy) AS accuracy,
+       a.user_accuracy AS engine_accuracy,
+       CASE WHEN a.game_id IS NOT NULL THEN coalesce(p.big_drops, 0) END AS blunders,
+       a.user_mistakes AS mistakes,
+       a.user_inaccuracies AS inaccuracies,
+       p.peak >= {WINNING_PCT} AS was_winning,
+       p.trough <= {LOST_PCT} AS was_lost,
+       coalesce(pu.opp_blunders, CASE WHEN a.game_id IS NOT NULL THEN 0 END) AS opp_blunders,
+       coalesce(pu.punished, CASE WHEN a.game_id IS NOT NULL THEN 0 END) AS punished,
+       m10.eval10
+FROM games g
+LEFT JOIN game_analysis a ON a.game_id = g.id
+LEFT JOIN peaks p ON p.game_id = g.id
+LEFT JOIN punish pu ON pu.game_id = g.id
+LEFT JOIN move10 m10 ON m10.game_id = g.id
+"""
+
+# Overview KPI -> the games behind it, used by the games list's `kpi` filter.
+KPI_FILTERS = {
+    "blunders": "f.blunders > 0",
+    "thrown": "f.was_winning AND f.user_outcome = 'loss'",
+    "unconverted": "f.was_winning AND f.user_outcome != 'win'",
+    "unpunished": "f.punished < f.opp_blunders",
+    "comebacks": "f.was_lost AND f.user_outcome != 'loss'",
+    "analysed": "f.analysed",
+}
+
+ENDINGS = [  # substring of Chess.com/Lichess termination text -> short label
+    ("checkmate", "Checkmate"), ("resignation", "Resigned"), ("abandoned", "Abandoned"),
+    ("timeout vs insufficient", "Time vs material"), ("on time", "Time"),
+    ("stalemate", "Stalemate"), ("repetition", "Repetition"), ("50-move", "50-move rule"),
+    ("insufficient material", "Material"), ("agreement", "Agreement"),
+]
+
+
+def ended_by(termination: str | None) -> str | None:
+    text = (termination or "").lower()
+    return next((label for key, label in ENDINGS if key in text), termination)
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _iso(dt: datetime) -> str:
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def period_bounds(range_: str, now: datetime | None = None):
+    """(start, end, prev_start) as ISO strings; start/prev_start are None for 'all'."""
+    days = RANGES[range_]
+    now = now or _now()
+    if days is None:
+        return None, _iso(now), None
+    start = now - timedelta(days=days)
+    return _iso(start), _iso(now), _iso(start - timedelta(days=days))
+
+
+def _mean(values):
+    values = [v for v in values if v is not None]
+    return sum(values) / len(values) if values else None
+
+
+def _ratio(num, den):
+    return num / den if den else None
+
+
+def kpis(rows, min_sample: int = 1) -> dict:
+    """Improvement KPIs over a list of GAME_FACTS rows. A KPI is None when it rests on
+    fewer than `min_sample` games."""
+    analysed = [r for r in rows if r["analysed"]]
+    winning = [r for r in analysed if r["was_winning"]]
+    lost = [r for r in analysed if r["was_lost"]]
+    # Engine accuracy only: Chess.com's own numbers run on a lower scale, so mixing them
+    # in makes trends move when only the source changed.
+    with_acc = [r["engine_accuracy"] for r in analysed if r["engine_accuracy"] is not None]
+    opp_blunders = sum(r["opp_blunders"] or 0 for r in analysed)
+
+    def enough(sample, value):
+        return value if len(sample) >= min_sample else None
+
+    return {
+        "blunders_per_game": enough(analysed, _mean([r["blunders"] for r in analysed])),
+        "conversion": enough(winning, _ratio(sum(r["user_outcome"] == "win" for r in winning), len(winning))),
+        "winning_games": len(winning),
+        "thrown": sum(r["user_outcome"] == "loss" for r in winning),
+        "punish_rate": enough(analysed, _ratio(sum(r["punished"] or 0 for r in analysed), opp_blunders)),
+        "opp_blunders": opp_blunders,
+        "accuracy": enough(with_acc, _mean(with_acc)),
+        "opening_edge": enough(analysed, _mean([r["eval10"] for r in analysed])),
+        "comeback_rate": enough(lost, _ratio(sum(r["user_outcome"] != "loss" for r in lost), len(lost))),
+        "lost_games": len(lost),
+        "analysed": len(analysed),
+    }
+
+
+def _weekly(rows, start: str | None, end: str) -> list[dict]:
+    """KPI values per week (per month for all-time), for the KPI sparklines."""
+    if not rows:
+        return []
+    monthly = start is None
+    buckets: dict[str, list] = {}
+    for r in rows:
+        day = datetime.fromisoformat(r["played_at"][:10])
+        key = day.strftime("%Y-%m") if monthly else (day - timedelta(days=day.weekday())).strftime("%Y-%m-%d")
+        buckets.setdefault(key, []).append(r)
+    out = []
+    for key in sorted(buckets):
+        k = kpis(buckets[key], min_sample=3)
+        out.append({"period": key, **{name: k[name] for name in
+                    ("blunders_per_game", "conversion", "punish_rate", "accuracy")}})
+    return out
+
+
+def _game_json(r) -> dict:
+    return {
+        "id": r["id"],
+        "played_at": r["played_at"],
+        "speed": r["speed"],
+        "rated": bool(r["rated"]),
+        "time_control": r["time_control"],
+        "url": r["url"],
+        "color": r["user_color"],
+        "outcome": r["user_outcome"],
+        "rating": r["user_rating"],
+        "opponent": r["opponent"],
+        "opponent_rating": r["opponent_rating"],
+        "eco": r["eco"],
+        "opening": r["opening"] or None,
+        "ended_by": ended_by(r["termination"]),
+        "moves": (r["ply_count"] + 1) // 2 if r["ply_count"] else None,
+        "analysed": bool(r["analysed"]),
+        "accuracy": r["accuracy"],
+        "blunders": r["blunders"],
+        "mistakes": r["mistakes"],
+        "inaccuracies": r["inaccuracies"],
+    }
+
+
+def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = None) -> FastAPI:
+    db_path = str(Path(db_path).resolve())
+    app = FastAPI(title="chessprofile")
+
+    def query(sql: str, params=()) -> list[sqlite3.Row]:
+        # Read-only, so the API never competes with `sync` or `analyze` for the write lock.
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        try:
+            return conn.execute(sql, params).fetchall()
+        finally:
+            conn.close()
+
+    def facts(where: str = "1", params=(), order: str = "f.played_at") -> list[sqlite3.Row]:
+        return query(f"SELECT * FROM ({GAME_FACTS}) f WHERE {where} ORDER BY {order}", params)
+
+    @app.get("/api/overview")
+    def overview(range: str = Query("90d", pattern="^(30d|90d|all)$")):
+        start, end, prev_start = period_bounds(range)
+        # Overview stats are rated games only: unrated daily games are mostly vs bots.
+        rated = facts("f.rated = 1")
+        current = [r for r in rated if start is None or r["played_at"] >= start]
+        previous = [r for r in rated if prev_start and prev_start <= r["played_at"] < start]
+        before = [r for r in rated if start and r["played_at"] < start]
+
+        ratings = [r["user_rating"] for r in current if r["user_rating"]]
+        baseline = before[-1]["user_rating"] if before else (ratings[0] if ratings else None)
+        weeks = max(1, RANGES[range] / 7) if RANGES[range] else max(1, (
+            (datetime.fromisoformat(current[-1]["played_at"][:10]) -
+             datetime.fromisoformat(current[0]["played_at"][:10])).days / 7 if current else 1))
+
+        # Grouped by ECO code; named after the variation played most often within it.
+        openings = query(f"""
+            WITH g AS (SELECT * FROM games WHERE rated = 1 AND eco IS NOT NULL
+                       {"AND played_at >= ?" if start else ""}),
+            names AS (SELECT eco, user_color, opening, row_number() OVER (
+                          PARTITION BY eco, user_color ORDER BY count(*) DESC) AS rn
+                      FROM g WHERE opening != '' GROUP BY eco, user_color, opening)
+            SELECT g.eco, n.opening, g.user_color AS color, count(*) AS games,
+                   avg(g.user_outcome = 'win') AS win_rate
+            FROM g LEFT JOIN names n ON n.eco = g.eco AND n.user_color = g.user_color AND n.rn = 1
+            GROUP BY g.eco, g.user_color ORDER BY games DESC LIMIT 3""", (start,) if start else ())
+
+        return {
+            "range": range,
+            "start": start,
+            "end": end,
+            "rating": {
+                "current": ratings[-1] if ratings else None,
+                "change": ratings[-1] - baseline if ratings and baseline else None,
+                "best": max(ratings) if ratings else None,
+            },
+            "games_played": len(current),
+            "games_per_week": len(current) / weeks,
+            "games_analysed": sum(1 for r in current if r["analysed"]),
+            "rating_series": [
+                {"id": r["id"], "played_at": r["played_at"], "rating": r["user_rating"],
+                 "outcome": r["user_outcome"], "opponent": r["opponent"],
+                 "opponent_rating": r["opponent_rating"]}
+                for r in current if r["user_rating"]
+            ],
+            "kpis": kpis(current),
+            "previous_kpis": kpis(previous, MIN_SAMPLE) if previous else None,
+            "kpi_series": _weekly(current, start, end),
+            "recent_games": [_game_json(r) for r in reversed(current[-5:])],
+            "top_openings": [dict(o) for o in openings],
+        }
+
+    @app.get("/api/games")
+    def games(
+        q: str | None = None,
+        speed: str | None = None,
+        color: str | None = Query(None, pattern="^(white|black)$"),
+        result: str | None = Query(None, pattern="^(win|loss|draw)$"),
+        range: str = Query("all", pattern="^(30d|90d|all)$"),
+        analysed: bool = False,
+        unrated: bool = False,
+        kpi: str | None = None,
+        page: int = Query(1, ge=1),
+    ):
+        where, params = ["1"], []
+        if q:
+            where.append("(f.opponent LIKE ? OR f.opening LIKE ? OR f.eco LIKE ?)")
+            params += [f"%{q}%"] * 3
+        if speed:
+            where.append("f.speed = ?")
+            params.append(speed)
+        if color:
+            where.append("f.user_color = ?")
+            params.append(color)
+        if result:
+            where.append("f.user_outcome = ?")
+            params.append(result)
+        start, _, _ = period_bounds(range)
+        if start:
+            where.append("f.played_at >= ?")
+            params.append(start)
+        if analysed:
+            where.append("f.analysed")
+        if not unrated:
+            where.append("f.rated = 1")
+        if kpi:
+            if kpi not in KPI_FILTERS:
+                raise HTTPException(400, f"unknown kpi {kpi!r}")
+            where.append(KPI_FILTERS[kpi])
+
+        rows = facts(" AND ".join(where), params, order="f.played_at DESC")
+        page_rows = rows[(page - 1) * PAGE_SIZE: page * PAGE_SIZE]
+        return {
+            "total": len(rows),
+            "page": page,
+            "page_size": PAGE_SIZE,
+            "win_rate": _mean([r["user_outcome"] == "win" for r in rows]),
+            "accuracy": _mean([r["accuracy"] for r in rows]),
+            "games": [_game_json(r) for r in page_rows],
+        }
+
+    @app.get("/api/games/{game_id}")
+    def game(game_id: int):
+        rows = facts("f.id = ?", (game_id,))
+        if not rows:
+            raise HTTPException(404, "game not found")
+        g = query("""SELECT white, black, white_elo, black_elo, start_fen, moves_san, account
+                     FROM games WHERE id = ?""", (game_id,))[0]
+        a = query("""SELECT user_accuracy, opponent_accuracy FROM game_analysis WHERE game_id = ?""",
+                  (game_id,))
+        moves = query("""SELECT ply, color, is_user, san, uci, best_san, best_uci, eval_after,
+                                mate_after, win_pct_before, win_pct_after, classification,
+                                clock_left, time_spent
+                         FROM moves WHERE game_id = ? ORDER BY ply""", (game_id,))
+        return {
+            **_game_json(rows[0]),
+            "account": g["account"],
+            "white": g["white"], "black": g["black"],
+            "white_elo": g["white_elo"], "black_elo": g["black_elo"],
+            "start_fen": g["start_fen"],
+            # Always present, so unanalysed games can still be stepped through.
+            "san": (g["moves_san"] or "").split(),
+            "engine_accuracy": a[0]["user_accuracy"] if a else None,
+            "opponent_accuracy": a[0]["opponent_accuracy"] if a else None,
+            "plies": [dict(m) for m in moves],
+        }
+
+    if static_dir and static_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=static_dir / "assets"), name="assets")
+
+        @app.get("/{path:path}", include_in_schema=False)
+        def spa(path: str):
+            # Client-side routes (/games?...) all serve the SPA shell.
+            return FileResponse(static_dir / "index.html")
+
+    return app
