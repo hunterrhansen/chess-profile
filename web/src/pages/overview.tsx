@@ -10,13 +10,15 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { type KpiPoint, type Kpis, type Overview, type Range, useApi } from '@/lib/api'
 import { longDate, num, openingLabel, pct, RANGE_LABEL, shortDate, signed } from '@/lib/format'
+import { usePreferences } from '@/lib/preferences'
 import { cn } from '@/lib/utils'
 
 const ROLLING_WINDOW = 20
 
 export function OverviewPage() {
   const [params, setParams] = useSearchParams()
-  const range = (params.get('range') as Range | null) ?? '90d'
+  const { prefs } = usePreferences()
+  const range = (params.get('range') as Range | null) ?? prefs.overviewRange
   const { data, error } = useApi<Overview>(`/api/overview?range=${range}`)
 
   // KPI links carry the overview's range into the games list.
@@ -33,7 +35,7 @@ export function OverviewPage() {
           size="sm"
           spacing={0}
           value={range}
-          onValueChange={(v) => v && setParams(v === '90d' ? {} : { range: v })}
+          onValueChange={(v) => v && setParams(v === prefs.overviewRange ? {} : { range: v })}
         >
           <ToggleGroupItem value="30d">30d</ToggleGroupItem>
           <ToggleGroupItem value="90d">90d</ToggleGroupItem>

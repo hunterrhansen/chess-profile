@@ -64,6 +64,7 @@ SQLite, one file. Tables in [`schema.sql`](src/chessprofile/schema.sql):
   time spent. Filled by `analyze`.
 - `game_analysis`: per-game engine summary (accuracy, ACPL, blunder/mistake counts).
 - `runs`: one row per `update` (status, counts, errors).
+- `settings`: app settings changed from the web app, e.g. `analysis_depth`.
 - `accounts`, `sync_state`: which handles are yours and the incremental-sync cursors.
 
 Principles:
@@ -120,9 +121,10 @@ uv run chessprofile analyze --reclassify
 
 ## Web app
 
-`chessprofile serve` runs a read-only FastAPI app ([`api.py`](src/chessprofile/api.py)) over
-the database and serves the React frontend in [`web/`](web/) (Vite, TypeScript, shadcn/ui,
-Recharts). It opens the DB read-only, so it's safe to leave running during `sync` or `analyze`.
+`chessprofile serve` runs a FastAPI app ([`api.py`](src/chessprofile/api.py)) over the
+database and serves the React frontend in [`web/`](web/) (Vite, TypeScript, shadcn/ui,
+Recharts). Pages read through a read-only connection, so it's safe to leave running during
+`sync` or `analyze`. It listens on 127.0.0.1 only.
 
 ```bash
 cd web && pnpm install && pnpm build && cd ..   # once, and after frontend changes
@@ -156,6 +158,20 @@ clocks as they stood at that move, the last move in yellow with its classificati
 and the engine's better move as a green arrow when you (or they) went wrong. The sidebar
 has a win-chance graph (click to jump), the selected move explained, and Moves / Key
 moments tabs. ← → step through the game, Home / End jump to the ends.
+
+**Settings** (the gear at the bottom of the sidebar):
+
+- *Appearance*: theme, board colors, whether the best move shows automatically in game
+  review, and the overview's default range. Saved in the browser only.
+- *Accounts*: add or remove Chess.com / Lichess accounts (removing one keeps its games),
+  and whether a Lichess token is saved. The token itself is only ever set from the terminal.
+- *Daily update*: turn the launchd job on or off, change its time, see the last run, and
+  run it now.
+- *Analysis*: Stockfish depth (stored in the `settings` table; `analyze` and `update` use it
+  unless `--depth` is passed).
+- *Data*: database and backup locations and sizes.
+
+These are the app's only writes to the database.
 
 ## Example queries
 

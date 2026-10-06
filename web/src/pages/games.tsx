@@ -13,7 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { type GamesPage as GamesResponse, useApi } from '@/lib/api'
-import { num, openingLabel, pct, RANGE_LABEL, shortDate } from '@/lib/format'
+import { num, openingLabel, RANGE_LABEL, shortDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 /** Filters live in the URL so overview KPIs can link straight to a filtered list. */
@@ -97,12 +97,6 @@ export function GamesPage() {
       )}
 
       {error && <p className="text-sm text-destructive">Couldn't load games. {error}</p>}
-
-      {data && (
-        <p className="text-sm text-muted-foreground">
-          {data.total} games · {pct(data.win_rate)} won · {num(data.accuracy, 1)}% avg accuracy
-        </p>
-      )}
 
       <div className={cn('rounded-xl ring-1 ring-foreground/10', loading && data && 'opacity-60')}>
         <Table>

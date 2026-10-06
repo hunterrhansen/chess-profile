@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 export type Range = '30d' | '90d' | 'all'
 export type Outcome = 'win' | 'loss' | 'draw'
@@ -75,8 +75,6 @@ export interface GamesPage {
   total: number
   page: number
   page_size: number
-  win_rate: number | null
-  accuracy: number | null
   games: Game[]
 }
 
@@ -85,6 +83,7 @@ export function useApi<T>(url: string) {
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [version, setVersion] = useState(0)
 
   useEffect(() => {
     const ctrl = new AbortController()
@@ -105,9 +104,51 @@ export function useApi<T>(url: string) {
         setLoading(false)
       })
     return () => ctrl.abort()
-  }, [url])
+  }, [url, version])
 
-  return { data, error, loading }
+  const reload = useCallback(() => setVersion((v) => v + 1), [])
+  return { data, error, loading, reload }
+}
+
+/** POST / PUT / DELETE a JSON body; throws with the server's message on failure. */
+export async function send<T = unknown>(method: 'POST' | 'PUT' | 'DELETE', url: string, body?: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method,
+    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (!res.ok) {
+    let message = `${res.status}`
+    try {
+      const err = await res.json()
+      message = typeof err.detail === 'string' ? err.detail : (err.detail?.[0]?.msg ?? message)
+    } catch {
+      // not JSON
+    }
+    throw new Error(message)
+  }
+  return (res.status === 204 ? undefined : await res.json()) as T
+}
+
+export interface Settings {
+  accounts: { source: string; handle: string; synced_through: string | null }[]
+  lichess_token: boolean
+  schedule: { hour: number; minute: number; loaded: boolean } | null
+  last_run: {
+    started_at: string
+    finished_at: string | null
+    status: 'ok' | 'partial' | 'failed'
+    trigger: string | null
+    new_games: number | null
+    new_puzzles: number | null
+    games_analysed: number | null
+    errors: string | null
+  } | null
+  running: boolean
+  engine: string | null
+  depth: number
+  database: { path: string; bytes: number; games: number; analysed: number }
+  backups: { dir: string; count: number; keep: number }
 }
 
 export type Classification = 'best' | 'excellent' | 'good' | 'inaccuracy' | 'mistake' | 'blunder' | 'miss'

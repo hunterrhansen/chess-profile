@@ -128,3 +128,76 @@ def test_game_detail(client):
     unanalysed = client.get("/api/games/4").json()
     assert unanalysed["plies"] == [] and unanalysed["analysed"] is False
     assert client.get("/api/games/999").status_code == 404
+
+
+def test_accounts(client, tmp_path):
+    assert client.get("/api/accounts").json() == []
+    with db.connect(tmp_path / "chess.db") as conn:
+        db.add_account(conn, "chesscom", "gghansen")
+    assert client.get("/api/accounts").json() == [{"source": "chesscom", "handle": "gghansen"}]
+
+
+@pytest.fixture
+def system(monkeypatch):
+    """Stand-ins for launchd, the Keychain and Stockfish, so tests never touch the real Mac."""
+    calls = {"install": None, "uninstall": 0, "run_now": 0, "spawned": None}
+    state = {"schedule": None}
+
+    def install(db_path, hour=6, minute=0, log=print):
+        calls["install"] = (hour, minute)
+        state["schedule"] = {"hour": hour, "minute": minute, "loaded": True}
+
+    def uninstall(log=print):
+        calls["uninstall"] += 1
+        state["schedule"] = None
+
+    monkeypatch.setattr(api.schedule, "install", install)
+    monkeypatch.setattr(api.schedule, "uninstall", uninstall)
+    monkeypatch.setattr(api.schedule, "current", lambda: state["schedule"])
+    monkeypatch.setattr(api.schedule, "run_now", lambda log=print: calls.__setitem__("run_now", calls["run_now"] + 1))
+    monkeypatch.setattr(api.subprocess, "Popen", lambda args, **kw: calls.__setitem__("spawned", args))
+    monkeypatch.setattr(api, "lichess_token_saved", lambda: True)
+    monkeypatch.setattr(api, "engine_name", lambda: "Stockfish 19")
+    return calls
+
+
+def test_settings_snapshot(client, system):
+    s = client.get("/api/settings").json()
+    assert s["depth"] == 18 and s["engine"] == "Stockfish 19" and s["lichess_token"] is True
+    assert s["schedule"] is None and s["running"] is False and s["last_run"] is None
+    assert s["database"]["games"] == 6 and s["database"]["analysed"] == 4
+
+
+def test_add_and_remove_account(client, system):
+    assert client.post("/api/accounts", json={"source": "chesscom", "handle": "gghansen"}).status_code == 201
+    assert client.post("/api/accounts", json={"source": "chesscom", "handle": "gghansen"}).status_code == 201  # idempotent
+    assert client.get("/api/accounts").json() == [{"source": "chesscom", "handle": "gghansen"}]
+    assert client.post("/api/accounts", json={"source": "fics", "handle": "x1"}).status_code == 400
+    assert client.post("/api/accounts", json={"source": "lichess", "handle": "no spaces"}).status_code == 400
+    assert client.delete("/api/accounts/chesscom/gghansen").status_code == 204
+    assert client.get("/api/accounts").json() == []
+
+
+def test_analysis_depth(client, system, tmp_path):
+    assert client.put("/api/settings/analysis", json={"depth": 22}).json() == {"depth": 22}
+    assert client.get("/api/settings").json()["depth"] == 22
+    with db.connect(tmp_path / "chess.db") as conn:
+        assert db.analysis_depth(conn) == 22  # what `analyze` and `update` will use
+    assert client.put("/api/settings/analysis", json={"depth": 99}).status_code == 422
+
+
+def test_schedule_and_run_now(client, system):
+    # Not installed: "run now" starts a detached `chessprofile update`.
+    assert client.post("/api/update/run").status_code == 202
+    assert system["spawned"][-3:] == ["update", "--workers", "3"] and system["run_now"] == 0
+
+    assert client.put("/api/settings/schedule", json={"enabled": True, "hour": 7, "minute": 30}).json() == {
+        "hour": 7, "minute": 30, "loaded": True}
+    assert system["install"] == (7, 30)
+    # Installed: "run now" goes through launchd instead.
+    client.post("/api/update/run")
+    assert system["run_now"] == 1
+
+    assert client.put("/api/settings/schedule", json={"enabled": False}).json() is None
+    assert system["uninstall"] == 1
+    assert client.put("/api/settings/schedule", json={"enabled": True, "hour": 24}).status_code == 422

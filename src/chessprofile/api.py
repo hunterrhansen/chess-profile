@@ -1,17 +1,28 @@
-"""Read-only HTTP API over chess.db for the web frontend (`chessprofile serve`).
+"""HTTP API over chess.db for the web frontend (`chessprofile serve`).
 
 Every number on the overview is computed from one row per game (GAME_FACTS), and the
 games list filters on the same rows, so a KPI and the games it links to always agree.
+
+Reads use a read-only connection. The only writes are the Settings page's: accounts, the
+analysis depth, and the daily-update schedule (which goes through launchd).
 """
+import functools
+import os
+import re
+import shutil
 import sqlite3
+import subprocess
+import sys
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
-from . import db
+from . import db, schedule, update
 from .analyze import THRESHOLDS
 
 # A position counts as "winning" once the user's win chance reaches this after one of
@@ -192,6 +203,49 @@ def _game_json(r) -> dict:
     }
 
 
+SOURCES = ("chesscom", "lichess")
+HANDLE = re.compile(r"^[A-Za-z0-9_-]{2,40}$")
+KEYCHAIN_SERVICE = "chessprofile-lichess"  # same entry `cli.keychain_token` reads
+STALE_RUN = timedelta(hours=3)  # a "running" row older than this is a crashed run
+
+
+class AccountIn(BaseModel):
+    source: str
+    handle: str
+
+
+class ScheduleIn(BaseModel):
+    enabled: bool
+    hour: int = Field(6, ge=0, le=23)
+    minute: int = Field(0, ge=0, le=59)
+
+
+class AnalysisIn(BaseModel):
+    depth: int = Field(ge=8, le=30)
+
+
+@functools.cache
+def engine_name() -> str | None:
+    """"Stockfish 19" from the engine's banner, or None if it isn't installed."""
+    path = os.environ.get("STOCKFISH") or shutil.which("stockfish")
+    if not path:
+        return None
+    try:
+        out = subprocess.run([path], input="quit\n", capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return " ".join(out.stdout.split()[:2]) or None
+
+
+def lichess_token_saved() -> bool:
+    """Whether a token is available, without ever reading the secret itself."""
+    if os.environ.get("LICHESS_TOKEN"):
+        return True
+    found = subprocess.run(["security", "find-generic-password", "-s", KEYCHAIN_SERVICE],
+                           capture_output=True)
+    return found.returncode == 0
+
+
 def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = None) -> FastAPI:
     db_path = str(Path(db_path).resolve())
     app = FastAPI(title="chessprofile")
@@ -207,6 +261,100 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
 
     def facts(where: str = "1", params=(), order: str = "f.played_at") -> list[sqlite3.Row]:
         return query(f"SELECT * FROM ({GAME_FACTS}) f WHERE {where} ORDER BY {order}", params)
+
+    def write():
+        """A short-lived read-write connection, for the Settings page's few writes."""
+        return closing(db.connect(db_path))
+
+    @app.get("/api/accounts")
+    def accounts():
+        return [dict(r) for r in query("SELECT source, handle FROM accounts ORDER BY source")]
+
+    @app.post("/api/accounts", status_code=201)
+    def add_account(body: AccountIn):
+        if body.source not in SOURCES:
+            raise HTTPException(400, f"source must be one of {', '.join(SOURCES)}")
+        if not HANDLE.match(body.handle):
+            raise HTTPException(400, "That doesn't look like a username.")
+        with write() as conn, conn:
+            db.add_account(conn, body.source, body.handle)
+        return {"source": body.source, "handle": body.handle}
+
+    @app.delete("/api/accounts/{source}/{handle}", status_code=204)
+    def remove_account(source: str, handle: str):
+        # Games already imported stay; the account just stops being synced.
+        with write() as conn, conn:
+            conn.execute("DELETE FROM accounts WHERE source = ? AND handle = ?", (source, handle))
+
+    @app.get("/api/settings")
+    def settings():
+        path = Path(db_path)
+        backups = sorted((path.parent / "backups").glob(f"{path.stem}-????-??-??.db"))
+        cursors = {(r["source"], r["account"], r["kind"]): r["cursor"]
+                   for r in query("SELECT source, account, kind, cursor FROM sync_state")}
+        last = query("""SELECT id, started_at, finished_at, status, trigger, new_games,
+                               new_puzzles, games_analysed, errors
+                        FROM runs WHERE status != 'running' ORDER BY id DESC LIMIT 1""")
+        cutoff = (datetime.now(timezone.utc) - STALE_RUN).strftime("%Y-%m-%dT%H:%M:%SZ")
+        running = query("SELECT 1 FROM runs WHERE status = 'running' AND started_at >= ?", (cutoff,))
+        counts = query("""SELECT (SELECT count(*) FROM games) AS games,
+                                 (SELECT count(*) FROM game_analysis) AS analysed""")[0]
+        depth = query("SELECT value FROM settings WHERE key = 'analysis_depth'")
+        return {
+            "accounts": [
+                {**dict(a), "synced_through": cursors.get((a["source"], a["handle"].lower(), "games"))}
+                for a in query("SELECT source, handle FROM accounts ORDER BY source")
+            ],
+            "lichess_token": lichess_token_saved(),
+            "schedule": schedule.current(),
+            "last_run": dict(last[0]) if last else None,
+            "running": bool(running),
+            "engine": engine_name(),
+            "depth": int(depth[0]["value"]) if depth else db.DEFAULT_DEPTH,
+            "database": {
+                "path": str(path),
+                "bytes": sum(p.stat().st_size for p in (path, Path(f"{path}-wal")) if p.exists()),
+                **dict(counts),
+            },
+            "backups": {"dir": str(path.parent / "backups"), "count": len(backups),
+                        "keep": update.KEEP_BACKUPS},
+        }
+
+    @app.put("/api/settings/analysis")
+    def set_analysis(body: AnalysisIn):
+        with write() as conn, conn:
+            db.set_setting(conn, "analysis_depth", body.depth)
+        return {"depth": body.depth}
+
+    @app.put("/api/settings/schedule")
+    def set_schedule(body: ScheduleIn):
+        try:
+            if body.enabled:
+                schedule.install(Path(db_path), hour=body.hour, minute=body.minute, log=lambda _: None)
+            else:
+                schedule.uninstall(log=lambda _: None)
+        except SystemExit as e:  # schedule.py reports failures this way for the CLI
+            raise HTTPException(400, str(e)) from None
+        return schedule.current()
+
+    @app.post("/api/update/run", status_code=202)
+    def run_update():
+        """Start the update pipeline in the background: via launchd when the daily job is
+        installed (same low priority and log), else as a detached `chessprofile update`."""
+        if schedule.current():
+            try:
+                schedule.run_now(log=lambda _: None)
+            except SystemExit as e:
+                raise HTTPException(400, str(e)) from None
+        else:
+            exe = Path(sys.executable).parent / "chessprofile"
+            schedule.LOG.parent.mkdir(parents=True, exist_ok=True)
+            with open(schedule.LOG, "a") as log_file:
+                subprocess.Popen(
+                    [str(exe), "--db", db_path, "update", "--workers", str(schedule.SCHEDULED_WORKERS)],
+                    stdout=log_file, stderr=log_file, stdin=subprocess.DEVNULL,
+                    cwd=str(Path(db_path).parent), start_new_session=True)
+        return {"started": True}
 
     @app.get("/api/overview")
     def overview(range: str = Query("90d", pattern="^(30d|90d|all)$")):
@@ -304,8 +452,6 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
             "total": len(rows),
             "page": page,
             "page_size": PAGE_SIZE,
-            "win_rate": _mean([r["user_outcome"] == "win" for r in rows]),
-            "accuracy": _mean([r["accuracy"] for r in rows]),
             "games": [_game_json(r) for r in page_rows],
         }
 

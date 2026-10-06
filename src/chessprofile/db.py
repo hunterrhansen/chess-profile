@@ -66,6 +66,27 @@ def add_snapshot(conn, source: str, account: str, kind: str, data) -> None:
     )
 
 
+DEFAULT_DEPTH = 18  # Stockfish depth per position unless changed in settings
+
+
+def get_setting(conn, key: str, default=None):
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return json.loads(row[0]) if row else default
+
+
+def set_setting(conn, key: str, value) -> None:
+    conn.execute(
+        """INSERT INTO settings (key, value) VALUES (?, ?)
+           ON CONFLICT (key) DO UPDATE
+           SET value = excluded.value, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')""",
+        (key, json.dumps(value)),
+    )
+
+
+def analysis_depth(conn) -> int:
+    return int(get_setting(conn, "analysis_depth", DEFAULT_DEPTH))
+
+
 def get_cursor(conn, source: str, account: str, kind: str) -> str | None:
     row = conn.execute(
         "SELECT cursor FROM sync_state WHERE source = ? AND account = ? AND kind = ?",

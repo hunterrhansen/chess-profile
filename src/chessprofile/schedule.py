@@ -93,6 +93,15 @@ def run_now(log=print) -> None:
     log(f"Started; follow it with: tail -f {LOG}")
 
 
+def current() -> dict | None:
+    """The installed schedule as {"hour", "minute", "loaded"}, or None if not installed."""
+    if not PLIST.exists():
+        return None
+    when = plistlib.loads(PLIST.read_bytes())["StartCalendarInterval"]
+    loaded = _launchctl("print", f"gui/{os.getuid()}/{LABEL}").returncode == 0
+    return {"hour": when["Hour"], "minute": when["Minute"], "loaded": loaded}
+
+
 def status(conn, log=print) -> None:
     if PLIST.exists():
         cfg = plistlib.loads(PLIST.read_bytes())

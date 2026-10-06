@@ -47,6 +47,7 @@ def cmd_sync(conn, args) -> None:
 
 def cmd_update(conn, args) -> None:
     status = update.run(conn, Path(args.db), lichess_token(), workers=args.workers,
+                        depth=db.analysis_depth(conn),
                         trigger="schedule" if args.scheduled else "manual",
                         notify_on_failure=args.scheduled, log=log)
     if status == "partial":
@@ -86,8 +87,8 @@ def cmd_analyze(conn, args) -> None:
         analyze.reclassify(conn, log=log)
         return
     try:
-        n = analyze.run(conn, depth=args.depth, workers=args.workers, engine_path=args.engine,
-                        force=args.force, limit=args.limit, log=log)
+        n = analyze.run(conn, depth=args.depth or db.analysis_depth(conn), workers=args.workers,
+                        engine_path=args.engine, force=args.force, limit=args.limit, log=log)
     except KeyboardInterrupt:
         sys.exit(130)
     if n:
@@ -177,7 +178,8 @@ def main(argv=None) -> None:
 
     s = sub.add_parser("analyze", help="Run Stockfish over games that haven't been analysed yet "
                                        "(per-move evals, blunders, time use). Safe to interrupt.")
-    s.add_argument("--depth", type=int, default=18, help="Search depth per position (default: 18)")
+    s.add_argument("--depth", type=int,
+                   help="Search depth per position (default: the Settings value, else 18)")
     s.add_argument("--workers", type=int, help="Parallel engine processes (default: CPU cores - 1)")
     s.add_argument("--engine", help="Path to Stockfish (default: $STOCKFISH or `stockfish` on PATH)")
     s.add_argument("--limit", type=int, help="Only analyse this many games (most recent first)")
@@ -203,7 +205,7 @@ def main(argv=None) -> None:
     s = sub.add_parser("stats", help="Summary of what's in the database")
     s.set_defaults(func=cmd_stats)
 
-    s = sub.add_parser("serve", help="Run the web app (read-only) at http://127.0.0.1:8000")
+    s = sub.add_parser("serve", help="Run the web app at http://127.0.0.1:8000")
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8000)
     s.set_defaults(func=cmd_serve)

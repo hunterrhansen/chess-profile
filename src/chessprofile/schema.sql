@@ -164,3 +164,10 @@ CREATE TABLE IF NOT EXISTS runs (
     backup_path     TEXT,
     errors          TEXT                    -- JSON array of messages, NULL if none
 );
+
+-- App settings changed from the web app's Settings page (or by hand), as key -> JSON value.
+CREATE TABLE IF NOT EXISTS settings (
+    key         TEXT PRIMARY KEY,
+    value       TEXT NOT NULL,
+    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);

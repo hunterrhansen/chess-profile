@@ -1,6 +1,6 @@
 import { Chess } from 'chess.js'
 import { ArrowLeft, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { type Arrow, Chessboard } from 'react-chessboard'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { ResultBadge } from '@/components/game-bits'
@@ -12,12 +12,9 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { type Classification, type GameDetail, type MoveRow, useApi } from '@/lib/api'
 import { CLASSIFICATION, isSound } from '@/lib/classification'
 import { clock, longDate, thinkTime, timeControl } from '@/lib/format'
+import { BOARDS, usePreferences } from '@/lib/preferences'
 import { cn } from '@/lib/utils'
 
-const LIGHT = '#EDD6B0'
-const DARK = '#B88762'
-const LIGHT_HL = '#F6EB72'
-const DARK_HL = '#DDC34B'
 const BEST_ARROW = 'rgba(99, 153, 34, 0.85)'
 const TIME_BAR_FULL = 100 // seconds of thinking that fill a time bar
 const BLUNDER_DROP = 20 // keep in step with analyze.THRESHOLDS
@@ -60,6 +57,10 @@ export function ReviewPage() {
   const last = replay ? replay.fens.length - 1 : 0
   const ply = Math.min(Number(params.get('ply') ?? 0), last)
   const tab = params.get('tab') === 'moments' ? 'moments' : 'moves'
+  const { prefs } = usePreferences()
+  // With the "on request" preference, the best move stays hidden until asked for, per move.
+  const [revealedPly, setRevealedPly] = useState<number | null>(null)
+  const showBest = prefs.bestArrow === 'auto' || revealedPly === ply
 
   const setPly = useCallback(
     (p: number) =>
@@ -114,6 +115,8 @@ export function ReviewPage() {
               orientation={me}
               lastMove={replay.squares[ply - 1]}
               move={move}
+              showBest={showBest}
+              palette={BOARDS[prefs.board]}
             />
           </div>
           <PlayerStrip
@@ -149,6 +152,8 @@ export function ReviewPage() {
               analysed={replay.moves.length > 0}
               mine={ply > 0 && (ply % 2 === 1) === (me === 'white')}
               opponent={me === 'white' ? game.black : game.white}
+              showBest={showBest}
+              onReveal={() => setRevealedPly(ply)}
             />
             <Tabs
               value={tab}
@@ -273,19 +278,26 @@ function Board({
   orientation,
   lastMove,
   move,
+  showBest,
+  palette,
 }: {
   fen: string
   orientation: Side
   lastMove?: { from: string; to: string }
   move?: MoveRow
+  showBest: boolean
+  palette: (typeof BOARDS)[keyof typeof BOARDS]
 }) {
   const squareStyles = lastMove
     ? Object.fromEntries(
-        [lastMove.from, lastMove.to].map((sq) => [sq, { backgroundColor: isLightSquare(sq) ? LIGHT_HL : DARK_HL }]),
+        [lastMove.from, lastMove.to].map((sq) => [
+          sq,
+          { backgroundColor: isLightSquare(sq) ? palette.lightHl : palette.darkHl },
+        ]),
       )
     : {}
   const arrows: Arrow[] =
-    move && !isSound(move.classification) && move.best_uci
+    showBest && move && !isSound(move.classification) && move.best_uci
       ? [{ startSquare: move.best_uci.slice(0, 2), endSquare: move.best_uci.slice(2, 4), color: BEST_ARROW }]
       : []
   const badge = move?.classification && lastMove ? { square: lastMove.to, kind: move.classification } : null
@@ -298,10 +310,10 @@ function Board({
           boardOrientation: orientation,
           allowDragging: false,
           animationDurationInMs: 150,
-          lightSquareStyle: { backgroundColor: LIGHT },
-          darkSquareStyle: { backgroundColor: DARK },
-          lightSquareNotationStyle: { color: DARK },
-          darkSquareNotationStyle: { color: LIGHT },
+          lightSquareStyle: { backgroundColor: palette.light },
+          darkSquareStyle: { backgroundColor: palette.dark },
+          lightSquareNotationStyle: { color: palette.dark },
+          darkSquareNotationStyle: { color: palette.light },
           arrows,
           // A custom renderer replaces the library's own square wrapper, which is where it
           // applies `squareStyles`, so the last-move highlight is applied here instead.
@@ -378,6 +390,8 @@ function MovePanel({
   analysed,
   mine,
   opponent,
+  showBest,
+  onReveal,
 }: {
   ply: number
   san?: string
@@ -385,6 +399,8 @@ function MovePanel({
   analysed: boolean
   mine: boolean
   opponent: string
+  showBest: boolean
+  onReveal: () => void
 }) {
   if (!ply || !san) {
     return (
@@ -415,7 +431,11 @@ function MovePanel({
             {Math.round(move.win_pct_after ?? 0)}%
           </p>
           <p className="text-muted-foreground">
-            {!isSound(kind ?? null) && move.best_san ? (
+            {!isSound(kind ?? null) && move.best_san && !showBest ? (
+              <Button variant="link" className="h-auto p-0 text-muted-foreground" onClick={onReveal}>
+                Show best move
+              </Button>
+            ) : !isSound(kind ?? null) && move.best_san ? (
               <>
                 Best was{' '}
                 <span className="font-medium text-foreground">
