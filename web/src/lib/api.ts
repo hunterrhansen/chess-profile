@@ -208,3 +208,14 @@ export interface GameDetail extends Game {
   opponent_accuracy: number | null
   plies: MoveRow[] // empty until the game has been analysed
 }
+
+/** A note from game review or `chessprofile note`. */
+export interface Note {
+  id: number
+  created_at: string
+  body: string
+  tags: string[]
+  fen: string | null
+  plies: number[] // where the note's position comes up in the game being viewed
+  game: { id: number; ply: number | null; opponent: string | null; played_at: string | null } | null // where it was written
+}

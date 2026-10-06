@@ -22,7 +22,7 @@ PUZZLE_COLUMNS = [
 
 # Columns added to existing tables after they were first created. schema.sql has them for
 # new databases; connect() adds any that an older database is missing.
-ADDED_COLUMNS = [("runs", "progress", "TEXT")]
+ADDED_COLUMNS = [("runs", "progress", "TEXT"), ("notes", "ply", "INTEGER")]
 
 
 def connect(path: str | Path = DEFAULT_DB) -> sqlite3.Connection:

@@ -92,7 +92,8 @@ CREATE TABLE IF NOT EXISTS notes (
     body        TEXT NOT NULL,
     tags        TEXT,                   -- JSON array
     game_id     INTEGER REFERENCES games(id),
-    fen         TEXT
+    fen         TEXT,                   -- the position the note is about
+    ply         INTEGER                 -- where in game_id that position is, for linking back
 );
 
 -- Incremental-sync cursors.

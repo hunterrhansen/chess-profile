@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js'
-import { ArrowLeft, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ExternalLink, LoaderCircle, Play, Undo2 } from 'lucide-react'
+import { ArrowLeft, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ExternalLink, LoaderCircle, Play, Plus, Trash2, Undo2 } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { type Arrow, Chessboard } from 'react-chessboard'
 import { Link, useParams, useSearchParams } from 'react-router'
@@ -7,11 +7,12 @@ import { ResultBadge } from '@/components/game-bits'
 import { MoveBadge } from '@/components/move-badge'
 import { MarkedText, MoveText } from '@/components/move-text'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { type Classification, type EngineLine, type EngineLines, type GameDetail, type LineKind, type MoveRow, useApi } from '@/lib/api'
+import { type Classification, type EngineLine, type EngineLines, type GameDetail, type LineKind, type MoveRow, type Note, send, useApi } from '@/lib/api'
 import { CLASSIFICATION, isSound } from '@/lib/classification'
-import { clock, longDate, thinkTime, timeControl } from '@/lib/format'
+import { clock, longDate, shortDate, thinkTime, timeControl } from '@/lib/format'
 import { lastLocation } from '@/lib/last-location'
 import { BOARDS, usePreferences } from '@/lib/preferences'
 import { cn } from '@/lib/utils'
@@ -79,6 +80,8 @@ export function ReviewPage() {
   const { id } = useParams()
   const { data: game, error } = useApi<GameDetail>(`/api/games/${id}`)
   const replay = useReplay(game)
+  const notes = useApi<Note[]>(`/api/games/${id}/notes`)
+  const notedPlies = useMemo(() => new Set(notes.data?.flatMap((n) => n.plies)), [notes.data])
   const [params, setParams] = useSearchParams()
   const last = replay ? replay.fens.length - 1 : 0
   const ply = Math.min(Number(params.get('ply') ?? 0), last)
@@ -128,7 +131,7 @@ export function ReviewPage() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.metaKey || e.ctrlKey || e.altKey) return
       if (line) {
         // While a line is open the keys step through it; Escape goes back to the game.
         if (e.key === 'Escape') setLine(null)
@@ -279,6 +282,16 @@ export function ReviewPage() {
               onShow={(kind) => setLine({ kind, step: 1 })}
             />
             )}
+            {!line && notes.data && (
+              <PositionNotes
+                key={ply}
+                gameId={game.id}
+                ply={ply}
+                fen={replay.fens[ply]}
+                notes={notes.data.filter((n) => n.plies.includes(ply) || (ply === 0 && !n.plies.length))}
+                onChange={notes.reload}
+              />
+            )}
             <Tabs
               value={tab}
               onValueChange={(v) =>
@@ -303,7 +316,7 @@ export function ReviewPage() {
             </Tabs>
             <div className={cn('flex min-h-0 flex-1 flex-col transition-opacity', inLine && 'opacity-40')}>
               {tab === 'moves' ? (
-                <MoveList san={game.san} moves={replay.moves} ply={ply} onSelect={setPly} />
+                <MoveList san={game.san} moves={replay.moves} ply={ply} noted={notedPlies} onSelect={setPly} />
               ) : (
                 <KeyMoments game={game} moves={replay.moves} whiteWin={replay.whiteWin} me={me} ply={ply} onSelect={setPly} />
               )}
@@ -828,15 +841,158 @@ function LinePanel({
   )
 }
 
+/**
+ * Notes on the position on the board (after the selected move): ones written here, and ones
+ * from other games that reached the same position. On the starting position, also the notes
+ * on the game as a whole.
+ */
+function PositionNotes({
+  gameId,
+  ply,
+  fen,
+  notes,
+  onChange,
+}: {
+  gameId: number
+  ply: number
+  fen: string
+  notes: Note[]
+  onChange: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [body, setBody] = useState('')
+  const [tags, setTags] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const save = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await send('POST', '/api/notes', {
+        body,
+        tags: tags.split(/[\s,]+/).filter(Boolean),
+        game_id: gameId,
+        ply,
+        fen,
+      })
+      setBody('')
+      setTags('')
+      setOpen(false)
+      onChange()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const remove = async (note: Note) => {
+    if (!window.confirm('Delete this note?')) return
+    try {
+      await send('DELETE', `/api/notes/${note.id}`)
+      onChange()
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
+  return (
+    <div className="border-b px-3 py-2 text-sm">
+      {notes.length > 0 && (
+        <ul className="mb-2 flex max-h-36 flex-col gap-1.5 overflow-y-auto">
+          {notes.map((n) => {
+            const elsewhere = n.game && n.game.id !== gameId
+            return (
+              <li key={n.id} className="group flex gap-2 rounded-lg bg-amber-500/10 px-2.5 py-1.5">
+                <div className="min-w-0 flex-1">
+                  <p className="leading-snug whitespace-pre-wrap">{n.body}</p>
+                  <p className="mt-0.5 flex flex-wrap gap-x-1.5 text-xs text-muted-foreground">
+                    {n.tags.map((t) => (
+                      <span key={t}>#{t}</span>
+                    ))}
+                    {!n.plies.length && <span>On the whole game</span>}
+                    {elsewhere && (
+                      <Link
+                        to={`/games/${n.game!.id}${n.game!.ply ? `?ply=${n.game!.ply}` : ''}`}
+                        className="underline-offset-2 hover:text-foreground hover:underline"
+                      >
+                        Same position vs {n.game!.opponent ?? 'another game'}
+                        {n.game!.played_at && `, ${shortDate(n.game!.played_at)}`}
+                      </Link>
+                    )}
+                  </p>
+                </div>
+                <button
+                  onClick={() => remove(n)}
+                  className="h-fit shrink-0 rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
+                  aria-label="Delete note"
+                  title="Delete note"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      {open ? (
+        <form
+          className="flex flex-col gap-1.5"
+          onSubmit={(e) => {
+            e.preventDefault()
+            save()
+          }}
+        >
+          <textarea
+            autoFocus
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save()
+              if (e.key === 'Escape') setOpen(false)
+            }}
+            rows={3}
+            placeholder="What did you learn here?"
+            className="w-full resize-none rounded-lg border border-input bg-transparent px-2.5 py-1.5 outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+          />
+          <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="Tags, e.g. tactics fork" />
+          {error && <p className="text-destructive">{error}</p>}
+          <div className="flex gap-2">
+            <Button size="sm" type="submit" disabled={busy || !body.trim()}>
+              Save note
+            </Button>
+            <Button size="sm" variant="ghost" type="button" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <>
+          {error && <p className="mb-1 text-destructive">{error}</p>}
+          <button
+            onClick={() => setOpen(true)}
+            className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
+          >
+            <Plus className="size-3.5" /> Note on this position
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
 function MoveList({
   san,
   moves,
   ply,
+  noted,
   onSelect,
 }: {
   san: string[]
   moves: MoveRow[]
   ply: number
+  noted: Set<number>
   onSelect: (ply: number) => void
 }) {
   const listRef = useRef<HTMLDivElement>(null)
@@ -866,11 +1022,12 @@ function MoveList({
                 data-selected={j + 1 === ply}
                 onClick={() => onSelect(j + 1)}
                 className={cn(
-                  'w-fit rounded px-1.5 py-0.5 text-left hover:bg-foreground/10',
+                  'flex w-fit items-center gap-1 rounded px-1.5 py-0.5 text-left hover:bg-foreground/10',
                   j + 1 === ply && 'bg-foreground/15 font-medium',
                 )}
               >
                 <MoveText ply={j + 1} san={san[j]} />
+                {noted.has(j + 1) && <span className="size-1.5 rounded-full bg-amber-500" aria-label="has a note" />}
               </button>
             ) : (
               <span key={j} />
