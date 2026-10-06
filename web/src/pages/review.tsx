@@ -520,7 +520,7 @@ function Board({
               {badge?.square === square && (
                 <MoveBadge
                   kind={badge.kind}
-                  className="pointer-events-none absolute -top-2 -right-2 z-10 size-[38%] max-h-7 max-w-7 text-[clamp(9px,1.4vw,12px)] shadow-[0_0_0_1.5px_rgba(0,0,0,0.25)] [&_svg]:size-[60%]"
+                  className="pointer-events-none absolute -top-2 -right-2 z-10 size-[38%] max-h-7 max-w-7 text-[clamp(11px,1.8vw,14px)] shadow-[0_0_0_1.5px_rgba(0,0,0,0.25)] [&_svg]:size-[75%]"
                 />
               )}
             </div>
