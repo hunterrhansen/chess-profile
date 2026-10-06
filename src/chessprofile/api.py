@@ -7,6 +7,7 @@ Reads use a read-only connection. The only writes are the Settings page's: accou
 analysis depth, and the daily-update schedule (which goes through launchd).
 """
 import functools
+import json
 import os
 import re
 import shutil
@@ -293,10 +294,20 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
         cursors = {(r["source"], r["account"], r["kind"]): r["cursor"]
                    for r in query("SELECT source, account, kind, cursor FROM sync_state")}
         last = query("""SELECT id, started_at, finished_at, status, trigger, new_games,
-                               new_puzzles, games_analysed, errors
+                               new_puzzles, games_analysed, errors, progress
                         FROM runs WHERE status != 'running' ORDER BY id DESC LIMIT 1""")
         cutoff = (datetime.now(timezone.utc) - STALE_RUN).strftime("%Y-%m-%dT%H:%M:%SZ")
-        running = query("SELECT 1 FROM runs WHERE status = 'running' AND started_at >= ?", (cutoff,))
+        current = query("""SELECT id, started_at, trigger, progress FROM runs
+                           WHERE status = 'running' AND started_at >= ?
+                           ORDER BY id DESC LIMIT 1""", (cutoff,))
+
+        def run_json(row):
+            run = dict(row)
+            run["progress"] = json.loads(run["progress"]) if run.get("progress") else None
+            if "errors" in run:
+                run["errors"] = json.loads(run["errors"]) if run["errors"] else []
+            return run
+
         counts = query("""SELECT (SELECT count(*) FROM games) AS games,
                                  (SELECT count(*) FROM game_analysis) AS analysed""")[0]
         depth = query("SELECT value FROM settings WHERE key = 'analysis_depth'")
@@ -307,8 +318,9 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
             ],
             "lichess_token": lichess_token_saved(),
             "schedule": schedule.current(),
-            "last_run": dict(last[0]) if last else None,
-            "running": bool(running),
+            "last_run": run_json(last[0]) if last else None,
+            "current_run": run_json(current[0]) if current else None,
+            "running": bool(current),
             "engine": engine_name(),
             "depth": int(depth[0]["value"]) if depth else db.DEFAULT_DEPTH,
             "database": {

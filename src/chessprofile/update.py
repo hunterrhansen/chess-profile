@@ -19,34 +19,75 @@ from .sources import chesscom, lichess
 KEEP_BACKUPS = 7
 
 
+class Progress:
+    """Live step-by-step state of a run, saved to `runs.progress` so the web app can show
+    which step is running. Steps are keyed "sync:<source>:<handle>", "analyze", "backup"."""
+
+    def __init__(self, conn=None, run_id: int | None = None, plan: list[str] | None = None):
+        self.conn, self.run_id = conn, run_id
+        self.state = {"plan": plan or [], "current": None, "detail": None, "done": []}
+
+    def _save(self) -> None:
+        if self.conn is None:  # e.g. `chessprofile sync`, which has no run row
+            return
+        with self.conn:
+            self.conn.execute("UPDATE runs SET progress = ? WHERE id = ?",
+                              (json.dumps(self.state), self.run_id))
+
+    def start(self, key: str, detail: str | None = None) -> None:
+        self.state.update(current=key, detail=detail)
+        self._save()
+
+    def detail(self, text: str) -> None:
+        self.state["detail"] = text
+        self._save()
+
+    def finish(self, summary: str | None, error: str | None = None) -> None:
+        self.state["done"].append({"key": self.state["current"], "summary": summary, "error": error})
+        self.state.update(current=None, detail=None)
+        self._save()
+
+
+def _plural(n: int, word: str) -> str:
+    return f"{n} {word}{'' if n == 1 else 's'}"
+
+
 def sync_accounts(conn, targets, token: str | None, since: str | None = None,
-                  puzzles: bool = True, log=print) -> tuple[int, int, list[str]]:
+                  puzzles: bool = True, log=print, progress: Progress | None = None
+                  ) -> tuple[int, int, list[str]]:
     """Sync each (source, username). Returns (new games, new puzzle attempts, errors);
     one account failing doesn't stop the others."""
+    progress = progress or Progress()
     games = puzzle_attempts = 0
     errors = []
     for source, username in targets:
         log(f"Syncing {source}:{username}")
+        progress.start(f"sync:{source}:{username}", "Fetching games")
         try:
             if source == "chesscom":
                 n = chesscom.sync(conn, username, since=since, log=log)
                 log(f"  -> {n} new games")
                 games += n
+                progress.finish(f"{_plural(n, 'new game')}")
                 continue
             n = lichess.sync_games(conn, username, token=token, since=since, log=log)
             log(f"  -> {n} new games")
             games += n
-            if not puzzles:
-                continue
-            if token:
-                n = lichess.sync_puzzles(conn, username, token, log=log)
-                log(f"  -> {n} new puzzle attempts")
-                puzzle_attempts += n
-            else:
+            summary = _plural(n, "new game")
+            if puzzles and token:
+                progress.detail("Fetching puzzle attempts")
+                p = lichess.sync_puzzles(conn, username, token, log=log)
+                log(f"  -> {p} new puzzle attempts")
+                puzzle_attempts += p
+                summary += f", {_plural(p, 'puzzle attempt')}"
+            elif puzzles:
                 log("  (skipping puzzles: no Lichess token found; see README > Lichess token)")
+                summary += " (no token, puzzles skipped)"
+            progress.finish(summary)
         except Exception as e:
             log(f"  failed: {e}")
             errors.append(f"sync {source}:{username}: {e}")
+            progress.finish(None, error=str(e))
     return games, puzzle_attempts, errors
 
 
@@ -131,25 +172,36 @@ def _run_locked(conn, db_path, token, workers, depth, engine_path, backup_dir, k
         run_id = conn.execute("INSERT INTO runs (status, trigger) VALUES ('running', ?)",
                               (trigger,)).lastrowid
     errors, counts = [], {}
+    targets = known_accounts(conn)
+    progress = Progress(conn, run_id, [f"sync:{s}:{u}" for s, u in targets] + ["analyze", "backup"])
     try:
-        games, puzzles, sync_errors = sync_accounts(conn, known_accounts(conn), token, log=log)
+        games, puzzles, sync_errors = sync_accounts(conn, targets, token, log=log, progress=progress)
         counts.update(new_games=games, new_puzzles=puzzles)
         errors += sync_errors
 
+        progress.start("analyze", "Looking for new games")
         try:  # analysis still covers games from earlier runs even if today's sync failed
-            counts["games_analysed"] = analyze.run(conn, depth=depth, workers=workers,
-                                                   engine_path=engine_path, log=log)
+            counts["games_analysed"] = analyze.run(
+                conn, depth=depth, workers=workers, engine_path=engine_path, log=log,
+                on_progress=lambda done, total: progress.detail(
+                    f"{done} of {_plural(total, 'game')}" if total else "No new games"))
+            n = counts["games_analysed"]
+            progress.finish(_plural(n, "game") + " analysed" if n else "Nothing new to analyse")
         except (Exception, SystemExit) as e:  # SystemExit: Stockfish not installed
             log(f"Analysis failed: {e}")
             errors.append(f"analyze: {e}")
+            progress.finish(None, error=str(e))
 
+        progress.start("backup", "Copying the database")
         try:
             dest = backup(conn, db_path, backup_dir, keep)
             counts["backup_path"] = str(dest)
             log(f"Backed up to {dest}")
+            progress.finish(f"Saved {dest.name}")
         except Exception as e:
             log(f"Backup failed: {e}")
             errors.append(f"backup: {e}")
+            progress.finish(None, error=str(e))
     except BaseException as e:  # anything unexpected, incl. Ctrl-C: record it, then re-raise
         errors.append(f"{type(e).__name__}: {e}")
         _finish(conn, run_id, status="failed", errors=json.dumps(errors), **counts)

@@ -106,3 +106,51 @@ def test_plist(tmp_path):
     assert p["StartCalendarInterval"] == {"Hour": 6, "Minute": 30}
     assert p["EnvironmentVariables"]["STOCKFISH"] == "/opt/sf"
     plistlib.dumps(p)  # serialisable
+
+
+def progress(conn):
+    return json.loads(last_run(conn)["progress"])
+
+
+def test_progress_records_each_step(setup, monkeypatch):
+    conn, db_path = setup
+    seen = []
+
+    def analysing(*a, on_progress=None, **k):  # what the web app polls for mid-run
+        on_progress(0, 2)
+        on_progress(1, 2)
+        seen.append(progress(conn))
+        on_progress(2, 2)
+        return 2
+
+    monkeypatch.setattr(analyze, "run", analysing)
+    assert update.run(conn, db_path, token="t", log=quiet) == "ok"
+    mid = seen[0]
+    assert mid["plan"] == ["sync:chesscom:me", "sync:lichess:me", "analyze", "backup"]
+    assert (mid["current"], mid["detail"]) == ("analyze", "1 of 2 games")
+    done = progress(conn)
+    assert done["current"] is None
+    assert [(d["key"], d["summary"], d["error"]) for d in done["done"]] == [
+        ("sync:chesscom:me", "3 new games", None),
+        ("sync:lichess:me", "1 new game, 5 puzzle attempts", None),
+        ("analyze", "2 games analysed", None),
+        ("backup", f"Saved {update.Path(last_run(conn)['backup_path']).name}", None),
+    ]
+
+
+def test_progress_marks_failed_steps(setup, monkeypatch):
+    conn, db_path = setup
+    monkeypatch.setattr(chesscom, "sync", lambda *a, **k: (_ for _ in ()).throw(ConnectionError("down")))
+    update.run(conn, db_path, token=None, log=quiet)
+    done = {d["key"]: d for d in progress(conn)["done"]}
+    assert done["sync:chesscom:me"]["error"] == "down"
+    assert done["sync:lichess:me"]["summary"] == "1 new game (no token, puzzles skipped)"
+
+
+def test_connect_adds_new_columns_to_an_old_database(tmp_path):
+    path = tmp_path / "old.db"
+    old = db.sqlite3.connect(path)
+    old.execute("CREATE TABLE runs (id INTEGER PRIMARY KEY, status TEXT NOT NULL)")
+    old.close()
+    conn = db.connect(path)
+    assert "progress" in {r["name"] for r in conn.execute("PRAGMA table_info(runs)")}

@@ -130,6 +130,14 @@ export async function send<T = unknown>(method: 'POST' | 'PUT' | 'DELETE', url: 
   return (res.status === 204 ? undefined : await res.json()) as T
 }
 
+/** Live step-by-step state of an update run (see update.Progress). */
+export interface RunProgress {
+  plan: string[] // "sync:<source>:<handle>", "analyze", "backup"
+  current: string | null
+  detail: string | null
+  done: { key: string; summary: string | null; error: string | null }[]
+}
+
 export interface Settings {
   accounts: { source: string; handle: string; synced_through: string | null }[]
   lichess_token: boolean
@@ -142,8 +150,10 @@ export interface Settings {
     new_games: number | null
     new_puzzles: number | null
     games_analysed: number | null
-    errors: string | null
+    errors: string[]
+    progress: RunProgress | null
   } | null
+  current_run: { id: number; started_at: string; trigger: string | null; progress: RunProgress | null } | null
   running: boolean
   engine: string | null
   depth: number

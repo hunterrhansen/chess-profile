@@ -237,8 +237,9 @@ def find_engine(path: str | None) -> str:
 
 
 def run(conn, depth: int = 18, workers: int | None = None, engine_path: str | None = None,
-        force: bool = False, limit: int | None = None, log=print) -> int:
-    """Analyse games that haven't been analysed yet (or all with force). Returns games analysed."""
+        force: bool = False, limit: int | None = None, log=print, on_progress=None) -> int:
+    """Analyse games that haven't been analysed yet (or all with force). Returns games analysed.
+    `on_progress(done, total)` is called before the first game and after each one."""
     engine_path = find_engine(engine_path)
     workers = workers or max(1, (os.cpu_count() or 2) - 1)
     sql = """SELECT id, pgn, user_color, time_control FROM games
@@ -247,6 +248,8 @@ def run(conn, depth: int = 18, workers: int | None = None, engine_path: str | No
     if limit:
         sql += f" LIMIT {int(limit)}"
     todo = [tuple(r) for r in conn.execute(sql)]
+    if on_progress:
+        on_progress(0, len(todo))
     if not todo:
         log("Nothing to analyse: every game already has engine analysis (use --force to redo).")
         return 0
@@ -280,6 +283,8 @@ def run(conn, depth: int = 18, workers: int | None = None, engine_path: str | No
                 continue
             save(conn, game_id, rows, summary)
             done += 1
+            if on_progress:
+                on_progress(done, len(todo))
             if done % 10 == 0 or done == len(todo):
                 elapsed = time.monotonic() - started
                 eta = elapsed / done * (len(todo) - done)

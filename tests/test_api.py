@@ -201,3 +201,20 @@ def test_schedule_and_run_now(client, system):
     assert client.put("/api/settings/schedule", json={"enabled": False}).json() is None
     assert system["uninstall"] == 1
     assert client.put("/api/settings/schedule", json={"enabled": True, "hour": 24}).status_code == 422
+
+
+def test_settings_shows_the_live_run(client, system, tmp_path):
+    with db.connect(tmp_path / "chess.db") as conn:
+        conn.execute("""INSERT INTO runs (status, trigger, errors, progress, finished_at)
+                        VALUES ('partial', 'schedule', '["backup: disk full"]',
+                                '{"plan": ["backup"], "current": null, "detail": null,
+                                  "done": [{"key": "backup", "summary": null, "error": "disk full"}]}',
+                                strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))""")
+        conn.execute("""INSERT INTO runs (status, trigger, progress) VALUES ('running', 'manual',
+                        '{"plan": ["analyze", "backup"], "current": "analyze",
+                          "detail": "1 of 3 games", "done": []}')""")
+    s = client.get("/api/settings").json()
+    assert s["running"] is True
+    assert s["current_run"]["progress"]["detail"] == "1 of 3 games"
+    assert s["last_run"]["errors"] == ["backup: disk full"]
+    assert s["last_run"]["progress"]["done"][0]["error"] == "disk full"

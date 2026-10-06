@@ -162,7 +162,10 @@ CREATE TABLE IF NOT EXISTS runs (
     new_puzzles     INTEGER,
     games_analysed  INTEGER,
     backup_path     TEXT,
-    errors          TEXT                    -- JSON array of messages, NULL if none
+    errors          TEXT,                   -- JSON array of messages, NULL if none
+    progress        TEXT                    -- JSON, live while running: {"plan": [step keys],
+                                            --   "current": key, "detail": "3 of 5 games",
+                                            --   "done": [{"key", "summary", "error"}]}
 );
 
 -- App settings changed from the web app's Settings page (or by hand), as key -> JSON value.

@@ -166,7 +166,8 @@ moments tabs. ← → step through the game, Home / End jump to the ends.
 - *Accounts*: add or remove Chess.com / Lichess accounts (removing one keeps its games),
   and whether a Lichess token is saved. The token itself is only ever set from the terminal.
 - *Daily update*: turn the launchd job on or off, change its time, see the last run, and
-  run it now.
+  run it now. A running update shows each step live (sync per account, analysis "3 of 5
+  games", backup); it runs outside the browser, so closing or reloading the page is fine.
 - *Analysis*: Stockfish depth (stored in the `settings` table; `analyze` and `update` use it
   unless `--depth` is passed).
 - *Data*: database and backup locations and sizes.

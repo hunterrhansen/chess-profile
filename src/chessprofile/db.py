@@ -20,12 +20,20 @@ PUZZLE_COLUMNS = [
 ]
 
 
+# Columns added to existing tables after they were first created. schema.sql has them for
+# new databases; connect() adds any that an older database is missing.
+ADDED_COLUMNS = [("runs", "progress", "TEXT")]
+
+
 def connect(path: str | Path = DEFAULT_DB) -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(resources.files("chessprofile").joinpath("schema.sql").read_text())
+    for table, column, decl in ADDED_COLUMNS:
+        if column not in {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
     return conn
 
 

@@ -1,11 +1,11 @@
-import { Check, LoaderCircle, Play, Plus, X } from 'lucide-react'
+import { Check, Circle, LoaderCircle, Play, Plus, X } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { send, type Settings, useApi } from '@/lib/api'
+import { type RunProgress, send, type Settings, useApi } from '@/lib/api'
 import { BOARDS, type Preferences, usePreferences } from '@/lib/preferences'
 import { cn } from '@/lib/utils'
 
@@ -19,10 +19,10 @@ const DEPTHS = [
 export function SettingsPage() {
   const { data, error, reload } = useApi<Settings>('/api/settings')
 
-  // While an update runs, refresh every few seconds so "last run" fills in when it's done.
+  // While an update runs, refresh every couple of seconds to follow its steps.
   useEffect(() => {
     if (!data?.running) return
-    const t = setInterval(reload, 3000)
+    const t = setInterval(reload, 2000)
     return () => clearInterval(t)
   }, [data?.running, reload])
 
@@ -310,6 +310,7 @@ function UpdateSection({ settings, reload }: { settings: Settings; reload: () =>
   const [time, setTime] = useState(current ? `${pad(current.hour)}:${pad(current.minute)}` : '06:00')
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [showSteps, setShowSteps] = useState(false)
   const savedTime = current ? `${pad(current.hour)}:${pad(current.minute)}` : null
 
   const call = async (what: string, action: () => Promise<unknown>) => {
@@ -370,41 +371,129 @@ function UpdateSection({ settings, reload }: { settings: Settings; reload: () =>
           )}
         </div>
       </Row>
-      <Row
-        label={
-          <span className="flex items-center gap-2">
-            Last run
-            {last && <RunStatus status={last.status} />}
-          </span>
-        }
-        hint={
-          last
-            ? `${new Date(last.started_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} · ${
-                last.new_games ?? 0
-              } new games, ${last.new_puzzles ?? 0} puzzles, ${last.games_analysed ?? 0} analysed`
-            : 'Never'
-        }
-      >
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={running}
-          onClick={() =>
-            call('run', async () => {
-              await send('POST', '/api/update/run')
-              // The job takes a moment to record itself as running; stay busy until it has.
-              await new Promise((r) => setTimeout(r, 2000))
-            })
-          }
-        >
-          {running ? <LoaderCircle className="animate-spin" /> : <Play />}
-          {running ? 'Running' : 'Run now'}
-        </Button>
-      </Row>
-      {last?.errors && <ErrorText>{JSON.parse(last.errors).join(' · ')}</ErrorText>}
+      {settings.current_run ? (
+        <div className="px-4 py-3 text-sm">
+          <div className="mb-2 flex items-center justify-between gap-4">
+            <span className="flex items-center gap-2 font-medium">
+              <LoaderCircle className="size-4 animate-spin" /> Updating
+            </span>
+            <span className="text-muted-foreground tabular-nums">
+              <Elapsed since={settings.current_run.started_at} />
+            </span>
+          </div>
+          {settings.current_run.progress ? (
+            <StepList progress={settings.current_run.progress} />
+          ) : (
+            <p className="text-muted-foreground">Starting…</p>
+          )}
+        </div>
+      ) : (
+        <>
+          <Row
+            label={
+              <span className="flex items-center gap-2">
+                Last run
+                {last && <RunStatus status={last.status} />}
+              </span>
+            }
+            hint={
+              last
+                ? `${new Date(last.started_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} · ${
+                    last.new_games ?? 0
+                  } new games, ${last.new_puzzles ?? 0} puzzles, ${last.games_analysed ?? 0} analysed`
+                : 'Never'
+            }
+          >
+            <div className="flex items-center gap-2">
+              {last?.progress && (
+                <Button variant="ghost" size="sm" onClick={() => setShowSteps((v) => !v)}>
+                  {showSteps ? 'Hide steps' : 'Steps'}
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={running}
+                onClick={() =>
+                  call('run', async () => {
+                    await send('POST', '/api/update/run')
+                    // The job takes a moment to record itself as running; stay busy until it has.
+                    await new Promise((r) => setTimeout(r, 2000))
+                  })
+                }
+              >
+                {running ? <LoaderCircle className="animate-spin" /> : <Play />}
+                {running ? 'Starting' : 'Run now'}
+              </Button>
+            </div>
+          </Row>
+          {showSteps && last?.progress && (
+            <div className="px-4 py-3">
+              <StepList progress={last.progress} />
+            </div>
+          )}
+          {!showSteps && !!last?.errors.length && <ErrorText>{last.errors.join(' · ')}</ErrorText>}
+        </>
+      )}
       <ErrorText>{error}</ErrorText>
     </Section>
   )
+}
+
+const SOURCE_NAMES: Record<string, string> = { chesscom: 'Chess.com', lichess: 'Lichess' }
+
+function stepLabel(key: string) {
+  if (key === 'analyze') return 'Analyse new games'
+  if (key === 'backup') return 'Back up the database'
+  const [, source, handle] = key.split(':')
+  return `Sync ${SOURCE_NAMES[source] ?? source} · ${handle}`
+}
+
+/** The run's steps in order: done (with result), running (with detail), or still to come. */
+function StepList({ progress }: { progress: RunProgress }) {
+  const done = new Map(progress.done.map((d) => [d.key, d]))
+  return (
+    <ol className="flex flex-col gap-2.5 text-sm">
+      {progress.plan.map((key) => {
+        const result = done.get(key)
+        const active = progress.current === key
+        return (
+          <li key={key} className="flex items-start gap-2.5">
+            <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
+              {result?.error ? (
+                <X className="size-4 text-loss" />
+              ) : result ? (
+                <Check className="size-4 text-win" />
+              ) : active ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <Circle className="size-3 text-muted-foreground/50" />
+              )}
+            </span>
+            <span className="min-w-0">
+              <span className={cn(!result && !active && 'text-muted-foreground')}>{stepLabel(key)}</span>
+              {(result || active) && (
+                <span className={cn('block text-muted-foreground', result?.error && 'text-loss')}>
+                  {result ? (result.error ?? result.summary) : (progress.detail ?? 'Working…')}
+                </span>
+              )}
+            </span>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+/** "1:42" since `since`, ticking every second. */
+function Elapsed({ since }: { since: string }) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [])
+  const s = Math.max(0, Math.floor((now - Date.parse(since)) / 1000))
+  return <>{`${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`}</>
 }
 
 function RunStatus({ status }: { status: 'ok' | 'partial' | 'failed' }) {
