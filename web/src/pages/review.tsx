@@ -17,7 +17,7 @@ import { lastLocation } from '@/lib/last-location'
 import { BOARDS, usePreferences } from '@/lib/preferences'
 import { cn } from '@/lib/utils'
 
-const BEST_ARROW = 'rgba(99, 153, 34, 0.85)'
+export const BEST_ARROW = 'rgba(99, 153, 34, 0.85)'
 // Engine lines are drawn in blue so they never look like the real game's yellow.
 const LINE_ARROW = 'rgba(70, 130, 220, 0.75)'
 const LINE_LIGHT = '#B7D2EE'
@@ -370,13 +370,16 @@ function clockAt(moves: MoveRow[], side: Side, ply: number, base: number | null)
   return left
 }
 
-function PlayerStrip({
+/** A player above or below the board. `inset` lines the name up with the board past the
+ * eval bar; leave it off where there's no eval bar. */
+export function PlayerStrip({
   name,
   rating,
   seconds,
   you,
   dim,
   tag,
+  inset = true,
 }: {
   name: string
   rating: number | null
@@ -384,9 +387,10 @@ function PlayerStrip({
   you?: boolean
   dim?: boolean
   tag?: string
+  inset?: boolean
 }) {
   return (
-    <div className="flex h-9 items-center gap-2 pl-6 text-sm">
+    <div className={cn('flex h-9 items-center gap-2 text-sm', inset && 'pl-6')}>
       <span className="font-medium">{name}</span>
       <span className="text-muted-foreground">
         {rating}
@@ -986,7 +990,7 @@ function PositionNotes({
   )
 }
 
-function MoveList({
+export function MoveList({
   san,
   moves,
   ply,
@@ -1157,9 +1161,26 @@ function KeyMoments({
   )
 }
 
-function NavButton({ label, onClick, icon }: { label: string; onClick: () => void; icon: React.ReactNode }) {
+export function NavButton({
+  label,
+  onClick,
+  icon,
+  disabled,
+}: {
+  label: string
+  onClick: () => void
+  icon: React.ReactNode
+  disabled?: boolean
+}) {
   return (
-    <Button variant="secondary" className="h-10 [&_svg]:size-5" aria-label={label} title={label} onClick={onClick}>
+    <Button
+      variant="secondary"
+      className="h-10 [&_svg]:size-5"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      disabled={disabled}
+    >
       {icon}
     </Button>
   )

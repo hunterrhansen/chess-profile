@@ -5,7 +5,7 @@ games list filters on the same rows, so a KPI and the games it links to always a
 
 Reads use a read-only connection. The only writes are the Settings page's (accounts, the
 analysis depth, and the daily-update schedule, which goes through launchd), cached engine
-lines, and notes.
+lines, notes, and games played against the bot.
 """
 import functools
 import json
@@ -20,13 +20,16 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import chess
+import chess.engine
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
-from . import db, lines, schedule, update
-from .analyze import THRESHOLDS
+from . import db, lines, play, schedule, update
+from .analyze import THRESHOLDS, find_engine
 
 # A position counts as "winning" once the user's win chance reaches this after one of
 # their own moves, and as "lost" once it falls to LOST_PCT. Lichess win% scale, 0-100.
@@ -249,6 +252,20 @@ class NoteIn(BaseModel):
     fen: str | None = None
 
 
+class BotMoveIn(BaseModel):
+    fen: str
+    elo: int | None = Field(None, ge=100, le=play.MAX_ELO)  # None: the best move, as a hint
+
+
+class PlayedGameIn(BaseModel):
+    moves: list[str] = Field(min_length=1, max_length=1000)  # UCI, from the start position
+    color: Literal["white", "black"]
+    elo: int = Field(ge=100, le=play.MAX_ELO)
+    bot: str = Field(min_length=1, max_length=60)
+    resigned: Literal["white", "black"] | None = None
+    started_at: datetime | None = None
+
+
 def position_key(fen: str) -> str:
     """The parts of a FEN that make two positions the same for a note: pieces, side to move,
     castling rights. Move counters differ between games, and the en passant square is written
@@ -409,6 +426,50 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
         with write() as conn, conn:
             if not conn.execute("DELETE FROM notes WHERE id = ?", (note_id,)).rowcount:
                 raise HTTPException(404, "note not found")
+
+    @app.post("/api/play/move")
+    def bot_move(body: BotMoveIn):
+        """The bot's reply at `elo`, or the engine's best move when `elo` is left out."""
+        try:
+            board = chess.Board(body.fen)
+        except ValueError:
+            raise HTTPException(400, "not a valid FEN") from None
+        if board.is_game_over():
+            raise HTTPException(400, "the game is over")
+        try:
+            with chess.engine.SimpleEngine.popen_uci(find_engine(None)) as engine:
+                move = play.bot_move(engine, board, body.elo)
+        except SystemExit as e:  # Stockfish not installed
+            raise HTTPException(503, str(e)) from None
+        return {"uci": move.uci(), "san": board.san(move)}
+
+    @app.post("/api/play/games", status_code=201)
+    def save_played(body: PlayedGameIn):
+        """Save a finished game against the bot as an unrated game, so it can be reviewed."""
+        handles = query("SELECT handle FROM accounts ORDER BY source = 'chesscom' DESC, source")
+        user = handles[0]["handle"] if handles else "You"
+        try:
+            row = play.game_row(body.moves, body.color, user, body.bot, body.elo,
+                                resigned=body.resigned, started_at=body.started_at)
+        except ValueError as e:
+            raise HTTPException(400, f"not a finished, legal game: {e}") from None
+        with write() as conn, conn:
+            db.insert_game(conn, row)
+            game_id = conn.execute("SELECT id FROM games WHERE source = ? AND source_id = ?",
+                                   (row["source"], row["source_id"])).fetchone()[0]
+        return {"id": game_id}
+
+    @app.post("/api/play/games/{game_id}/analysis")
+    def analyse_played(game_id: int):
+        """Engine analysis of one game right away (several seconds), at the Settings depth."""
+        with write() as conn:
+            if not conn.execute("SELECT 1 FROM games WHERE id = ?", (game_id,)).fetchone():
+                raise HTTPException(404, "game not found")
+            try:
+                play.analyse_saved(conn, game_id, play.default_depth(conn))
+            except SystemExit as e:
+                raise HTTPException(503, str(e)) from None
+        return {"analysed": True}
 
     @app.get("/api/settings")
     def settings():

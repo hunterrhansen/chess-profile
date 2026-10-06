@@ -126,8 +126,10 @@ def _evaluate(engine, board: chess.Board, depth: int) -> dict:
 
 
 def analyze_game(engine, game_id: int, pgn: str, user_color: str | None,
-                 time_control: str | None, depth: int) -> list[dict]:
-    """Evaluate every position in the game and return one dict per half-move."""
+                 time_control: str | None, depth: int, evaluate_all=None) -> list[dict]:
+    """Evaluate every position in the game and return one dict per half-move.
+    `evaluate_all(boards) -> evals` replaces the one-engine loop, e.g. to spread the
+    positions over several engines."""
     game = chess.pgn.read_game(io.StringIO(pgn))
     if game is None:
         return []
@@ -135,12 +137,11 @@ def analyze_game(engine, game_id: int, pgn: str, user_color: str | None,
     board = game.board()
     nodes = list(game.mainline())
 
-    evals = [_evaluate(engine, board, depth)]
     boards = [board.copy()]
     for node in nodes:
         board.push(node.move)
         boards.append(board.copy())
-        evals.append(_evaluate(engine, board, depth))
+    evals = (evaluate_all or (lambda bs: [_evaluate(engine, b, depth) for b in bs]))(boards)
 
     last_clock = {chess.WHITE: base, chess.BLACK: base}
     rows = []
