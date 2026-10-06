@@ -98,7 +98,7 @@ export function GamesPage() {
 
       {error && <p className="text-sm text-destructive">Couldn't load games. {error}</p>}
 
-      <div className={cn('rounded-xl ring-1 ring-foreground/10', loading && data && 'opacity-60')}>
+      <div className={cn('panel overflow-hidden', loading && data && 'opacity-60')}>
         <Table>
           <TableHeader>
             <TableRow>

@@ -9,6 +9,7 @@ import { OverviewPage } from '@/pages/overview'
 import { PlayPage } from '@/pages/play'
 import { ReviewPage } from '@/pages/review'
 import { SettingsPage } from '@/pages/settings'
+import { StyleguidePage } from '@/pages/styleguide'
 import './index.css'
 
 createRoot(document.getElementById('root')!).render(
@@ -23,6 +24,7 @@ createRoot(document.getElementById('root')!).render(
               <Route path="games/:id" element={<ReviewPage />} />
               <Route path="play" element={<PlayPage />} />
               <Route path="settings" element={<SettingsPage />} />
+              <Route path="styleguide" element={<StyleguidePage />} />
             </Route>
           </Routes>
         </TooltipProvider>

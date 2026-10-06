@@ -13,7 +13,7 @@ export interface Preferences {
 
 export const BOARDS = {
   // the brand board (styles/tokens.css); follows the light/dark theme
-  sage: { label: 'Sage', light: 'var(--board-light)', dark: 'var(--board-dark)', lightHl: '#F3E77E', darkHl: '#C3C449' },
+  sage: { label: 'Sage', light: 'var(--board-light)', dark: 'var(--board-dark)', lightHl: 'var(--board-highlight-light)', darkHl: 'var(--board-highlight-dark)' },
   brown: { label: 'Brown', light: '#EDD6B0', dark: '#B88762', lightHl: '#F6EB72', darkHl: '#DDC34B' },
   green: { label: 'Green', light: '#EEEED2', dark: '#769656', lightHl: '#F6F669', darkHl: '#BACA2B' },
   blue: { label: 'Blue', light: '#DEE3E6', dark: '#8CA2AD', lightHl: '#CDD26A', darkHl: '#AAA23A' },

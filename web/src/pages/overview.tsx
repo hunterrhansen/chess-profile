@@ -4,7 +4,9 @@ import { Link, useSearchParams } from 'react-router'
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts'
 import { ColorDot, ResultBadge } from '@/components/game-bits'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Progress } from '@/components/ui/progress'
+import { StatDelta, StatLabel, StatValue } from '@/components/ui/stat'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { type ChartConfig, ChartContainer, ChartTooltip } from '@/components/ui/chart'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -67,7 +69,7 @@ function OverviewBody({
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard label="Rapid rating">
           <span>{data.rating.current ?? '—'}</span>
-          {data.rating.change != null && <Delta value={data.rating.change} better={data.rating.change > 0} />}
+          {data.rating.change != null && <StatDelta value={data.rating.change} better={data.rating.change > 0} />}
           <Sub>Best {data.rating.best ?? '—'}</Sub>
         </StatCard>
         <StatCard label="Games played">
@@ -77,9 +79,7 @@ function OverviewBody({
         <StatCard label="Games analysed" to={gamesLink({ kpi: 'analysed' })}>
           <span>{data.games_analysed}</span>
           <Sub>{pct(analysedShare)} of rated games</Sub>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-            <div className="h-full bg-foreground/60" style={{ width: `${analysedShare * 100}%` }} />
-          </div>
+          <Progress value={analysedShare * 100} label="Share of rated games analysed" hideLabel size="sm" className="mt-3" />
         </StatCard>
       </div>
 
@@ -194,29 +194,21 @@ function OverviewBody({
 
 function StatCard({ label, to, children }: { label: string; to?: string; children: ReactNode }) {
   const card = (
-    <Card className={cn('h-full', to && 'transition-colors hover:bg-muted/50')}>
+    <Card className="h-full">
       <CardHeader>
-        <CardDescription className="flex items-center justify-between">
+        <StatLabel>
           {label}
           {to && <ArrowRight className="size-3.5" />}
-        </CardDescription>
-        <div className="text-2xl font-medium tabular-nums">{children}</div>
+        </StatLabel>
+        <StatValue className="mt-1">{children}</StatValue>
       </CardHeader>
     </Card>
   )
-  return to ? <Link to={to}>{card}</Link> : card
+  return to ? <Link to={to} className="panel-link rounded-xl">{card}</Link> : card
 }
 
 function Sub({ children }: { children: ReactNode }) {
-  return <p className="mt-1 text-xs font-normal text-muted-foreground">{children}</p>
-}
-
-function Delta({ value, better, text }: { value: number; better: boolean; text?: string }) {
-  return (
-    <span className={cn('ml-2 text-sm font-normal', better ? 'text-win' : 'text-loss')}>
-      {value > 0 ? '▲' : '▼'} {text ?? Math.abs(value)}
-    </span>
-  )
+  return <p className="mt-2 font-sans text-sm font-semibold text-muted-foreground">{children}</p>
 }
 
 /** null: nothing to compare (all-time view); 'none': the previous period lacks enough games. */
@@ -258,26 +250,20 @@ function KpiCard({
   focus?: boolean
 }) {
   return (
-    <Card className={cn('gap-2', focus && 'ring-2 ring-loss/50')}>
+    <Card className={cn('gap-2', focus && 'border-danger')}>
       <CardHeader>
-        <CardDescription className="flex items-center justify-between">
-          {label}
-          {focus && (
-            <Badge variant="outline" className="border-loss/40 text-loss">
-              Main focus
-            </Badge>
-          )}
-        </CardDescription>
-        <div className="text-2xl font-medium tabular-nums">
+        {focus && <Badge variant="destructive" className="mb-1">Main focus</Badge>}
+        <StatLabel>{label}</StatLabel>
+        <StatValue className="mt-1 text-3xl">
           {value}
           {delta === 'none' ? (
             <span className="ml-2 text-xs font-normal text-muted-foreground">no earlier data</span>
           ) : delta?.value === 0 ? (
             <span className="ml-2 text-sm font-normal text-muted-foreground">no change</span>
           ) : (
-            delta && <Delta value={delta.value} better={delta.better} text={delta.text} />
+            delta && <StatDelta value={delta.value} better={delta.better} text={delta.text} />
           )}
-        </div>
+        </StatValue>
         {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
       </CardHeader>
       <CardContent className="flex flex-1 flex-col justify-end gap-2">

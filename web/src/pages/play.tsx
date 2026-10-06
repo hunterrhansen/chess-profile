@@ -6,6 +6,7 @@ import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { send, useApi } from '@/lib/api'
 import { BOARDS, usePreferences } from '@/lib/preferences'
+import { token } from '@/lib/tokens'
 import { cn } from '@/lib/utils'
 import { BEST_ARROW, MoveList, NavButton, PlayerStrip } from '@/pages/review'
 
@@ -24,7 +25,7 @@ const LEVELS: { elo: number; label: string }[] = [
   { elo: 3200, label: 'Full strength' },
 ]
 const BOT_DELAY_MS = 500 // the bot never answers faster than this, so its moves can be seen
-const CHECK = 'radial-gradient(circle, rgba(220, 38, 38, 0.85) 0%, rgba(220, 38, 38, 0.5) 45%, transparent 75%)'
+const CHECK = 'radial-gradient(circle, var(--check-glow) 0%, var(--check-glow-soft) 45%, transparent 75%)'
 const STORE = 'chessprofile.play'
 
 const isLightSquare = (square: string) => (square.charCodeAt(0) - 97 + Number(square[1])) % 2 === 0
@@ -271,7 +272,7 @@ export function PlayPage() {
         </div>
 
         <div className="relative min-h-[28rem]">
-          <aside className="flex flex-col overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 lg:absolute lg:inset-0">
+          <aside className="panel flex flex-col overflow-hidden lg:absolute lg:inset-0">
             <div className="flex items-center justify-center gap-2 border-b px-3 py-3 font-semibold">
               <Bot className="size-5" /> Play bot
             </div>
@@ -417,7 +418,7 @@ function Setup({
               <span
                 className={cn(
                   'size-3 rounded-full border border-foreground/40',
-                  c === 'white' ? 'bg-white' : c === 'black' ? 'bg-neutral-900' : 'bg-linear-to-r from-white from-50% to-neutral-900 to-50%',
+                  c === 'white' ? 'bg-eval-white' : c === 'black' ? 'bg-eval-black' : 'bg-linear-to-r from-eval-white from-50% to-eval-black to-50%',
                 )}
               />
               {c}
@@ -447,7 +448,7 @@ function BotSays({ elo, text, error }: { elo: number; text: string | null; error
       </span>
       <div
         className={cn(
-          'relative min-h-11 flex-1 rounded-xl bg-background px-3 py-2 text-sm shadow-sm ring-1 ring-foreground/10',
+          'panel relative min-h-11 flex-1 px-3 py-2 text-sm',
           error && 'text-destructive',
         )}
       >
@@ -494,7 +495,7 @@ function PlayBoard({
     const king = chess.findPiece({ type: 'k', color: chess.turn() })[0]
     if (king) squareStyles[king] = { ...squareStyles[king], backgroundImage: CHECK }
   }
-  const arrows: Arrow[] = hint ? [{ startSquare: hint.slice(0, 2), endSquare: hint.slice(2, 4), color: BEST_ARROW }] : []
+  const arrows: Arrow[] = hint ? [{ startSquare: hint.slice(0, 2), endSquare: hint.slice(2, 4), color: token(BEST_ARROW) }] : []
 
   const click = (square: string) => {
     if (!interactive) return
@@ -528,9 +529,9 @@ function PlayBoard({
               {children}
               {targets.has(square as Square) &&
                 (chess.get(square as Square) ? (
-                  <span className="pointer-events-none absolute inset-0 rounded-full border-[6px] border-black/15" />
+                  <span className="pointer-events-none absolute inset-0 rounded-full border-[6px] border-move-hint" />
                 ) : (
-                  <span className="pointer-events-none absolute inset-[36%] rounded-full bg-black/15" />
+                  <span className="pointer-events-none absolute inset-[36%] rounded-full bg-move-hint" />
                 ))}
             </div>
           ),

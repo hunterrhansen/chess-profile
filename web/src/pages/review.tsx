@@ -4,8 +4,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { type Arrow, Chessboard } from 'react-chessboard'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { ResultBadge } from '@/components/game-bits'
+import { EvalBar as EvalBarView } from '@/components/eval-bar'
 import { MoveBadge } from '@/components/move-badge'
 import { MarkedText, MoveText } from '@/components/move-text'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -15,13 +17,14 @@ import { CLASSIFICATION, isSound } from '@/lib/classification'
 import { clock, longDate, shortDate, thinkTime, timeControl } from '@/lib/format'
 import { lastLocation } from '@/lib/last-location'
 import { BOARDS, usePreferences } from '@/lib/preferences'
+import { token } from '@/lib/tokens'
 import { cn } from '@/lib/utils'
 
-export const BEST_ARROW = 'rgba(99, 153, 34, 0.85)'
+export const BEST_ARROW = '--arrow-best'
 // Engine lines are drawn in blue so they never look like the real game's yellow.
-const LINE_ARROW = 'rgba(70, 130, 220, 0.75)'
-const LINE_LIGHT = '#B7D2EE'
-const LINE_DARK = '#86A9CF'
+const LINE_ARROW = '--arrow-line'
+const LINE_LIGHT = 'var(--line-highlight-light)'
+const LINE_DARK = 'var(--line-highlight-dark)'
 const TIME_BAR_FULL = 100 // seconds of thinking that fill a time bar
 const BLUNDER_DROP = 20 // keep in step with analyze.THRESHOLDS
 
@@ -248,7 +251,7 @@ export function ReviewPage() {
         </div>
 
         <div className="relative min-h-[28rem]">
-          <aside className="flex flex-col overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 lg:absolute lg:inset-0">
+          <aside className="panel flex flex-col overflow-hidden lg:absolute lg:inset-0">
             {prefs.showGraph && replay.moves.length > 0 && (
               <WinGraph replay={replay} me={me} ply={ply} onSelect={setPly} />
             )}
@@ -397,9 +400,9 @@ export function PlayerStrip({
         {you && ' · you'}
       </span>
       {tag && (
-        <span className="ml-1 rounded-full bg-blue-500/15 px-2 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-300">
+        <Badge variant="sky" className="ml-1">
           {tag}
-        </span>
+        </Badge>
       )}
       {seconds != null && (
         <ClockChip seconds={seconds} className={cn('ml-auto text-base transition-opacity', dim && 'opacity-40')} />
@@ -427,32 +430,7 @@ function EvalBar({
       : move?.eval_after != null
         ? (Math.abs(move.eval_after) / 100).toFixed(1)
         : null
-  const whiteAhead = whiteWin >= 50
-  // White's share sits at the bottom when you're White, at the top when you're Black.
-  const whiteAtBottom = orientation === 'white'
-  return (
-    <div
-      className={cn(
-        'relative w-4 shrink-0 overflow-hidden rounded-sm bg-[#2b2b2b] ring-1 ring-foreground/10',
-        'flex',
-        whiteAtBottom ? 'flex-col-reverse' : 'flex-col',
-      )}
-      aria-label={`White's winning chance ${Math.round(whiteWin)}%`}
-    >
-      <div className="bg-[#f2f2f2] transition-[height] duration-200" style={{ height: `${whiteWin}%` }} />
-      {score && (
-        <span
-          className={cn(
-            'absolute inset-x-0 text-center text-[9px] font-medium',
-            whiteAhead === whiteAtBottom ? 'bottom-1' : 'top-1',
-            whiteAhead ? 'text-[#2b2b2b]' : 'text-[#f2f2f2]',
-          )}
-        >
-          {score}
-        </span>
-      )}
-    </div>
-  )
+  return <EvalBarView whiteWin={whiteWin} score={score} whiteAtBottom={orientation === 'white'} />
 }
 
 function isLightSquare(square: string) {
@@ -492,9 +470,9 @@ function Board({
     : {}
   // In the game: the engine's better move in green. In a line: the line's next move in blue.
   const arrows: Arrow[] = inLine
-    ? nextMove ? [{ startSquare: nextMove.from, endSquare: nextMove.to, color: LINE_ARROW }] : []
+    ? nextMove ? [{ startSquare: nextMove.from, endSquare: nextMove.to, color: token(LINE_ARROW) }] : []
     : showBest && move && !isSound(move.classification) && move.best_uci
-      ? [{ startSquare: move.best_uci.slice(0, 2), endSquare: move.best_uci.slice(2, 4), color: BEST_ARROW }]
+      ? [{ startSquare: move.best_uci.slice(0, 2), endSquare: move.best_uci.slice(2, 4), color: token(BEST_ARROW) }]
       : []
   const badge = move?.classification && lastMove ? { square: lastMove.to, kind: move.classification } : null
 
@@ -502,7 +480,7 @@ function Board({
     <div
       className={cn(
         'min-w-0 flex-1 overflow-visible rounded-sm',
-        inLine && 'outline-3 outline-offset-2 outline-blue-500',
+        inLine && 'outline-3 outline-offset-2 outline-sky',
       )}
     >
       <Chessboard
@@ -523,8 +501,10 @@ function Board({
               {children}
               {badge?.square === square && (
                 <MoveBadge
+                  key={fen}
                   kind={badge.kind}
-                  className="pointer-events-none absolute -top-2 -right-2 z-10 size-[38%] max-h-7 max-w-7 text-[clamp(11px,1.8vw,14px)] shadow-[0_0_0_1.5px_rgba(0,0,0,0.25)] [&_svg]:size-[75%]"
+                  pop
+                  className="pointer-events-none absolute -top-2 -right-2 z-10 size-[38%] max-h-7 max-w-7 text-[clamp(11px,1.8vw,14px)] shadow-[inset_0_-2px_0_var(--move-shade),0_0_0_2px_var(--surface)] [&_svg]:size-[75%]"
                 />
               )}
             </div>
@@ -576,7 +556,7 @@ function WinGraph({
         <line x1={0} x2={W} y1={y(50)} y2={y(50)} className="stroke-border" strokeDasharray="3 3" />
         <polyline points={line} fill="none" className="stroke-foreground" strokeWidth={1.5} />
         {errors.map((m) => (
-          <circle key={m.ply} cx={x(m.ply)} cy={y(mine[m.ply])} r={3.2} fill={CLASSIFICATION[m.classification!].color} />
+          <circle key={m.ply} cx={x(m.ply)} cy={y(mine[m.ply])} r={3.2} style={{ fill: CLASSIFICATION[m.classification!].color }} />
         ))}
         <line x1={x(ply)} x2={x(ply)} y1={0} y2={H} className="stroke-foreground" strokeWidth={1} />
       </svg>
@@ -590,7 +570,7 @@ function ClockChip({ seconds, className }: { seconds: number; className?: string
     <span
       className={cn(
         'rounded-md bg-muted px-2.5 py-0.5 font-mono tabular-nums',
-        seconds < 60 && 'bg-loss/15 text-loss',
+        seconds < 60 && 'bg-loss/15 text-danger-text',
         className,
       )}
     >
@@ -604,9 +584,9 @@ function ClockChip({ seconds, className }: { seconds: number; className?: string
  * the move was (the badge says that). +10 or more green, -10 or more red, -5 to -10 amber.
  */
 function changeTone(change: number) {
-  if (change >= 10) return { text: 'text-win', chip: 'bg-win/15 text-win' }
-  if (change <= -10) return { text: 'text-loss', chip: 'bg-loss/15 text-loss' }
-  if (change <= -5) return { text: 'text-amber-600 dark:text-amber-400', chip: 'text-amber-600 dark:text-amber-400' }
+  if (change >= 10) return { text: 'text-brand-text', chip: 'bg-win/15 text-brand-text' }
+  if (change <= -10) return { text: 'text-danger-text', chip: 'bg-loss/15 text-danger-text' }
+  if (change <= -5) return { text: 'text-gold-text', chip: 'text-gold-text' }
   return { text: '', chip: 'text-muted-foreground' }
 }
 
@@ -693,9 +673,9 @@ function MovePanel({
                   {move.time_spent != null && <span className="tabular-nums">{thinkTime(move.time_spent)}</span>}
                 </span>
                 <span className="whitespace-nowrap font-mono text-[15px] tabular-nums">
-                  <span className={cn(clockBefore < 60 && 'text-loss')}>{clock(clockBefore)}</span>
+                  <span className={cn(clockBefore < 60 && 'text-danger-text')}>{clock(clockBefore)}</span>
                   <span className="text-muted-foreground"> → </span>
-                  <span className={cn(clockAfter < 60 && 'text-loss')}>{clock(clockAfter)}</span>
+                  <span className={cn(clockAfter < 60 && 'text-danger-text')}>{clock(clockAfter)}</span>
                 </span>
               </div>
             )}
@@ -705,7 +685,7 @@ function MovePanel({
               <span className="flex items-center gap-2">
                 Best
                 {showBest ? (
-                  <span className="rounded-md bg-win/15 px-2 py-0.5 font-medium text-win">
+                  <span className="rounded-md bg-win/15 px-2 py-0.5 font-medium text-brand-text">
                     <MoveText ply={ply} san={move.best_san} />
                   </span>
                 ) : (
@@ -774,7 +754,7 @@ function LinePanel({
   const label = classification ? CLASSIFICATION[classification].label.toLowerCase() : 'move'
   const article = /^[aeiou]/.test(label) ? 'an' : 'a'
   return (
-    <div className="border-b bg-blue-500/10 px-3 py-2.5 text-sm">
+    <div className="border-b bg-sky/10 px-3 py-2.5 text-sm">
       <div className="flex items-center gap-2 font-medium">
         {kind === 'why' ? (
           <span>
@@ -811,7 +791,7 @@ function LinePanel({
                     className={cn(
                       'rounded-md px-2 py-0.5 tabular-nums',
                       i + 1 === step
-                        ? 'bg-blue-500/20 font-semibold text-blue-700 dark:text-blue-300'
+                        ? 'bg-sky font-bold text-on-sky'
                         : 'bg-muted hover:bg-foreground/10',
                       i + 1 > step && 'opacity-60',
                     )}
@@ -912,7 +892,7 @@ function PositionNotes({
           {notes.map((n) => {
             const elsewhere = n.game && n.game.id !== gameId
             return (
-              <li key={n.id} className="group flex gap-2 rounded-lg bg-amber-500/10 px-2.5 py-1.5">
+              <li key={n.id} className="group flex gap-2 rounded-md bg-gold/15 px-2.5 py-1.5">
                 <div className="min-w-0 flex-1">
                   <p className="leading-snug whitespace-pre-wrap">{n.body}</p>
                   <p className="mt-0.5 flex flex-wrap gap-x-1.5 text-xs text-muted-foreground">
@@ -1035,7 +1015,7 @@ export function MoveList({
                 )}
               >
                 <MoveText ply={j + 1} san={san[j]} />
-                {noted.has(j + 1) && <span className="size-1.5 rounded-full bg-amber-500" aria-label="has a note" />}
+                {noted.has(j + 1) && <span className="size-1.5 rounded-full bg-gold" aria-label="has a note" />}
               </button>
             ) : (
               <span key={j} />
