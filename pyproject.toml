@@ -3,6 +3,8 @@ name = "chessprofile"
 version = "0.1.0"
 description = "Aggregate your Chess.com, Lichess and over-the-board chess data into one SQLite database."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = [
     "chess>=1.10",

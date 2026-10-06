@@ -206,3 +206,7 @@ FROM puzzle_attempts, json_each(themes) t GROUP BY 1 HAVING n >= 10 ORDER BY sol
   base for blunder detection and for turning your own mistakes into puzzles.
 - Clock analysis from `%clk` comments (time-trouble patterns).
 - Chess.com puzzle history (no API, see above).
+
+## License
+
+[MIT](LICENSE)
