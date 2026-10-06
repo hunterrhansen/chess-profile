@@ -5,7 +5,8 @@ import { cn } from '@/lib/utils'
 
 const ICONS = { best: Star, excellent: ThumbsUp, good: Check, miss: X } as const
 
-/** Round classification badge: an icon for good moves and misses, ?! / ? / ?? for errors. */
+/** Round classification badge: an icon for good moves and misses, !! / ! for brilliant and
+ * great moves, ?! / ? / ?? for errors. */
 export function MoveBadge({ kind, className }: { kind: Classification; className?: string }) {
   const { label, color, symbol } = CLASSIFICATION[kind]
   const Icon = kind in ICONS ? ICONS[kind as keyof typeof ICONS] : null

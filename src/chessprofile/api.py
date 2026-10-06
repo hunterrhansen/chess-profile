@@ -52,7 +52,7 @@ WITH peaks AS (
     -- Opponent blunders (by size, since a blunder that answers your own error is labelled
     -- "miss"), and how many the user answered with a best, excellent or good move.
     SELECT o.game_id, count(*) AS opp_blunders,
-           sum(n.classification IN ('best', 'excellent', 'good')) AS punished
+           sum(n.classification IN ('brilliant', 'great', 'best', 'excellent', 'good')) AS punished
     FROM moves o JOIN moves n ON n.game_id = o.game_id AND n.ply = o.ply + 1
     WHERE o.is_user = 0 AND o.win_pct_before - o.win_pct_after >= {BLUNDER_DROP} AND n.is_user = 1
     GROUP BY o.game_id

@@ -555,7 +555,7 @@ function AnalysisSection({ settings, reload }: { settings: Settings; reload: () 
           }))}
         />
       </Row>
-      <Row label="Move classification" hint="Chess.com's bands. A move losing 20+ points of win chance is a blunder.">
+      <Row label="Move classification" hint="Chess.com's bands. A move losing 20+ points of win chance is a blunder; Great is the only move that held, Brilliant a sound sacrifice.">
         <span className="text-muted-foreground">Fixed</span>
       </Row>
       <ErrorText>{error}</ErrorText>

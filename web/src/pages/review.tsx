@@ -721,6 +721,10 @@ function MovePanel({
                   </Button>
                 </span>
               </span>
+            ) : kind === 'brilliant' ? (
+              'A sound sacrifice: it gives up material and the engine agrees'
+            ) : kind === 'great' ? (
+              'The only move that held: anything else lost a lot'
             ) : kind === 'best' ? (
               "The engine's top choice"
             ) : kind === 'excellent' ? (
@@ -1096,7 +1100,7 @@ function KeyMoments({
         replies.add(reply.ply)
         out.push({
           ply: reply.ply,
-          badge: punished ? 'best' : (reply.classification ?? 'miss'),
+          badge: punished ? (reply.classification === 'brilliant' || reply.classification === 'great' ? reply.classification : 'best') : (reply.classification ?? 'miss'),
           text: (
             <>
               {punished ? 'Punished' : 'Missed'} <MoveText ply={m.ply} san={m.san} number />
@@ -1108,7 +1112,7 @@ function KeyMoments({
     })
     for (const m of moves) {
       const c = m.classification
-      if (m.color === me && !replies.has(m.ply) && (c === 'mistake' || c === 'blunder' || c === 'miss')) {
+      if (m.color === me && !replies.has(m.ply) && (c === 'mistake' || c === 'blunder' || c === 'miss' || c === 'great' || c === 'brilliant')) {
         out.push({ ply: m.ply, badge: c, text: <MoveText ply={m.ply} san={m.san} number />, detail: swing(m) })
       }
     }

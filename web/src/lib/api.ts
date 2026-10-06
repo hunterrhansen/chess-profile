@@ -161,7 +161,11 @@ export interface Settings {
   backups: { dir: string; count: number; keep: number }
 }
 
-export type Classification = 'best' | 'excellent' | 'good' | 'inaccuracy' | 'mistake' | 'blunder' | 'miss'
+export type Classification =
+  | 'brilliant'
+  | 'great'
+  | 'best'
+  | 'excellent' | 'good' | 'inaccuracy' | 'mistake' | 'blunder' | 'miss'
 
 /** One half-move of an analysed game. Win% values are from the mover's point of view. */
 export interface MoveRow {

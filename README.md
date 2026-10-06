@@ -61,7 +61,7 @@ SQLite, one file. Tables in [`schema.sql`](src/chessprofile/schema.sql):
   store the position, so they also show up in any other game that reaches it.
 - `moves`: one row per half-move of every analysed game: position, your move vs. the
   engine's best, evals before/after, centipawn loss, win% before/after, accuracy,
-  `classification` (best / excellent / good / inaccuracy / mistake / blunder / miss), `phase`, clock left and
+  `classification` (brilliant / great / best / excellent / good / inaccuracy / mistake / blunder / miss), `phase`, clock left and
   time spent. Filled by `analyze`.
 - `game_analysis`: per-game engine summary (accuracy, ACPL, blunder/mistake counts).
 - `runs`: one row per `update` (status, counts, errors).
@@ -111,8 +111,18 @@ Moves are classified with Chess.com's bands, by how many points the mover's win 
 dropped: the engine's move is **best**, under 2 is **excellent**, 2-5 **good**, 5-10 an
 **inaccuracy**, 10-20 a **mistake**, 20+ a **blunder**. A **miss** is a reply that gives up
 10+ points straight after the opponent's own 10+ point error, i.e. failing to cash in;
-it replaces mistake/blunder for that move. (Chess.com's Great, Brilliant and Book need
-second-best-move analysis or an opening book and aren't computed.) Accuracy uses
+it replaces mistake/blunder for that move.
+
+**Great** and **Brilliant** follow Chess.com's definitions, with rules modelled on the
+open-source [WintrChess](https://github.com/WintrCat/wintrchess) reviewer (see
+[`brilliance.py`](src/chessprofile/brilliance.py)). Neither is given when the second-best
+move would still have been completely winning (+7), when you're worse after the move, or
+when escaping check. A **great** move is the engine's top choice when its second choice
+would have cost 10+ points, and isn't just taking free material. A **brilliant** move is a
+top move that leaves a piece en prise (judged on the board, so a sacrifice the opponent
+should decline still counts), unless the piece was lost anyway or taking it backfires.
+Great needs the engine's second-best move, so games analysed before it was added need
+`analyze --force` to get it. (Chess.com's Book isn't computed.) Accuracy uses
 Lichess's per-move formula, so it runs a bit higher than Chess.com's own accuracy numbers.
 
 After changing the thresholds in `analyze.py`, re-label saved moves without re-running the
