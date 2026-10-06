@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js'
-import { ArrowLeft, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { type Arrow, Chessboard } from 'react-chessboard'
 import { Link, useParams, useSearchParams } from 'react-router'
@@ -152,6 +152,8 @@ export function ReviewPage() {
               analysed={replay.moves.length > 0}
               mine={ply > 0 && (ply % 2 === 1) === (me === 'white')}
               opponent={me === 'white' ? game.black : game.white}
+              clockBefore={ply ? clockAt(replay.moves, ply % 2 === 1 ? 'white' : 'black', ply - 1, replay.baseClock) : null}
+              clockAfter={ply ? clockAt(replay.moves, ply % 2 === 1 ? 'white' : 'black', ply, replay.baseClock) : null}
               showBest={showBest}
               onReveal={() => setRevealedPly(ply)}
             />
@@ -220,16 +222,7 @@ function PlayerStrip({
         {rating}
         {you && ' · you'}
       </span>
-      {seconds != null && (
-        <span
-          className={cn(
-            'ml-auto rounded-md bg-muted px-2.5 py-0.5 font-mono text-base tabular-nums',
-            seconds < 60 && 'bg-loss/15 text-loss',
-          )}
-        >
-          {clock(seconds)}
-        </span>
-      )}
+      {seconds != null && <ClockChip seconds={seconds} className="ml-auto text-base" />}
     </div>
   )
 }
@@ -383,6 +376,32 @@ function WinGraph({
   )
 }
 
+/** The same clock chip as the player strips; red under a minute. */
+function ClockChip({ seconds, className }: { seconds: number; className?: string }) {
+  return (
+    <span
+      className={cn(
+        'rounded-md bg-muted px-2.5 py-0.5 font-mono tabular-nums',
+        seconds < 60 && 'bg-loss/15 text-loss',
+        className,
+      )}
+    >
+      {clock(seconds)}
+    </span>
+  )
+}
+
+/** Win chance for a classification's "after" value: red for errors, amber for inaccuracies. */
+function afterTone(kind: Classification | null | undefined) {
+  if (kind === 'mistake' || kind === 'blunder' || kind === 'miss') return 'text-loss'
+  if (kind === 'inaccuracy') return 'text-amber-600 dark:text-amber-400'
+  return ''
+}
+
+/**
+ * The selected move, "then and now": the mover's win chance and clock before the move,
+ * the thinking time in between, and both after it.
+ */
 function MovePanel({
   ply,
   san,
@@ -390,6 +409,8 @@ function MovePanel({
   analysed,
   mine,
   opponent,
+  clockBefore,
+  clockAfter,
   showBest,
   onReveal,
 }: {
@@ -399,6 +420,8 @@ function MovePanel({
   analysed: boolean
   mine: boolean
   opponent: string
+  clockBefore: number | null
+  clockAfter: number | null
   showBest: boolean
   onReveal: () => void
 }) {
@@ -411,10 +434,12 @@ function MovePanel({
     )
   }
   const kind = move?.classification
+  const pct = (v: number | null) => `${Math.round(v ?? 0)}%`
   return (
-    <div className="min-h-24 border-b px-3 py-2.5 text-sm leading-relaxed">
+    <div className="min-h-24 border-b px-3 py-2.5 text-sm">
       <div className="flex items-center gap-2 text-base font-medium">
         <MoveText ply={ply} san={san} number />
+        <span className="text-sm font-normal text-muted-foreground">{mine ? 'You' : opponent}</span>
         {kind && (
           <span className="ml-auto flex items-center gap-1.5 text-sm font-normal">
             <MoveBadge kind={kind} />
@@ -423,25 +448,44 @@ function MovePanel({
         )}
       </div>
       {!analysed || !move ? (
-        <p className="text-muted-foreground">Not analysed yet. Run `chessprofile analyze`.</p>
+        <p className="mt-1 text-muted-foreground">Not analysed yet. Run `chessprofile analyze`.</p>
       ) : (
         <>
-          <p className="text-muted-foreground">
-            {mine ? 'You' : opponent} · win chance {Math.round(move.win_pct_before ?? 0)}% →{' '}
-            {Math.round(move.win_pct_after ?? 0)}%
-          </p>
-          <p className="text-muted-foreground">
-            {!isSound(kind ?? null) && move.best_san && !showBest ? (
-              <Button variant="link" className="h-auto p-0 text-muted-foreground" onClick={onReveal}>
-                Show best move
-              </Button>
-            ) : !isSound(kind ?? null) && move.best_san ? (
-              <>
-                Best was{' '}
-                <span className="font-medium text-foreground">
-                  <MoveText ply={ply} san={move.best_san} />
-                </span>
-              </>
+          <div className="mt-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-center">
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-[11px] text-muted-foreground">Before</span>
+              <span className="text-xl font-medium tabular-nums">{pct(move.win_pct_before)}</span>
+              {clockBefore != null && <ClockChip seconds={clockBefore} className="text-xs" />}
+            </div>
+            <div className="flex flex-col items-center text-[11px] text-muted-foreground">
+              <ArrowRight className="size-4" />
+              {move.time_spent != null && <span className="tabular-nums">{thinkTime(move.time_spent)}</span>}
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-[11px] text-muted-foreground">After</span>
+              <span className={cn('text-xl font-medium tabular-nums', afterTone(kind))}>
+                {pct(move.win_pct_after)}
+              </span>
+              {clockAfter != null && <ClockChip seconds={clockAfter} className="text-xs" />}
+            </div>
+          </div>
+          <div className="mt-2.5 text-muted-foreground">
+            {!isSound(kind ?? null) && move.best_san ? (
+              <span className="flex items-center gap-2">
+                Best
+                {showBest ? (
+                  <span className="rounded-md bg-win/15 px-2 py-0.5 font-medium text-win">
+                    <MoveText ply={ply} san={move.best_san} />
+                  </span>
+                ) : (
+                  <button
+                    onClick={onReveal}
+                    className="rounded-md border border-dashed px-2 py-0.5 text-foreground hover:bg-muted"
+                  >
+                    Show best move
+                  </button>
+                )}
+              </span>
             ) : kind === 'best' ? (
               "The engine's top choice"
             ) : kind === 'excellent' ? (
@@ -449,13 +493,7 @@ function MovePanel({
             ) : (
               'A solid move'
             )}
-          </p>
-          {move.time_spent != null && (
-            <p className="text-muted-foreground">
-              Spent {thinkTime(move.time_spent)}
-              {move.clock_left != null && ` · ${clock(move.clock_left)} left`}
-            </p>
-          )}
+          </div>
         </>
       )}
     </div>
