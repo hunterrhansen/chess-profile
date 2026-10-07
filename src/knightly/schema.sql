@@ -203,6 +203,13 @@ CREATE TABLE IF NOT EXISTS cards (
     PRIMARY KEY (game_id, ply)
 );
 
+-- Games you've walked through on the review page and finished ("Finish review"). Kept apart
+-- from `games` so re-importing a game never forgets it was reviewed.
+CREATE TABLE IF NOT EXISTS game_reviews (
+    game_id      INTEGER PRIMARY KEY REFERENCES games(id) ON DELETE CASCADE,
+    reviewed_at  TEXT NOT NULL              -- ISO-8601 UTC, the latest time it was finished
+);
+
 -- Every graded answer (a card's first of the day), for history and the daily count.
 CREATE TABLE IF NOT EXISTS card_reviews (
     id           INTEGER PRIMARY KEY,

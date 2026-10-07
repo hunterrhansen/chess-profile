@@ -1,7 +1,7 @@
 import { Chess } from 'chess.js'
-import { ArrowLeftIcon, ArrowSquareOutIcon, ArrowUUpLeftIcon, CaretLeftIcon, CaretLineLeftIcon, CaretLineRightIcon, CaretRightIcon, CircleNotchIcon, PlayIcon, PlusIcon, TrashIcon } from '@phosphor-icons/react'
+import { ArrowLeftIcon, ArrowRightIcon, ArrowSquareOutIcon, ArrowUUpLeftIcon, CaretLeftIcon, CaretLineLeftIcon, CaretLineRightIcon, CaretRightIcon, CircleNotchIcon, PlayIcon, PlusIcon, TrashIcon } from '@phosphor-icons/react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { Board, type BoardArrow, type Palette } from '@/components/board'
 import { ResultBadge } from '@/components/game-bits'
 import { EvalBar as EvalBarView } from '@/components/eval-bar'
@@ -11,17 +11,18 @@ import { MarkedText, MoveText } from '@/components/move-text'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { type Classification, type EngineLine, type EngineLines, type GameDetail, type LineKind, type MoveRow, type Note, send, useApi } from '@/lib/api'
 import { CLASSIFICATION, isSound } from '@/lib/classification'
+import { type KeyMoment, keyMoments } from '@/lib/key-moments'
 import { clock, longDate, shortDate, thinkTime, timeControl } from '@/lib/format'
 import { lastLocation } from '@/lib/last-location'
 import { BOARDS, usePreferences } from '@/lib/preferences'
 import { cn } from '@/lib/utils'
 
 const TIME_BAR_FULL = 100 // seconds of thinking that fill a time bar
-const BLUNDER_DROP = 20 // keep in step with analyze.THRESHOLDS
 
 type Side = 'white' | 'black'
 
@@ -83,7 +84,14 @@ export function ReviewPage() {
   const [params, setParams] = useSearchParams()
   const last = replay ? replay.fens.length - 1 : 0
   const ply = Math.min(Number(params.get('ply') ?? 0), last)
-  const tab = params.get('tab') === 'moments' ? 'moments' : 'moves'
+  const analysed = !!replay?.moves.length
+  // Key moments first; All moves is a tab away (?tab=moves).
+  const tab = analysed && params.get('tab') !== 'moves' ? 'moments' : 'moves'
+  const me: Side = game?.color ?? 'white'
+  const opponent = (me === 'white' ? game?.black : game?.white) ?? 'They'
+  const moments = useMemo(() => (replay ? keyMoments(replay.moves, me, opponent) : []), [replay, me, opponent])
+  const navigate = useNavigate()
+  const [finishing, setFinishing] = useState(false)
   const { prefs } = usePreferences()
   // With the "on request" preference, the best move stays hidden until asked for, per move.
   const [revealedPly, setRevealedPly] = useState<number | null>(null)
@@ -127,6 +135,18 @@ export function ReviewPage() {
     [setParams],
   )
 
+  // A game opens on its first key moment, unless the link says where to start.
+  const opened = useRef<string | null>(null)
+  useEffect(() => {
+    if (!replay || opened.current === id) return
+    opened.current = id ?? null
+    if (!params.has('ply') && moments.length) setPly(moments[0].ply)
+  }, [replay, id, params, moments, setPly])
+
+  // On the Key moments tab, ← and → jump between moments; on All moves, between moves.
+  const prevMoment = [...moments].reverse().find((k) => k.ply < ply)
+  const nextMoment = moments.find((k) => k.ply > ply)
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.metaKey || e.ctrlKey || e.altKey) return
@@ -138,19 +158,22 @@ export function ReviewPage() {
         if (to !== undefined || e.key === 'Escape') e.preventDefault()
         return
       }
-      const to = { ArrowLeft: ply - 1, ArrowRight: ply + 1, Home: 0, End: last }[e.key]
+      const byMoment = tab === 'moments' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')
+      const to = byMoment
+        ? (e.key === 'ArrowLeft' ? prevMoment : nextMoment)?.ply
+        : { ArrowLeft: ply - 1, ArrowRight: ply + 1, Home: 0, End: last }[e.key]
+      if (byMoment) e.preventDefault()
       if (to === undefined) return
       e.preventDefault()
       setPly(Math.max(0, Math.min(last, to)))
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [ply, last, setPly, line, step, lineLength, setStep])
+  }, [ply, last, setPly, line, step, lineLength, setStep, tab, prevMoment, nextMoment])
 
   if (error) return <p className="text-sm text-destructive">Couldn't load this game. {error}</p>
   if (!game || !replay) return <ReviewSkeleton />
 
-  const me: Side = game.color ?? 'white'
   const them: Side = me === 'white' ? 'black' : 'white'
   const move = replay.moves[ply - 1] as MoveRow | undefined
   const san = game.san[ply - 1]
@@ -162,6 +185,16 @@ export function ReviewPage() {
   const inLine = !!lineView
   const lineWhiteWin =
     lineView?.data.win_pct != null ? (moverWhite ? lineView.data.win_pct : 100 - lineView.data.win_pct) : null
+
+  const finish = async () => {
+    setFinishing(true)
+    try {
+      await send('POST', `/api/games/${game.id}/review`)
+      navigate(`/games/${game.id}/done`, { state: { celebrate: true } })
+    } catch {
+      setFinishing(false)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -196,8 +229,21 @@ export function ReviewPage() {
           </a>
         )}
       </div>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="mx-auto flex w-full max-w-[calc(100svh-170px)] min-w-72 flex-col gap-1.5">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-[auto_minmax(0,1fr)_auto]">
+        {/* On a phone the stepper's headline sits above the board; on wider screens it heads
+            the right column. */}
+        {analysed && moments.length > 0 && (
+          <MomentStepper
+            moments={moments}
+            ply={ply}
+            prev={prevMoment}
+            next={nextMoment}
+            dim={inLine}
+            onGo={setPly}
+            className="lg:col-start-2 lg:row-start-1"
+          />
+        )}
+        <div className="mx-auto flex w-full max-w-[calc(100svh-170px)] min-w-72 flex-col gap-1.5 lg:col-start-1 lg:row-span-3 lg:row-start-1">
           <PlayerStrip
             name={me === 'white' ? game.black : game.white}
             rating={me === 'white' ? game.black_elo : game.white_elo}
@@ -245,7 +291,7 @@ export function ReviewPage() {
           />
         </div>
 
-        <div className="relative min-h-[28rem]">
+        <div className="relative min-h-[28rem] lg:col-start-2 lg:row-start-2">
           <aside className="panel flex flex-col overflow-hidden lg:absolute lg:inset-0">
             {prefs.showGraph && replay.moves.length > 0 && (
               <WinGraph replay={replay} me={me} ply={ply} onSelect={setPly} />
@@ -296,7 +342,7 @@ export function ReviewPage() {
                 setParams(
                   (prev) => {
                     const next = new URLSearchParams(prev)
-                    if (v === 'moments') next.set('tab', v)
+                    if (v === 'moves') next.set('tab', v)
                     else next.delete('tab')
                     return next
                   },
@@ -306,17 +352,17 @@ export function ReviewPage() {
               className="border-b px-3 pt-2 pb-2"
             >
               <TabsList className="w-full">
-                <TabsTrigger value="moves">Moves</TabsTrigger>
-                <TabsTrigger value="moments" disabled={!replay.moves.length}>
+                <TabsTrigger value="moments" disabled={!analysed}>
                   Key moments
                 </TabsTrigger>
+                <TabsTrigger value="moves">All moves</TabsTrigger>
               </TabsList>
             </Tabs>
             <div className={cn('flex min-h-0 flex-1 flex-col transition-opacity', inLine && 'opacity-40')}>
               {tab === 'moves' ? (
                 <MoveList san={game.san} moves={replay.moves} ply={ply} noted={notedPlies} onSelect={setPly} />
               ) : (
-                <KeyMoments game={game} moves={replay.moves} whiteWin={replay.whiteWin} me={me} ply={ply} onSelect={setPly} />
+                <KeyMoments moments={moments} moves={replay.moves} ply={ply} onSelect={setPly} />
               )}
             </div>
             {/* While a line is open these step through the line instead of the game. */}
@@ -336,8 +382,84 @@ export function ReviewPage() {
             </div>
           </aside>
         </div>
+        {analysed && (
+          <div className="flex flex-col gap-1.5 lg:col-start-2 lg:row-start-3">
+            <Button size="lg" className="w-full" onClick={finish} disabled={finishing}>
+              {finishing && <CircleNotchIcon className="animate-spin" />}
+              {game.reviewed_at ? 'Finish review again' : 'Finish review'}
+            </Button>
+            {game.reviewed_at && (
+              <p className="text-center text-xs text-muted-foreground">
+                Reviewed {shortDate(game.reviewed_at)} ·{' '}
+                <Link to={`/games/${game.id}/done`} className="font-bold text-brand-text hover:underline">
+                  See the summary
+                </Link>
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </div>
+  )
+}
+
+/** "Key moment 2 of 5", a bar of how far through you are, ← / →, and what happened here. */
+function MomentStepper({
+  moments,
+  ply,
+  prev,
+  next,
+  dim,
+  onGo,
+  className,
+}: {
+  moments: KeyMoment[]
+  ply: number
+  prev?: KeyMoment
+  next?: KeyMoment
+  dim?: boolean
+  onGo: (ply: number) => void
+  className?: string
+}) {
+  const at = moments.findIndex((k) => k.ply === ply)
+  const seen = moments.filter((k) => k.ply <= ply).length
+  return (
+    <section
+      aria-label="Key moments"
+      className={cn('panel flex flex-col gap-2.5 px-4 py-3.5 transition-opacity', dim && 'opacity-40', className)}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="eyebrow">
+          {at >= 0 ? `Key moment ${at + 1} of ${moments.length}` : `Between key moments · ${seen} of ${moments.length}`}
+        </span>
+        <span className="flex gap-1.5">
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Previous key moment"
+            title="Previous key moment (←)"
+            disabled={!prev}
+            onClick={() => prev && onGo(prev.ply)}
+          >
+            <ArrowLeftIcon />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Next key moment"
+            title="Next key moment (→)"
+            disabled={!next}
+            onClick={() => next && onGo(next.ply)}
+          >
+            <ArrowRightIcon />
+          </Button>
+        </span>
+      </div>
+      <Progress value={(seen / moments.length) * 100} tone="sky" label="Key moments seen" valueText={`${seen} of ${moments.length}`} hideLabel />
+      <p className="font-heading text-lg leading-snug font-semibold text-balance">
+        {at >= 0 ? moments[at].headline : next ? `Next up: ${next.short.toLowerCase()}.` : 'That was the last key moment.'}
+      </p>
+    </section>
   )
 }
 
@@ -1006,87 +1128,38 @@ function TimeCell({ white, black }: { white?: number | null; black?: number | nu
   )
 }
 
-type Moment = { ply: number; badge?: Classification; tag?: string; text: React.ReactNode; detail: string }
-
+/** The key moments as a list: badge, the move, and what kind of moment it was. */
 function KeyMoments({
-  game,
+  moments,
   moves,
-  whiteWin,
-  me,
   ply,
   onSelect,
 }: {
-  game: GameDetail
+  moments: KeyMoment[]
   moves: MoveRow[]
-  whiteWin: number[]
-  me: Side
   ply: number
   onSelect: (ply: number) => void
 }) {
-  const moments = useMemo(() => {
-    const out: Moment[] = []
-    const pct = (v: number | null) => Math.round(v ?? 0)
-    const swing = (m: MoveRow) => `${pct(m.win_pct_before)} → ${pct(m.win_pct_after)}%`
-    // Your replies already described by a "Punished" / "Missed" row, so they aren't listed twice.
-    const replies = new Set<number>()
-    moves.forEach((m, i) => {
-      const reply = moves[i + 1]
-      if (m.color !== me && reply && (m.win_pct_before ?? 0) - (m.win_pct_after ?? 0) >= BLUNDER_DROP) {
-        const punished = isSound(reply.classification)
-        replies.add(reply.ply)
-        out.push({
-          ply: reply.ply,
-          badge: punished ? (reply.classification === 'brilliant' || reply.classification === 'great' ? reply.classification : 'best') : (reply.classification ?? 'miss'),
-          text: (
-            <>
-              {punished ? 'Punished' : 'Missed'} <MoveText ply={m.ply} san={m.san} number />
-            </>
-          ),
-          detail: swing(reply),
-        })
-      }
-    })
-    for (const m of moves) {
-      const c = m.classification
-      if (m.color === me && !replies.has(m.ply) && (c === 'mistake' || c === 'blunder' || c === 'miss' || c === 'great' || c === 'brilliant')) {
-        out.push({ ply: m.ply, badge: c, text: <MoveText ply={m.ply} san={m.san} number />, detail: swing(m) })
-      }
-    }
-    // Your best moment: the highest win chance right after one of your own moves.
-    const mine = whiteWin.map((w) => (me === 'white' ? w : 100 - w))
-    let peak = 0
-    for (const m of moves) if (m.color === me && (!peak || mine[m.ply] > mine[peak])) peak = m.ply
-    if (peak) {
-      out.push({
-        ply: peak,
-        tag: 'Peak',
-        text: <MoveText ply={peak} san={moves[peak - 1].san} number />,
-        detail: `${Math.round(mine[peak])}%`,
-      })
-    }
-    const end = game.outcome === 'win' ? 'Won' : game.outcome === 'loss' ? 'Lost' : 'Drew'
-    out.push({ ply: moves.length, tag: 'End', text: `${end} · ${game.ended_by ?? ''}`, detail: '' })
-    return out.sort((a, b) => a.ply - b.ply)
-  }, [game, moves, whiteWin, me])
-
+  if (!moments.length) {
+    return <p className="px-4 py-3 text-sm text-muted-foreground">No key moments: a quiet game, with no big swings either way.</p>
+  }
   return (
-    <div className="min-h-40 flex-1 overflow-y-auto">
-      {moments.map((k, i) => (
+    <div className="flex min-h-40 flex-1 flex-col gap-1 overflow-y-auto p-2">
+      {moments.map((k) => (
         <button
-          key={i}
+          key={k.ply}
           onClick={() => onSelect(k.ply)}
+          aria-current={k.ply === ply ? 'step' : undefined}
           className={cn(
-            'flex w-full items-center gap-2.5 border-b px-3 py-2 text-left text-sm hover:bg-muted/60',
-            k.ply === ply && 'bg-muted',
+            'flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm hover:bg-muted/60',
+            k.ply === ply && 'bg-sky/15 shadow-[inset_0_0_0_2px_var(--sky)] hover:bg-sky/15',
           )}
         >
-          {k.badge ? (
-            <MoveBadge kind={k.badge} />
-          ) : (
-            <span className="w-5 shrink-0 text-center text-[10px] text-muted-foreground">{k.tag}</span>
-          )}
-          <span className="min-w-0 truncate">{k.text}</span>
-          <span className="ml-auto shrink-0 text-muted-foreground tabular-nums">{k.detail}</span>
+          <MoveBadge kind={k.kind} />
+          <span className="min-w-[4.5rem] font-bold">
+            <MoveText ply={k.ply} san={moves[k.ply - 1].san} number />
+          </span>
+          <span className="min-w-0 truncate text-muted-foreground">{k.short}</span>
         </button>
       ))}
     </div>

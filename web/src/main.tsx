@@ -10,6 +10,7 @@ import { ProgressPage } from '@/pages/overview'
 import { PlayPage } from '@/pages/play'
 import { PracticePage } from '@/pages/practice'
 import { ReviewPage } from '@/pages/review'
+import { ReviewDonePage } from '@/pages/review-done'
 import { SettingsPage } from '@/pages/settings'
 import { StyleguidePage } from '@/pages/styleguide'
 import './index.css'
@@ -39,6 +40,7 @@ createRoot(document.getElementById('root')!).render(
                 <Route path="progress" element={<ProgressPage />} />
                 <Route path="games" element={<GamesPage />} />
                 <Route path="games/:id" element={<ReviewPage />} />
+                <Route path="games/:id/done" element={<ReviewDonePage />} />
                 <Route path="play" element={<PlayPage />} />
                 <Route path="practice" element={<PracticePage />} />
                 <Route path="settings" element={<SettingsPage />} />
