@@ -14,10 +14,9 @@ interface Tab {
   label: string
   glyph: Glyph
 }
-// The design's order is Home · Games · Play · Progress · Settings. Until Home is built,
-// Practice (today's positions) holds its place.
+// Practice isn't a tab: it's a lesson you start from Home (or Progress), full screen.
 const NAV: Tab[] = [
-  { section: 'practice', root: '/practice', label: 'Practice', glyph: 'drill' },
+  { section: 'home', root: '/', label: 'Home', glyph: 'home' },
   { section: 'games', root: '/games', label: 'Games', glyph: 'games' },
   { section: 'play', root: '/play', label: 'Play', glyph: 'play' },
   { section: 'progress', root: '/progress', label: 'Progress', glyph: 'progress' },
@@ -189,5 +188,16 @@ function NavItem({ to, active, label, glyph, labelClass }: { to: string; active:
       <KnIcon glyph={glyph} />
       <span className={labelClass}>{label}</span>
     </Link>
+  )
+}
+
+/** For lessons (Practice): no sidebar or tabs, just the page, which brings its own ✕. */
+export function FocusShell() {
+  return (
+    <main className="min-h-svh bg-background text-foreground">
+      <div className="mx-auto max-w-6xl px-4 py-6 md:px-8">
+        <Outlet />
+      </div>
+    </main>
   )
 }

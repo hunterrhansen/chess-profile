@@ -29,7 +29,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import db, deck, lines, play, schedule, update
+from . import db, deck, lines, play, schedule, units, update
 from .analyze import THRESHOLDS, find_engine
 
 # A position counts as "winning" once the user's win chance reaches this after one of
@@ -40,6 +40,7 @@ BLUNDER_DROP = THRESHOLDS[0][0]  # win% lost that makes a move a blunder
 RANGES = {"30d": 30, "90d": 90, "all": None}
 MIN_SAMPLE = 10  # fewer games than this and a KPI is too noisy to show or compare
 PAGE_SIZE = 50
+NEW_GAME_DAYS = 3  # a game you haven't reviewed counts as new on Home for this long
 
 # One row per game with everything the overview and filters need. Engine columns are NULL
 # for games that haven't been analysed yet.
@@ -594,6 +595,42 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
                     stdout=log_file, stderr=log_file, stdin=subprocess.DEVNULL,
                     cwd=str(Path(db_path).parent), start_new_session=True)
         return {"started": True}
+
+    @app.get("/api/home")
+    def home():
+        """Home: the units in path order, and today's goal. Today's game is your newest
+        analysed game you haven't reviewed, played after the newest one you have (and in the
+        last NEW_GAME_DAYS days), preferring one that fits Unit 1."""
+        rated = facts("f.rated = 1")
+        start, _, _ = period_bounds("90d")
+        path = units.build(rated, [r for r in rated if r["played_at"] >= start], kpis)
+
+        # Newer than the newest game you've reviewed: reviewing an old game from the list
+        # doesn't make yesterday's game stop counting as new.
+        last = query("""SELECT max(g.played_at) AS at FROM game_reviews r
+                        JOIN games g ON g.id = r.game_id""")[0]["at"]
+        since = max(filter(None, [last, _iso(_now() - timedelta(days=NEW_GAME_DAYS))]))
+        fresh = facts("f.analysed AND f.reviewed_at IS NULL AND f.played_at > ?", (since,),
+                      order="f.played_at DESC")
+        lead = units.unit(path[0]["id"])
+        pick = next((r for r in fresh if lead.review(r)), fresh[0] if fresh else None)
+        reviewed_today = query(
+            """SELECT count(*) AS n FROM game_reviews
+               WHERE date(reviewed_at, 'localtime') = date('now', 'localtime')""")[0]["n"]
+
+        with write() as conn, conn:
+            deck.sync(conn)
+            positions = deck.stats(conn)
+        return {
+            "units": path,
+            "today": {
+                "game": {**_game_json(pick), "fits_unit": lead.review(pick)} if pick else None,
+                "new_games": len(fresh),
+                "reviewed_today": reviewed_today,
+                "positions": positions["today"],
+                "deck_total": positions["total"],
+            },
+        }
 
     @app.get("/api/overview")
     def overview(range: str = Query("90d", pattern="^(30d|90d|all)$")):

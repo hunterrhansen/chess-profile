@@ -264,3 +264,27 @@ export interface Note {
   plies: number[] // where the note's position comes up in the game being viewed
   game: { id: number; ply: number | null; opponent: string | null; played_at: string | null } | null // where it was written
 }
+
+/** A unit on Home's path (units.py): one KPI, its target, and the unit check over your last
+ * 10 games that count for it. */
+export interface Unit {
+  id: 'blunders' | 'conversion' | 'punish' | 'comebacks'
+  title: string
+  kpi: string
+  value: number | null // over the last 90 days, as on Progress
+  target: number
+  lower_better: boolean
+  done: boolean
+  check: { size: number; games: number; hits: number; value: number | null }
+}
+
+export interface Home {
+  units: Unit[] // path order: weakest unfinished first, finished last
+  today: {
+    game: (Game & { fits_unit: boolean }) | null // the game to review today, if there's a new one
+    new_games: number
+    reviewed_today: number
+    positions: { done: number; total: number }
+    deck_total: number
+  }
+}

@@ -111,7 +111,7 @@ function Position({ deck, card, onNext }: { deck: DeckToday; card: DeckCard; onN
     <>
       <header className="flex items-center gap-3">
         <Button asChild variant="ghost" size="icon" aria-label="Stop for now">
-          <Link to="/progress">
+          <Link to="/">
             <XIcon />
           </Link>
         </Button>
@@ -268,9 +268,14 @@ function DoneForToday({ deck }: { deck: DeckToday }) {
         <Stat label="Learning" value={deck.learning} order={1} />
         <Stat label="Not seen yet" value={deck.new} order={2} />
       </div>
-      <Button asChild size="lg" variant="outline">
-        <Link to="/progress">Back to progress</Link>
-      </Button>
+      <div className="flex w-full flex-wrap justify-between gap-3 border-t-2 pt-5">
+        <Button asChild size="lg" variant="outline">
+          <Link to="/progress">See your deck</Link>
+        </Button>
+        <Button asChild size="lg">
+          <Link to="/">Back home</Link>
+        </Button>
+      </div>
     </div>
   )
 }

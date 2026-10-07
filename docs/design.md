@@ -95,8 +95,19 @@ which are the same in both themes. Its states, each on `/styleguide`:
 
 From `md` up, a sidebar: the brand, then the tabs (KnIcon and an uppercase label; the current
 one outlined in sky), collapsible to an icon rail. On a phone: a top bar with the Settings gear
-and a tab bar along the bottom. The design's tabs are Home · Games · Play · Progress ·
-Settings; until Home is built, Practice holds its place and `/` opens Progress.
+and a tab bar along the bottom. The tabs are Home · Games · Play · Progress · Settings.
+
+Practice isn't a tab: it's a lesson, started from Home's path or Today's goal (or Progress),
+shown full screen without navigation (`FocusShell`). Its ✕ goes back Home.
+
+## Home
+
+Today's goal and the path (`pages/home.tsx`, data from `/api/home` and `units.py`). Unit 1 is
+the weakest of the four KPIs; its path is today's lessons in order (review today's game,
+today's positions, play the bot), then the unit check. `PathNode` (`components/path-node.tsx`)
+draws each step: done, current (ringed, with a sky tag and the only `animate-beacon`), locked,
+and the unit check's crown. The current step opens its lesson card. Gold appears once at
+most: the finished goal, or the "Unit complete" banner (shown once per unit).
 
 ## Type
 
@@ -120,6 +131,7 @@ Settings; until Home is built, Practice holds its place and `/` opens Progress.
 | Board / PlayBoard | `components/board.tsx`, `pages/play.tsx` | Every chess position; PlayBoard to make moves (see Board) |
 | Piece / PieceGlyph | `components/pieces.tsx` | A piece on its own; a piece in the text color for notation |
 | KnIcon | `components/kn-icon.tsx` | Brand icons: navigation, the path, big moments |
+| PathNode | `components/path-node.tsx` | A step on Home's path |
 | CountUp / CountUpText | `components/ui/count-up.tsx` | Numbers that count up to their value |
 | LogoMark / Logo | `components/logo.tsx` | The mark, and the mark with the name |
 | LogoLoader / LoadingBlock / EmptyState | `components/logo.tsx`, `components/empty-state.tsx` | Loading a view; nothing to show yet |
