@@ -1,5 +1,4 @@
 import argparse
-import json
 import os
 import subprocess
 import sys
@@ -73,13 +72,7 @@ def cmd_import_pgn(conn, args) -> None:
     log(f"-> {n} new games")
 
 
-def cmd_note(conn, args) -> None:
-    cur = conn.execute(
-        "INSERT INTO notes (body, tags, game_id, fen) VALUES (?, ?, ?, ?)",
-        (args.text, json.dumps(args.tag) if args.tag else None, args.game, args.fen),
-    )
-    conn.commit()
-    log(f"Saved note #{cur.lastrowid}")
+
 
 
 def cmd_analyze(conn, args) -> None:
@@ -148,7 +141,7 @@ def cmd_stats(conn, args) -> None:
         FROM puzzle_attempts, json_each(puzzle_attempts.themes) t
         GROUP BY 1 HAVING count(*) >= 10 ORDER BY avg(success) LIMIT 10""")
     table("Other", """
-        SELECT (SELECT count(*) FROM notes) AS notes, (SELECT count(*) FROM snapshots) AS snapshots,
+        SELECT (SELECT count(*) FROM snapshots) AS snapshots,
                (SELECT group_concat(source || ':' || handle, ', ') FROM accounts) AS accounts""")
 
 
@@ -185,13 +178,6 @@ def main(argv=None) -> None:
     s.add_argument("--source", default="otb", help="Label for these games (default: otb)")
     s.add_argument("--speed", help="classical | rapid | blitz ... (optional)")
     s.set_defaults(func=cmd_import_pgn)
-
-    s = sub.add_parser("note", help="Record a learning, optionally tied to a game or position")
-    s.add_argument("text")
-    s.add_argument("--tag", action="append", help="Repeatable, e.g. --tag endgame --tag time-trouble")
-    s.add_argument("--game", type=int, help="games.id this note is about")
-    s.add_argument("--fen", help="Position this note is about")
-    s.set_defaults(func=cmd_note)
 
     s = sub.add_parser("analyze", help="Run Stockfish over games that haven't been analysed yet "
                                        "(per-move evals, blunders, time use). Safe to interrupt.")

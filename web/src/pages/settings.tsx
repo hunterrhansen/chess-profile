@@ -177,9 +177,6 @@ function AppearanceSection() {
           ]}
         />
       </Row>
-      <Row label="Win-chance graph in game review" hint="A graph of your chances across the game, above the move. Click it to jump.">
-        <Switch aria-label="Win-chance graph in game review" checked={prefs.showGraph} onCheckedChange={(showGraph) => set({ showGraph })} />
-      </Row>
       <Row label="Sounds" hint="Moves on the board, right and wrong answers, and the big moments.">
         <Switch
           aria-label="Sounds"

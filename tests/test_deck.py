@@ -155,3 +155,24 @@ def test_skip_counts_as_a_miss(tmp_path):
     skipped = client.post("/api/deck/answer", json={"game_id": 1, "ply": 2, "uci": "0000"}).json()
     assert not skipped["correct"] and skipped["step"] == 0
     assert [r["correct"] for r in client.get("/api/deck").json()["results"]] == [False]
+
+
+def test_game_plies_lists_positions_before_they_are_cards(conn):
+    add_game(conn, 1)
+    add_move(conn, 1, 2)                              # will be a card
+    add_move(conn, 1, 4, cls="mistake", second=-20)   # no single better move
+    assert deck.game_plies(conn, 1) == [2]
+    deck.sync(conn)
+    assert deck.game_plies(conn, 1) == [2]
+
+
+def test_answer_from_game_review_adds_the_card_first(conn):
+    # Game review asks before Finish review has synced the deck; the answer still counts.
+    add_game(conn, 1)
+    add_move(conn, 1, 2)
+    today = date(2026, 10, 7)
+    res = deck.answer(conn, 1, 2, "e7e5", today=today)
+    assert res["correct"] and res["due"] == "2026-10-10"
+    assert conn.execute("SELECT step FROM cards WHERE game_id = 1 AND ply = 2").fetchone()[0] == 1
+    with pytest.raises(KeyError):
+        deck.answer(conn, 1, 4, "e7e5", today=today)

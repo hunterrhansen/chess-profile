@@ -200,13 +200,13 @@ Rules:
 
 ## Sound
 
-Sounds pair with the motion: a wooden knock when a piece lands, a chime when you're right, a
+Sounds pair with the motion: a wooden piece on a wooden board when a piece lands, a chime when you're right, a
 fanfare with the confetti. They're made in the browser with the Web Audio API
 (`lib/sound.ts`), with no audio files, and Settings has an on/off switch (on by default).
 
 | Sound | Plays when | Wired in |
 | --- | --- | --- |
-| `move`, `capture`, `check`, `castle`, `promote` | A board's position changes by one move (one back plays `move`; a jump is silent) | `useMoveSound(fen)` in `PlayBoard` and review's `Board` |
+| `move`, `capture`, `check`, `castle`, `promote` | A board's position changes by one move (one back plays `move`; a jump is silent), as the piece lands: after the slide, or at once for a dragged piece | `useMoveSound` in `Board` |
 | `right` / `wrong` | A practice answer is checked, with the square's flash | `practice.tsx` |
 | `brilliant` | A Brilliant or Great badge lands with its ring | `MoveBadge pop` |
 | `win` / `gameOver` | A game against the bot ends (won / lost or drawn) | `play.tsx` |

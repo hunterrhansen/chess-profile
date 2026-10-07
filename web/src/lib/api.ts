@@ -262,17 +262,6 @@ export interface GameDetail extends Game {
   deck_plies: number[] // your moves from this game that are in the review deck
 }
 
-/** A note from game review or `knightly note`. */
-export interface Note {
-  id: number
-  created_at: string
-  body: string
-  tags: string[]
-  fen: string | null
-  plies: number[] // where the note's position comes up in the game being viewed
-  game: { id: number; ply: number | null; opponent: string | null; played_at: string | null } | null // where it was written
-}
-
 /** A unit on Home's path (units.py): one KPI, its target, and the unit check over your last
  * 10 games that count for it. */
 export interface Unit {

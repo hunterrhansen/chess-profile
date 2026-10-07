@@ -14,7 +14,7 @@ import { Progress } from '@/components/ui/progress'
 import { StatLabel, StatValue } from '@/components/ui/stat'
 import { type DeckAnswer, type DeckCard, type DeckToday, type EngineLines, send, useApi } from '@/lib/api'
 import { CLASSIFICATION } from '@/lib/classification'
-import { shortDate } from '@/lib/format'
+import { nextTime, shortDate } from '@/lib/format'
 import { moveLabel } from '@/lib/key-moments'
 import { PATTERNS, patternOf } from '@/lib/patterns'
 import { BOARDS, usePreferences } from '@/lib/preferences'
@@ -244,21 +244,6 @@ function Verdict({
       </Button>
     </section>
   )
-}
-
-/** "Back in 3 days", "Back tomorrow", or the mastered message. */
-function nextTime(result: DeckAnswer) {
-  if (result.mastered) return 'Mastered: four times in a row. It won\'t come back.'
-  if (!result.due) return ''
-  const days = Math.round((Date.parse(result.due) - Date.parse(localToday())) / 86_400_000)
-  if (days <= 1) return 'Back tomorrow.'
-  if (days < 14) return `Back in ${days} days.`
-  return `Back in ${Math.round(days / 7)} weeks.`
-}
-
-function localToday() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function DoneForToday({ deck }: { deck: DeckToday }) {

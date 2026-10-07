@@ -266,6 +266,12 @@
     }
 }
 
+/* A piece sliding on the board eases in and out like a hand, not the library's default ease
+   (react-chessboard sets the transition inline, without a timing function to pass). */
+[data-piece] {
+  transition-timing-function: var(--ease-move) !important;
+}
+
 /* style guide demos: a bar filling, a dot crossing */
 @keyframes grow {
   from { transform: scaleX(0); }

@@ -10,7 +10,7 @@ import { BOARDS, usePreferences } from '@/lib/preferences'
 import { durationMs } from '@/lib/motion'
 import { playSound } from '@/lib/sound'
 import { cn } from '@/lib/utils'
-import { MoveList, NavButton, PlayerStrip } from '@/pages/review'
+import { MoveList, NavButton, PlayerStrip } from '@/components/review-bits'
 
 type Side = 'white' | 'black'
 
@@ -410,7 +410,7 @@ export function PlayPage() {
                 )}
                 <div className="flex min-h-0 flex-1 flex-col">
                   {san.length ? (
-                    <MoveList san={san} moves={[]} ply={san.length} noted={new Set()} onSelect={() => {}} />
+                    <MoveList san={san} moves={[]} ply={san.length} onSelect={() => {}} />
                   ) : (
                     <p className="px-3 py-2.5 text-sm text-muted-foreground">
                       {me === 'white' ? 'You have White. Make the first move.' : 'You have Black.'}
