@@ -6,7 +6,8 @@ import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { send, useApi } from '@/lib/api'
 import { BOARDS, usePreferences } from '@/lib/preferences'
-import { useMoveMs } from '@/lib/motion'
+import { durationMs, useMoveMs } from '@/lib/motion'
+import { playSound, useMoveSound } from '@/lib/sound'
 import { token } from '@/lib/tokens'
 import { cn } from '@/lib/utils'
 import { BEST_ARROW, MoveList, NavButton, PlayerStrip } from '@/pages/review'
@@ -252,6 +253,19 @@ export function PlayPage() {
   const result = over && state ? resultText(chess, me, state.resigned) : null
   const elo = state?.elo ?? setup.elo
 
+  // The game ending gets its sound once the last move has landed; a finished game you come
+  // back to stays quiet.
+  const endedBefore = useRef(over)
+  const outcome = result?.outcome
+  useEffect(() => {
+    if (!outcome) {
+      endedBefore.current = false
+      return
+    }
+    if (endedBefore.current) return
+    return playSound(outcome === 'win' ? 'win' : 'gameOver', durationMs('--duration-move') + 150)
+  }, [outcome])
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex h-5 items-center text-sm font-medium">Play vs bot</div>
@@ -489,6 +503,7 @@ export function PlayBoard({
   onSelect: (square: string | null) => void
 }) {
   const moveMs = useMoveMs()
+  useMoveSound(chess.fen())
   const mine = orientation === 'white' ? 'w' : 'b'
   const targets = new Set(
     interactive && selected ? chess.moves({ square: selected as Square, verbose: true }).map((m) => m.to) : [],

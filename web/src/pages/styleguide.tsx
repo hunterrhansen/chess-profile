@@ -1,4 +1,4 @@
-import { ArrowRight, Check, Play, RotateCcw, Star, X } from 'lucide-react'
+import { ArrowRight, Check, Play, RotateCcw, Star, Volume2, X } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { Confetti } from '@/components/confetti'
 import { EvalBar } from '@/components/eval-bar'
@@ -12,6 +12,7 @@ import { Progress } from '@/components/ui/progress'
 import { StatDelta, StatLabel, StatValue } from '@/components/ui/stat'
 import type { Classification } from '@/lib/api'
 import { CLASSIFICATION } from '@/lib/classification'
+import { playSound, type SoundName } from '@/lib/sound'
 import { cn } from '@/lib/utils'
 
 /**
@@ -176,6 +177,12 @@ const EASINGS = [
   ['ease-in', 'Leaving.'],
 ] as const
 
+const SOUND_GROUPS: [string, [SoundName, string][]][] = [
+  ['Board', [['move', 'Move'], ['capture', 'Capture'], ['check', 'Check'], ['castle', 'Castle'], ['promote', 'Promote']]],
+  ['Answers', [['right', 'Right'], ['wrong', 'Wrong'], ['brilliant', 'Brilliant']]],
+  ['Moments', [['win', 'Game won'], ['gameOver', 'Game over'], ['celebrate', 'Celebrate']]],
+]
+
 /** The motion tokens and every animation, each one replayable. */
 function MotionBlock() {
   const [take, setTake] = useState(0) // bump to replay everything
@@ -183,8 +190,8 @@ function MotionBlock() {
   const [party, setParty] = useState(0)
   return (
     <Block
-      title="Motion"
-      note="Quick for small things, bouncy for rewards, never in the way. Reduced motion keeps the end state and drops the movement."
+      title="Motion and sound"
+      note="Quick for small things, bouncy for rewards, never in the way. Reduced motion keeps the end state and drops the movement. Sounds land with their animation."
     >
       <Row>
         <Button variant="outline" onClick={() => setTake((t) => t + 1)}>
@@ -316,6 +323,25 @@ function MotionBlock() {
             <span className="grid size-14 animate-beacon place-items-center rounded-full bg-brand text-on-brand shadow-[0_4px_0_var(--brand-lip)] [--beacon:var(--brand)]">
               <Star className="size-6" fill="currentColor" />
             </span>
+          </div>
+        </Demo>
+
+        <Demo
+          title="Sounds"
+          note="Made in the browser, no files. Each plays as its animation lands; Settings turns them off."
+          className="sm:col-span-2"
+        >
+          <div className="grid gap-3">
+            {SOUND_GROUPS.map(([group, names]) => (
+              <div key={group} className="flex flex-wrap items-center gap-2">
+                <span className="eyebrow w-20">{group}</span>
+                {names.map(([name, label]) => (
+                  <Button key={name} size="sm" variant="outline" onClick={() => playSound(name)}>
+                    <Volume2 /> {label}
+                  </Button>
+                ))}
+              </div>
+            ))}
           </div>
         </Demo>
 

@@ -16,6 +16,8 @@ import { type DeckAnswer, type DeckCard, type DeckToday, type EngineLines, send,
 import { CLASSIFICATION } from '@/lib/classification'
 import { shortDate } from '@/lib/format'
 import { BOARDS, usePreferences } from '@/lib/preferences'
+import { durationMs } from '@/lib/motion'
+import { playSound } from '@/lib/sound'
 import { cn } from '@/lib/utils'
 import { PlayBoard } from '@/pages/play'
 
@@ -50,6 +52,11 @@ function Position({ deck, card, onNext }: { deck: DeckToday; card: DeckCard; onN
   const [result, setResult] = useState<DeckAnswer | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
   const [why, setWhy] = useState<string | null | undefined>(undefined) // undefined: loading
+
+  // The verdict's sound lands with the square's flash, after the piece.
+  useEffect(() => {
+    if (result) return playSound(result.correct ? 'right' : 'wrong', durationMs('--duration-move'))
+  }, [result])
 
   // Once answered, ask for the engine's explanation of the best line (cached after the
   // first time, the same "Best line" game review shows).

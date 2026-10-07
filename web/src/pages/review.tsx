@@ -16,6 +16,7 @@ import { type Classification, type EngineLine, type EngineLines, type GameDetail
 import { CLASSIFICATION, isSound } from '@/lib/classification'
 import { clock, longDate, shortDate, thinkTime, timeControl } from '@/lib/format'
 import { useMoveMs } from '@/lib/motion'
+import { useMoveSound } from '@/lib/sound'
 import { lastLocation } from '@/lib/last-location'
 import { BOARDS, usePreferences } from '@/lib/preferences'
 import { token } from '@/lib/tokens'
@@ -458,6 +459,7 @@ function Board({
   inLine?: boolean
 }) {
   const moveMs = useMoveMs()
+  useMoveSound(fen)
   const squareStyles = lastMove
     ? Object.fromEntries(
         [lastMove.from, lastMove.to].map((sq) => [
