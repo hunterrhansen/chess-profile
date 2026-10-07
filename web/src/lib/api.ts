@@ -115,6 +115,8 @@ export interface GamesPage {
   total: number
   page: number
   page_size: number
+  /** Each quick filter's number, for the list as narrowed by search and Filters. */
+  counts: { all: number; to_review: number; wins: number; losses: number; blunders: number; thrown: number }
   games: Game[]
 }
 

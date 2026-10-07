@@ -321,3 +321,16 @@ def test_home(client):
     after = client.get("/api/home").json()["today"]
     assert after["reviewed_today"] == 1
     assert after["game"] is None and after["new_games"] == 0
+
+
+def test_games_quick_filters(client):
+    page = client.get("/api/games").json()
+    # Rated games 1-4 and 6; game 6 is 40 days old. Analysed and unreviewed in the last week: 1, 2, 3.
+    assert page["counts"] == {"all": 5, "to_review": 3, "wins": 2, "losses": 2, "blunders": 2, "thrown": 1}
+    client.post("/api/games/2/review")
+    to_review = client.get("/api/games?to_review=true").json()
+    assert [g["id"] for g in to_review["games"]] == [1, 3]
+    assert to_review["counts"]["to_review"] == 2 and to_review["total"] == 2
+    # Counts follow search and the popover filters, not the quick filter itself.
+    assert client.get("/api/games?result=win").json()["counts"]["all"] == 5
+    assert client.get("/api/games?color=white").json()["counts"]["all"] == 5
