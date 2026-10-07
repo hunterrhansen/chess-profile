@@ -2,10 +2,11 @@ import { CheckIcon, CircleIcon, CircleNotchIcon, PlayIcon, PlusIcon, XIcon } fro
 import { type ReactNode, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { LoadingBlock } from '@/components/empty-state'
+import { type Glyph, KnIcon } from '@/components/kn-icon'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Switch } from '@/components/ui/switch'
 import { type RunProgress, send, type Settings, useApi } from '@/lib/api'
 import { BOARDS, type Preferences, usePreferences } from '@/lib/preferences'
 import { playSound, setSoundEnabled } from '@/lib/sound'
@@ -30,7 +31,7 @@ export function SettingsPage() {
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
-      <h1 className="text-xl font-medium">Settings</h1>
+      <h1 className="text-4xl font-bold">Settings</h1>
       <AppearanceSection />
       {error && <p className="text-sm text-destructive">Couldn't load settings. {error}</p>}
       {!data ? (
@@ -50,30 +51,36 @@ export function SettingsPage() {
   )
 }
 
-function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+/** A settings card: its brand icon, title and what it's for, then its rows. */
+function Section({ title, glyph, description, children }: { title: string; glyph: Glyph; description?: string; children: ReactNode }) {
   return (
     <section className="panel overflow-hidden">
-      <header className="border-b px-4 py-3">
-        <h2 className="font-medium">{title}</h2>
-        {description && <p className="text-sm text-muted-foreground">{description}</p>}
+      <header className="flex items-center gap-3.5 border-b-2 px-5 py-4">
+        <KnIcon glyph={glyph} className="size-[34px]" />
+        <div className="min-w-0">
+          <h2 className="font-heading text-xl font-semibold">{title}</h2>
+          {description && <p className="text-sm text-muted-foreground">{description}</p>}
+        </div>
       </header>
-      <div className="divide-y">{children}</div>
+      <div className="divide-y-2">{children}</div>
     </section>
   )
 }
 
+/** One setting: its name (and a hint) on the left, the control on the right. */
 function Row({ label, hint, children }: { label: ReactNode; hint?: ReactNode; children?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-3 text-sm">
-      <div className="min-w-0">
-        <div>{label}</div>
-        {hint && <div className="text-muted-foreground">{hint}</div>}
+    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-5 py-3.5">
+      <div className="min-w-0 flex-1 basis-60">
+        <div className="font-extrabold">{label}</div>
+        {hint && <div className="mt-0.5 text-[13px] text-muted-foreground">{hint}</div>}
       </div>
       {children}
     </div>
   )
 }
 
+/** A segmented control: the options on a sunken track, the chosen one raised on its ledge. */
 function Segmented<T extends string>({
   value,
   options,
@@ -81,37 +88,51 @@ function Segmented<T extends string>({
   label,
 }: {
   value: T
-  options: { value: T; label: ReactNode }[]
+  options: { value: T; label: ReactNode; title?: string }[]
   onChange: (v: T) => void
   label: string
 }) {
   return (
-    <ToggleGroup
-      type="single"
-      variant="outline"
-      size="sm"
-      spacing={0}
-      value={value}
-      aria-label={label}
-      onValueChange={(v) => v && onChange(v as T)}
-    >
-      {options.map((o) => (
-        <ToggleGroupItem key={o.value} value={o.value} className="px-3">
-          {o.label}
-        </ToggleGroupItem>
-      ))}
-    </ToggleGroup>
+    <div role="group" aria-label={label} className="flex flex-wrap gap-1 rounded-[14px] bg-surface-muted p-1">
+      {options.map((o) => {
+        const on = o.value === value
+        return (
+          <button
+            key={o.value}
+            type="button"
+            title={o.title}
+            aria-pressed={on}
+            onClick={() => !on && onChange(o.value)}
+            className={cn(
+              'grid h-[34px] place-items-center rounded-[10px] px-3 text-sm font-extrabold whitespace-nowrap transition-colors duration-(--duration-quick)',
+              on ? 'bg-card text-foreground shadow-[0_2px_0_var(--lip)]' : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/** A green "Saved" / "OK" pill. */
+function OkPill({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md bg-brand/18 px-2.5 py-1 text-[13px] font-extrabold text-brand-text">
+      {children}
+    </span>
   )
 }
 
 function ErrorText({ children }: { children: ReactNode }) {
-  return children ? <p className="px-4 pb-3 text-sm text-destructive">{children}</p> : null
+  return children ? <p className="px-5 pb-3 text-sm text-destructive">{children}</p> : null
 }
 
 function AppearanceSection() {
   const { prefs, set } = usePreferences()
   return (
-    <Section title="Appearance and sound" description="Saved in this browser.">
+    <Section title="Appearance and sound" glyph="star" description="Saved in this browser.">
       <Row label="Theme">
         <Segmented<Preferences['theme']>
           label="Theme"
@@ -124,7 +145,7 @@ function AppearanceSection() {
           ]}
         />
       </Row>
-      <Row label="Board">
+      <Row label="Board" hint="Sage is the Knightly board; the others match other sites.">
         <Segmented<Preferences['board']>
           label="Board colors"
           value={prefs.board}
@@ -151,37 +172,25 @@ function AppearanceSection() {
           value={prefs.bestArrow}
           onChange={(bestArrow) => set({ bestArrow })}
           options={[
-            { value: 'auto', label: 'Automatically' },
-            { value: 'request', label: 'On request' },
+            { value: 'auto', label: 'Right away' },
+            { value: 'request', label: 'On a click' },
           ]}
         />
       </Row>
       <Row label="Win-chance graph in game review" hint="A graph of your chances across the game, above the move. Click it to jump.">
-        <Segmented
-          label="Win-chance graph in game review"
-          value={prefs.showGraph ? 'on' : 'off'}
-          onChange={(v) => set({ showGraph: v === 'on' })}
-          options={[
-            { value: 'off', label: 'Hidden' },
-            { value: 'on', label: 'Shown' },
-          ]}
-        />
+        <Switch aria-label="Win-chance graph in game review" checked={prefs.showGraph} onCheckedChange={(showGraph) => set({ showGraph })} />
       </Row>
       <Row label="Sounds" hint="Moves on the board, right and wrong answers, and the big moments.">
-        <Segmented
-          label="Sounds"
-          value={prefs.sound ? 'on' : 'off'}
-          onChange={(v) => {
-            set({ sound: v === 'on' })
-            if (v === 'on') {
+        <Switch
+          aria-label="Sounds"
+          checked={prefs.sound}
+          onCheckedChange={(on) => {
+            set({ sound: on })
+            if (on) {
               setSoundEnabled(true) // before the preference applies, so this sample plays
               playSound('right')
             }
           }}
-          options={[
-            { value: 'on', label: 'On' },
-            { value: 'off', label: 'Off' },
-          ]}
         />
       </Row>
       <Row label="Progress opens on">
@@ -242,7 +251,7 @@ function AccountsSection({ settings, reload }: { settings: Settings; reload: () 
   }
 
   return (
-    <Section title="Accounts" description="The daily update syncs every account here. Removing one keeps its games.">
+    <Section title="Accounts" glyph="games" description="The daily update syncs every account here. Removing one keeps its games.">
       {settings.accounts.map((a) => {
         const key = `${a.source}/${a.handle}`
         const through = syncedThrough(a.synced_through)
@@ -295,14 +304,14 @@ function AccountsSection({ settings, reload }: { settings: Settings; reload: () 
         }
       >
         {settings.lichess_token ? (
-          <Badge variant="secondary" className="gap-1">
+          <OkPill>
             <CheckIcon className="size-3" /> Saved
-          </Badge>
+          </OkPill>
         ) : (
           <Badge variant="outline">Not set</Badge>
         )}
       </Row>
-      <form onSubmit={add} className="flex flex-wrap items-center gap-2 px-4 py-3">
+      <form onSubmit={add} className="flex flex-wrap items-center gap-2 px-5 py-3.5">
         <Segmented
           label="Site"
           value={source}
@@ -320,9 +329,9 @@ function AccountsSection({ settings, reload }: { settings: Settings; reload: () 
           }}
           placeholder="username"
           aria-label="Username"
-          className="h-8 w-48"
+          className="h-10 w-48"
         />
-        <Button type="submit" size="sm" disabled={busy}>
+        <Button type="submit" variant="outline" disabled={busy}>
           <PlusIcon /> Add account
         </Button>
         <span className="basis-full text-xs text-muted-foreground">
@@ -371,41 +380,37 @@ function UpdateSection({ settings, reload }: { settings: Settings; reload: () =>
   return (
     <Section
       title="Daily update"
+      glyph="goal"
       description="Syncs every account, analyses new games, and backs up the database. If the Mac is asleep at that time, it runs on wake."
     >
       <Row
         label="Run every day"
         hint={current ? (current.loaded ? `On, at ${savedTime}` : 'Installed but not loaded. Save again to fix.') : 'Off'}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <Input
             type="time"
             step={300}
             value={time}
             onChange={(e) => setTime(e.target.value)}
             aria-label="Time of day"
-            className="h-8 w-32"
+            className="h-10 w-32"
           />
-          {current ? (
-            <>
-              {time !== savedTime && (
-                <Button size="sm" disabled={!!busy} onClick={() => saveSchedule(true)}>
-                  Save time
-                </Button>
-              )}
-              <Button variant="outline" size="sm" disabled={!!busy} onClick={() => saveSchedule(false)}>
-                Turn off
-              </Button>
-            </>
-          ) : (
+          {current && time !== savedTime && (
             <Button size="sm" disabled={!!busy} onClick={() => saveSchedule(true)}>
-              Turn on
+              Save time
             </Button>
           )}
+          <Switch
+            aria-label="Run every day"
+            checked={!!current}
+            disabled={!!busy}
+            onCheckedChange={(on) => saveSchedule(on)}
+          />
         </div>
       </Row>
       {settings.current_run ? (
-        <div className="px-4 py-3 text-sm">
+        <div className="px-5 py-3.5 text-sm">
           <div className="mb-2 flex items-center justify-between gap-4">
             <span className="flex items-center gap-2 font-medium">
               <CircleNotchIcon className="size-4 animate-spin" /> Updating
@@ -444,7 +449,7 @@ function UpdateSection({ settings, reload }: { settings: Settings; reload: () =>
                 </Button>
               )}
               <Button
-                variant="outline"
+                variant="sky"
                 size="sm"
                 disabled={running}
                 onClick={() =>
@@ -461,7 +466,7 @@ function UpdateSection({ settings, reload }: { settings: Settings; reload: () =>
             </div>
           </Row>
           {showSteps && last?.progress && (
-            <div className="px-4 py-3">
+            <div className="px-5 py-3.5">
               <StepList progress={last.progress} />
             </div>
           )}
@@ -550,9 +555,9 @@ function AnalysisSection({ settings, reload }: { settings: Settings; reload: () 
     : [...DEPTHS, { value: settings.depth, label: 'Custom' }].sort((a, b) => a.value - b.value)
 
   return (
-    <Section title="Analysis">
+    <Section title="Analysis" glyph="engine" description="How your games are analysed.">
       <Row label="Engine" hint={settings.engine ? undefined : 'Install it with: brew install stockfish'}>
-        <span className="text-muted-foreground">{settings.engine ?? 'Not found'}</span>
+        <span className="font-extrabold">{settings.engine ?? 'Not found'}</span>
       </Row>
       <Row label="Depth" hint="Deeper finds more but takes longer. Applies to games analysed from now on.">
         <Segmented
@@ -567,18 +572,11 @@ function AnalysisSection({ settings, reload }: { settings: Settings; reload: () 
               setError((e as Error).message)
             }
           }}
-          options={options.map((d) => ({
-            value: String(d.value),
-            label: (
-              <span>
-                {d.label} <span className="text-muted-foreground">{d.value}</span>
-              </span>
-            ),
-          }))}
+          options={options.map((d) => ({ value: String(d.value), label: d.label, title: `Depth ${d.value}` }))}
         />
       </Row>
       <Row label="Move classification" hint="Chess.com's bands. A move losing 20+ points of win chance is a blunder; Great is the only move that held, Brilliant a sound sacrifice.">
-        <span className="text-muted-foreground">Fixed</span>
+        <span className="font-extrabold">Fixed</span>
       </Row>
       <ErrorText>{error}</ErrorText>
     </Section>
@@ -589,7 +587,7 @@ function DataSection({ settings }: { settings: Settings }) {
   const { database: db, backups } = settings
   const mb = (db.bytes / 1024 / 1024).toFixed(1)
   return (
-    <Section title="Data">
+    <Section title="Data" glyph="notes" description="Everything lives in one SQLite file on this Mac.">
       <Row
         label="Database"
         hint={<span className="break-all">{db.path}</span>}
