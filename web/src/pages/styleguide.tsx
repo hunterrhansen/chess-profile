@@ -2,6 +2,7 @@ import { ArrowRight, Check, Play, RotateCcw, Star, Volume2, X } from 'lucide-rea
 import { type ReactNode, useState } from 'react'
 import { Confetti } from '@/components/confetti'
 import { EvalBar } from '@/components/eval-bar'
+import { Logo, LogoMark } from '@/components/logo'
 import { ResultBadge } from '@/components/game-bits'
 import { MoveBadge } from '@/components/move-badge'
 import { Badge } from '@/components/ui/badge'
@@ -30,6 +31,21 @@ export function StyleguidePage() {
           ledge, and gold is for one moment per view.
         </p>
       </header>
+
+      <Block title="Logo" note="LogoMark and Logo in components/logo.tsx. The knight alone (simple) under 24px; the favicon is that version.">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="panel flex flex-wrap items-end gap-6 p-6">
+            <LogoMark title="Knightly" className="size-28" />
+            <LogoMark className="size-16" />
+            <LogoMark className="size-8" />
+            <LogoMark simple className="size-4" />
+          </div>
+          <div className="panel flex flex-col justify-center gap-5 p-6">
+            <Logo />
+            <Logo className="gap-4 [&>span:last-child]:text-4xl" markClassName="size-14" />
+          </div>
+        </div>
+      </Block>
 
       <Block title="Color" note="Tokens in src/styles/tokens.css. Use them as Tailwind colors (bg-brand) or var(--brand).">
         {COLOR_GROUPS.map(([group, names]) => (
