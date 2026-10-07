@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import analyze, db, patterns, schedule, update
+from . import analyze, db, patterns, puzzles, schedule, update
 from .sources import pgn_file
 
 
@@ -106,6 +106,12 @@ def cmd_patterns(conn, args) -> None:
     log(f"-> {m} more tagged from the engine's lines")
 
 
+def cmd_puzzles(conn, args) -> None:
+    kept = puzzles.import_file(conn, args.file, log=log)
+    for theme, n in kept.items():
+        log(f"  {theme}: {n}")
+
+
 def cmd_stats(conn, args) -> None:
     def table(title, sql):
         rows = conn.execute(sql).fetchall()
@@ -204,6 +210,11 @@ def main(argv=None) -> None:
     s.add_argument("--workers", type=int, help="Parallel engine processes (default: CPU cores - 1)")
     s.add_argument("--engine", help="Path to Stockfish (default: $STOCKFISH or `stockfish` on PATH)")
     s.set_defaults(func=cmd_patterns)
+
+    s = sub.add_parser("puzzles", help="Import puzzles for your weak tactics from the Lichess puzzle "
+                                       "database (lichess_db_puzzle.csv.zst from database.lichess.org)")
+    s.add_argument("file", help="Path to lichess_db_puzzle.csv.zst (or the unpacked .csv)")
+    s.set_defaults(func=cmd_puzzles)
 
     s = sub.add_parser("update", help="Sync every account, analyse new games, back up the DB. "
                                       "What the daily schedule runs.")

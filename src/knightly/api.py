@@ -29,7 +29,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import db, deck, lines, patterns, play, schedule, units, update
+from . import db, deck, lines, patterns, play, puzzles, schedule, units, update
 from .analyze import THRESHOLDS, find_engine
 
 # A position counts as "winning" once the user's win chance reaches this after one of
@@ -249,6 +249,11 @@ class ScheduleIn(BaseModel):
 class CheckIn(BaseModel):
     fen: str
     uci: str = Field(pattern=r"^[a-h][1-8][a-h][1-8][qrbn]?$")
+
+
+class PuzzleAnswerIn(BaseModel):
+    id: str = Field(pattern=r"^[A-Za-z0-9]{1,16}$")
+    correct: bool
 
 
 class AnswerIn(BaseModel):
@@ -648,6 +653,19 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
             deck.sync(conn)
             patterns.tag_all(conn)
             positions = deck.stats(conn)
+            puzzles_done = puzzles.done_today(conn)
+            puzzles_ready = puzzles.available(conn)
+        # Your most common tactic over the last 90 days: the path's puzzles train it.
+        top = query(
+            """SELECT m.pattern, count(*) AS n FROM moves m JOIN games g ON g.id = m.game_id
+               WHERE m.is_user = 1 AND g.rated = 1 AND g.played_at >= ?
+                 AND m.pattern NOT IN (?, ?) AND m.pattern IS NOT NULL
+               GROUP BY m.pattern ORDER BY n DESC LIMIT 1""",
+            (start, patterns.OTHER, patterns.PENDING))
+        tagged = query(
+            """SELECT count(*) AS n FROM moves m JOIN games g ON g.id = m.game_id
+               WHERE m.is_user = 1 AND g.rated = 1 AND g.played_at >= ? AND m.pattern IS NOT NULL""",
+            (start,))[0]["n"]
         return {
             "units": path,
             "today": {
@@ -656,8 +674,33 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
                 "reviewed_today": reviewed_today,
                 "positions": positions["today"],
                 "deck_total": positions["total"],
+                "puzzles": {
+                    "theme": top[0]["pattern"] if top else None,
+                    "share": round(top[0]["n"] / tagged, 2) if top and tagged else None,
+                    "done": puzzles_done,
+                    "session": puzzles.SESSION,
+                    "available": puzzles_ready,
+                },
             },
         }
+
+    @app.get("/api/puzzles/next")
+    def puzzle_next(theme: str = Query(pattern="^[A-Za-z]{1,32}$")):
+        """A Lichess puzzle in `theme` you haven't tried here, near your puzzle rating."""
+        if theme not in patterns.THEMES:
+            raise HTTPException(400, f"unknown theme {theme!r}")
+        with closing(db.connect(db_path)) as conn:
+            return {"puzzle": puzzles.next_puzzle(conn, theme), "done_today": puzzles.done_today(conn),
+                    "session": puzzles.SESSION, "available": puzzles.available(conn)}
+
+    @app.post("/api/puzzles/answer")
+    def puzzle_answer(body: PuzzleAnswerIn):
+        with write() as conn, conn:
+            try:
+                puzzles.record(conn, body.id, body.correct)
+            except KeyError:
+                raise HTTPException(404, "No such puzzle.") from None
+            return {"done_today": puzzles.done_today(conn)}
 
     @app.get("/api/patterns")
     def what_you_blunder(range: str = Query("90d", pattern="^(30d|90d|all)$")):

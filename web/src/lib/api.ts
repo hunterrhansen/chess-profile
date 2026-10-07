@@ -294,6 +294,8 @@ export interface Home {
     reviewed_today: number
     positions: { done: number; total: number }
     deck_total: number
+    /** Lichess puzzles for your most common tactic (puzzles.py). */
+    puzzles: { theme: string | null; share: number | null; done: number; session: number; available: boolean }
   }
 }
 
@@ -302,4 +304,21 @@ export interface PatternCounts {
   range: Range
   patterns: { pattern: string; total: number; blunder: number; mistake: number; miss: number }[]
   pending: number // tagged once the daily update has looked deeper
+}
+
+/** A Lichess puzzle (puzzles.py): moves[0] is the opponent's setting-up move, yours follow. */
+export interface Puzzle {
+  id: string
+  fen: string
+  moves: string[]
+  rating: number
+  themes: string[]
+  url: string | null
+}
+
+export interface PuzzleNext {
+  puzzle: Puzzle | null
+  done_today: number
+  session: number
+  available: boolean
 }

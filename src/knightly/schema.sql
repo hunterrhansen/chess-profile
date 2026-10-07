@@ -74,6 +74,20 @@ CREATE TABLE IF NOT EXISTS puzzle_attempts (
 );
 CREATE INDEX IF NOT EXISTS puzzle_attempts_at ON puzzle_attempts (attempted_at);
 
+-- Puzzles picked from the Lichess puzzle database (puzzles.py) for the themes your mistakes
+-- are tagged with. Replaced wholesale by each `knightly puzzles import`.
+CREATE TABLE IF NOT EXISTS lichess_puzzles (
+    puzzle_id   TEXT PRIMARY KEY,
+    fen         TEXT NOT NULL,          -- before moves[0], the opponent's setting-up move
+    moves       TEXT NOT NULL,          -- space-separated UCI; yours at odd indexes
+    rating      INTEGER NOT NULL,
+    popularity  INTEGER,
+    plays       INTEGER,
+    themes      TEXT NOT NULL,          -- space-separated Lichess themes
+    url         TEXT
+);
+CREATE INDEX IF NOT EXISTS lichess_puzzles_rating ON lichess_puzzles (rating);
+
 -- Point-in-time copies of profile/stats endpoints (ratings, tactics rating, records...).
 -- Chess.com does not expose puzzle history, so this is where its tactics rating lives.
 CREATE TABLE IF NOT EXISTS snapshots (
