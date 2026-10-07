@@ -1,4 +1,4 @@
-import { Bot, ChartLine, ChessKnight, ListChecks, PanelLeftClose, PanelLeftOpen, Settings } from 'lucide-react'
+import { Bot, ChartLine, ChessKnight, ListChecks, PanelLeftClose, PanelLeftOpen, Settings, Target } from 'lucide-react'
 import { useEffect } from 'react'
 import { Link, Outlet, useLocation } from 'react-router'
 import { useApi } from '@/lib/api'
@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 
 const NAV: { section: Section; root: string; label: string; icon: typeof Settings }[] = [
   { section: 'overview', root: '/', label: 'Overview', icon: ChartLine },
+  { section: 'practice', root: '/practice', label: 'Practice', icon: Target },
   { section: 'games', root: '/games', label: 'Games', icon: ListChecks },
   { section: 'play', root: '/play', label: 'Play', icon: Bot },
 ]

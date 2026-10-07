@@ -71,6 +71,45 @@ export interface Overview {
   top_openings: { eco: string; opening: string | null; color: 'white' | 'black'; games: number; win_rate: number }[]
 }
 
+/** The review deck (deck.py): counts, today's progress and the next card, if any. */
+export interface DeckToday {
+  total: number
+  mastered: number
+  learning: number
+  new: number
+  today: { done: number; total: number }
+  card: DeckCard | null
+}
+
+export interface DeckCard {
+  game_id: number
+  ply: number
+  step: number // right answers in a row so far
+  reviews: number // 0: you haven't seen this position yet
+  fen_before: string
+  color: 'white' | 'black' // who moved: you
+  san: string // what you played
+  uci: string
+  move_number: number
+  classification: Classification
+  win_pct_before: number | null
+  prev_uci: string | null // the opponent's move that led here
+  opponent: string | null
+  played_at: string
+  time_control: string | null
+  speed: string | null
+  user_outcome: Outcome | null
+}
+
+export interface DeckAnswer {
+  correct: boolean
+  best_uci: string
+  best_san: string
+  step: number
+  mastered: boolean
+  due: string | null // YYYY-MM-DD of the next review
+}
+
 export interface GamesPage {
   total: number
   page: number

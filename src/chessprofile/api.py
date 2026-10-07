@@ -5,7 +5,7 @@ games list filters on the same rows, so a KPI and the games it links to always a
 
 Reads use a read-only connection. The only writes are the Settings page's (accounts, the
 analysis depth, and the daily-update schedule, which goes through launchd), cached engine
-lines, notes, and games played against the bot.
+lines, notes, games played against the bot, and the review deck's cards and answers.
 """
 import functools
 import json
@@ -28,7 +28,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import db, lines, play, schedule, update
+from . import db, deck, lines, play, schedule, update
 from .analyze import THRESHOLDS, find_engine
 
 # A position counts as "winning" once the user's win chance reaches this after one of
@@ -238,6 +238,12 @@ class ScheduleIn(BaseModel):
     enabled: bool
     hour: int = Field(6, ge=0, le=23)
     minute: int = Field(0, ge=0, le=59)
+
+
+class AnswerIn(BaseModel):
+    game_id: int
+    ply: int
+    uci: str = Field(pattern=r"^[a-h][1-8][a-h][1-8][qrbn]?$")
 
 
 class AnalysisIn(BaseModel):
@@ -470,6 +476,39 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
             except SystemExit as e:
                 raise HTTPException(503, str(e)) from None
         return {"analysed": True}
+
+    @app.get("/api/deck")
+    def deck_today():
+        """The review deck's counts and today's next card (null when today's are done).
+        Adds cards for newly analysed games first, so the deck is always current."""
+        with write() as conn, conn:
+            deck.sync(conn)
+            info = deck.stats(conn)
+            nxt = deck.queue(conn)[:1]
+        card = None
+        if nxt:
+            rows = query(
+                """SELECT c.game_id, c.ply, c.step, c.reviews, m.fen_before, m.color, m.san,
+                          m.uci, m.move_number, m.classification, m.win_pct_before,
+                          prev.uci AS prev_uci, g.opponent, g.played_at, g.time_control,
+                          g.speed, g.user_outcome
+                   FROM cards c
+                   JOIN moves m ON m.game_id = c.game_id AND m.ply = c.ply
+                   JOIN games g ON g.id = c.game_id
+                   LEFT JOIN moves prev ON prev.game_id = m.game_id AND prev.ply = m.ply - 1
+                   WHERE c.game_id = ? AND c.ply = ?""",
+                (nxt[0]["game_id"], nxt[0]["ply"]),
+            )
+            card = dict(rows[0])
+        return {**info, "card": card}
+
+    @app.post("/api/deck/answer")
+    def deck_answer(body: AnswerIn):
+        with write() as conn, conn:
+            try:
+                return deck.answer(conn, body.game_id, body.ply, body.uci)
+            except KeyError:
+                raise HTTPException(404, "No card for that position.") from None
 
     @app.get("/api/settings")
     def settings():

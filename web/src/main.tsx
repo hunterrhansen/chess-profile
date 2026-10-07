@@ -7,6 +7,7 @@ import { GamesPage } from '@/pages/games'
 import { PreferencesProvider } from '@/lib/preferences'
 import { OverviewPage } from '@/pages/overview'
 import { PlayPage } from '@/pages/play'
+import { PracticePage } from '@/pages/practice'
 import { ReviewPage } from '@/pages/review'
 import { SettingsPage } from '@/pages/settings'
 import { StyleguidePage } from '@/pages/styleguide'
@@ -23,6 +24,7 @@ createRoot(document.getElementById('root')!).render(
               <Route path="games" element={<GamesPage />} />
               <Route path="games/:id" element={<ReviewPage />} />
               <Route path="play" element={<PlayPage />} />
+              <Route path="practice" element={<PracticePage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="styleguide" element={<StyleguidePage />} />
             </Route>
