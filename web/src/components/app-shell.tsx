@@ -1,5 +1,6 @@
 import { SidebarSimpleIcon } from '@phosphor-icons/react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, Outlet, useLocation } from 'react-router'
 import { type Glyph, KnIcon } from '@/components/kn-icon'
 import { LogoMark } from '@/components/logo'
@@ -22,6 +23,16 @@ const NAV: Tab[] = [
   { section: 'progress', root: '/progress', label: 'Progress', glyph: 'progress' },
 ]
 const SETTINGS: Tab = { section: 'settings', root: '/settings', label: 'Settings', glyph: 'settings' }
+
+/** The phone top bar's slot for page content, filled with `PhoneHeader`. */
+export const PHONE_HEADER_SLOT = 'phone-header-slot'
+
+/** Puts `children` in the phone top bar, beside Settings, while the page is shown. */
+export function PhoneHeader({ children }: { children: React.ReactNode }) {
+  const [slot, setSlot] = useState<HTMLElement | null>(null)
+  useEffect(() => setSlot(document.getElementById(PHONE_HEADER_SLOT)), [])
+  return slot ? createPortal(children, slot) : null
+}
 
 const SOURCE_LABEL: Record<string, string> = { chesscom: 'Chess.com', lichess: 'Lichess' }
 
@@ -130,11 +141,13 @@ export function AppShell() {
         <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b-2 bg-card px-3 md:hidden">
           <LogoMark className="size-7" />
           <span className="font-display text-xl font-bold text-brand-text">Knightly</span>
+          {/* Pages can put a little here (Home: today's goal counters). */}
+          <div id={PHONE_HEADER_SLOT} className="ml-auto flex items-center" />
           <Link
             to={target(SETTINGS.section, SETTINGS.root)}
             aria-label="Settings"
             aria-current={here.includes('settings') ? 'page' : undefined}
-            className="ml-auto grid size-11 place-items-center rounded-md aria-[current=page]:bg-sky/15"
+            className="grid size-11 place-items-center rounded-md aria-[current=page]:bg-sky/15"
           >
             <KnIcon glyph="settings" className="size-[26px]" />
           </Link>

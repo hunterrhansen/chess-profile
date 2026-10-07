@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import { PhoneHeader } from '@/components/app-shell'
 import { type Glyph, KnIcon } from '@/components/kn-icon'
 import { LogoLoader } from '@/components/logo'
 import { PathNode, type PathNodeState } from '@/components/path-node'
@@ -112,13 +113,13 @@ export function HomePage() {
   steps.push({
     key: 'play',
     glyph: 'play',
-    label: 'Play the bot',
+    label: 'Play the bot with blunder check on',
     tag: goalDone ? 'Bonus' : undefined,
     done: false,
     card: {
       eyebrow: 'Optional · put it to work',
       title: 'Want more?',
-      body: "Today's goal is done. A game against the bot is the best place to try what you just reviewed.",
+      body: "Today's goal is done. Play the bot with blunder check on: it stops you once if a move loses a lot, so you can see what you missed.",
       cta: 'Play the bot',
       to: '/play',
       quiet: true,
@@ -130,6 +131,26 @@ export function HomePage() {
 
   return (
     <div className="flex flex-wrap items-start justify-center gap-10 py-2">
+      <PhoneHeader>
+        <Link
+          to={game ? `/games/${game.id}` : '/games?to_review=true'}
+          aria-label={`Today's game: ${reviewed_today ? 'reviewed' : 'not reviewed yet'}`}
+          className="flex h-11 items-center gap-1 rounded-md px-2 text-[15px] font-extrabold tabular-nums"
+        >
+          <KnIcon glyph="review" className="size-[26px]" />
+          {reviewed_today ? 1 : 0}/1
+        </Link>
+        {positions.total > 0 && (
+          <Link
+            to="/practice"
+            aria-label={`Positions to review: ${positions.done} of ${positions.total} done`}
+            className="flex h-11 items-center gap-1 rounded-md px-2 text-[15px] font-extrabold tabular-nums"
+          >
+            <KnIcon glyph="drill" className="size-6" />
+            {positions.done}/{positions.total}
+          </Link>
+        )}
+      </PhoneHeader>
       <section aria-label="Your path" className="flex max-w-xl min-w-0 flex-[1_1_26rem] flex-col gap-6">
         {finished && (
           <div className="flex animate-bounce-in items-center gap-4 rounded-xl bg-gold px-5 py-4 text-on-gold shadow-[0_4px_0_var(--gold-lip)]">

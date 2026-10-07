@@ -547,7 +547,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
                    for r in query("SELECT source, account, kind, cursor FROM sync_state")}
         last = query("""SELECT id, started_at, finished_at, status, trigger, new_games,
                                new_puzzles, games_analysed, errors, progress
-                        FROM runs WHERE status != 'running' ORDER BY id DESC LIMIT 1""")
+                        FROM runs WHERE status != 'running' ORDER BY id DESC LIMIT 4""")
         cutoff = (datetime.now(timezone.utc) - STALE_RUN).strftime("%Y-%m-%dT%H:%M:%SZ")
         current = query("""SELECT id, started_at, trigger, progress FROM runs
                            WHERE status = 'running' AND started_at >= ?
@@ -571,6 +571,8 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
             "lichess_token": lichess_token_saved(),
             "schedule": schedule.current(),
             "last_run": run_json(last[0]) if last else None,
+            # The runs before it, for the history under it (without their step lists).
+            "earlier_runs": [{k: v for k, v in run_json(r).items() if k != "progress"} for r in last[1:]],
             "current_run": run_json(current[0]) if current else None,
             "running": bool(current),
             "engine": engine_name(),
