@@ -1,7 +1,7 @@
 import chess
 import chess.engine
 
-from chessprofile import lines
+from knightly import lines
 
 # 38...Rd2?? from a real game: Black was winning, ...Rb3 kept it, Rd2 let White equalise.
 BEFORE_RD2 = "6k1/5p2/p5p1/6p1/P1p2P2/2R2P2/1r5P/5K2 b - - 0 38"

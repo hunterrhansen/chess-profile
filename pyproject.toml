@@ -1,5 +1,5 @@
 [project]
-name = "chessprofile"
+name = "knightly"
 version = "0.1.0"
 description = "Aggregate your Chess.com, Lichess and over-the-board chess data into one SQLite database."
 readme = "README.md"
@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-chessprofile = "chessprofile.cli:main"
+knightly = "knightly.cli:main"
 
 [build-system]
 requires = ["hatchling"]

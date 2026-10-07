@@ -1,4 +1,4 @@
--- chessprofile schema, v1
+-- knightly schema, v1
 --
 -- Design rules:
 --   * Every row keeps the untouched source payload (`pgn` and/or `raw`), so new
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS sync_state (
     PRIMARY KEY (source, account, kind)
 );
 
--- Engine analysis (filled by `chessprofile analyze`). One row per analysed game; a game
+-- Engine analysis (filled by `knightly analyze`). One row per analysed game; a game
 -- with no row here hasn't been analysed yet. Re-analysing replaces the game's rows.
 CREATE TABLE IF NOT EXISTS game_analysis (
     game_id             INTEGER PRIMARY KEY REFERENCES games(id) ON DELETE CASCADE,
@@ -153,7 +153,7 @@ CREATE TABLE IF NOT EXISTS moves (
 );
 CREATE INDEX IF NOT EXISTS moves_user_class ON moves (is_user, classification);
 
--- One row per `chessprofile update` (the scheduled sync -> analyse -> backup pipeline).
+-- One row per `knightly update` (the scheduled sync -> analyse -> backup pipeline).
 CREATE TABLE IF NOT EXISTS runs (
     id              INTEGER PRIMARY KEY,
     started_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),

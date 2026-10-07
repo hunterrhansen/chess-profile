@@ -27,7 +27,7 @@ const LEVELS: { elo: number; label: string }[] = [
 ]
 const BOT_DELAY_MS = 500 // the bot never answers faster than this, so its moves can be seen
 const CHECK = 'radial-gradient(circle, var(--check-glow) 0%, var(--check-glow-soft) 45%, transparent 75%)'
-const STORE = 'chessprofile.play'
+const STORE = 'knightly.play'
 
 const isLightSquare = (square: string) => (square.charCodeAt(0) - 97 + Number(square[1])) % 2 === 0
 
@@ -144,7 +144,7 @@ export function PlayPage() {
           throw new Error(
             typeof body?.detail === 'string'
               ? body.detail
-              : `The server didn't answer (${res.status}). Is \`chessprofile serve\` running?`,
+              : `The server didn't answer (${res.status}). Is \`knightly serve\` running?`,
           )
         }
         return body as { uci: string }
@@ -339,7 +339,7 @@ export function PlayPage() {
                       </Button>
                     </div>
                     {analysis === 'failed' && (
-                      <p className="text-muted-foreground">Saved, but the analysis didn't run. `chessprofile analyze` will pick it up.</p>
+                      <p className="text-muted-foreground">Saved, but the analysis didn't run. `knightly analyze` will pick it up.</p>
                     )}
                   </div>
                 )}

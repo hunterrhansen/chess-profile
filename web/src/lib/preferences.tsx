@@ -27,7 +27,7 @@ const DEFAULTS: Preferences = {
   sidebarCollapsed: false,
   showGraph: false,
 }
-const KEY = 'chessprofile.preferences'
+const KEY = 'knightly.preferences'
 
 function load(): Preferences {
   try {

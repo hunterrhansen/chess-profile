@@ -252,7 +252,7 @@ export interface GameDetail extends Game {
   plies: MoveRow[] // empty until the game has been analysed
 }
 
-/** A note from game review or `chessprofile note`. */
+/** A note from game review or `knightly note`. */
 export interface Note {
   id: number
   created_at: string

@@ -9,7 +9,7 @@ export default defineConfig({
     alias: { '@': path.resolve(import.meta.dirname, './src') },
   },
   server: {
-    // `chessprofile serve` runs the API on :8000
+    // `knightly serve` runs the API on :8000
     proxy: { '/api': 'http://127.0.0.1:8000' },
   },
 })

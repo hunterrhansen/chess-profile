@@ -270,7 +270,7 @@ function AccountsSection({ settings, reload }: { settings: Settings; reload: () 
             <>
               Not set. Save one from the terminal so it never passes through the browser:{' '}
               <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                security add-generic-password -a "$USER" -s chessprofile-lichess -w
+                security add-generic-password -a "$USER" -s knightly-lichess -w
               </code>
             </>
           )

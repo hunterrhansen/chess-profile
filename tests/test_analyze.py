@@ -3,7 +3,7 @@ import shutil
 import chess
 import pytest
 
-from chessprofile import analyze, db
+from knightly import analyze, db
 
 # Scholar's mate: White's 3.Bc4 and 4.Qxf7# are fine, Black's 3...Nf6?? is the blunder.
 SCHOLARS_MATE = """[Event "test"]

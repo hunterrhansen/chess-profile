@@ -5,7 +5,7 @@ import chess.engine
 import pytest
 from fastapi.testclient import TestClient
 
-from chessprofile import api, db, play
+from knightly import api, db, play
 
 FOOLS_MATE = ["f2f3", "e7e5", "g2g4", "d8h4"]
 

@@ -1,24 +1,25 @@
-# chessprofile
+# Knightly
 
-Pull all of your chess data (Chess.com, Lichess, over-the-board PGNs, notes) into a
-single SQLite file, so analyzers can run against one consistent dataset later.
+Turn your own chess games into daily practice. Knightly pulls all of your chess data
+(Chess.com, Lichess, over-the-board PGNs, notes) into a single SQLite file, analyses it with
+Stockfish, and turns your mistakes into positions to review.
 
 ## Quick start
 
 ```bash
 uv sync
-uv run chessprofile sync chesscom <username>            # all games, every month
-uv run chessprofile sync lichess  <username> --token lip_xxx   # games + puzzle history
-uv run chessprofile import-pgn ~/otb-games/ --me "Hansen, Hunter"
-uv run chessprofile note "I rush in time trouble" --tag time --game 42
-uv run chessprofile sync                                 # later: incremental re-sync of all accounts
-uv run chessprofile analyze                              # Stockfish pass over new games
-uv run chessprofile stats
-uv run chessprofile serve                                # web app at http://127.0.0.1:8000
+uv run knightly sync chesscom <username>            # all games, every month
+uv run knightly sync lichess  <username> --token lip_xxx   # games + puzzle history
+uv run knightly import-pgn ~/otb-games/ --me "Hansen, Hunter"
+uv run knightly note "I rush in time trouble" --tag time --game 42
+uv run knightly sync                                 # later: incremental re-sync of all accounts
+uv run knightly analyze                              # Stockfish pass over new games
+uv run knightly stats
+uv run knightly serve                                # web app at http://127.0.0.1:8000
 sqlite3 chess.db                                         # it's just SQL from here
 ```
 
-The DB path defaults to `./chess.db` (override with `--db` or `CHESSPROFILE_DB`).
+The DB path defaults to `./chess.db` (override with `--db` or `KNIGHTLY_DB`).
 `--since 2024-01` limits a first import.
 
 ## Sources
@@ -33,12 +34,12 @@ The DB path defaults to `./chess.db` (override with `--db` or `CHESSPROFILE_DB`)
 ### Lichess token
 
 Create one at
-<https://lichess.org/account/oauth/token/create?scopes[]=puzzle:read&description=chessprofile>
+<https://lichess.org/account/oauth/token/create?scopes[]=puzzle:read&description=knightly>
 (only the `puzzle:read` scope), then store it in the macOS Keychain. The command prompts
 for it, so it never lands in your shell history:
 
 ```bash
-security add-generic-password -a "$USER" -s chessprofile-lichess -w
+security add-generic-password -a "$USER" -s knightly-lichess -w
 ```
 
 The tool looks for the token in this order: `--token`, then `$LICHESS_TOKEN`, then the Keychain.
@@ -49,7 +50,7 @@ would mean scraping a logged-in session, which is left out for now.
 
 ## Storage design
 
-SQLite, one file. Tables in [`schema.sql`](src/chessprofile/schema.sql):
+SQLite, one file. Tables in [`schema.sql`](src/knightly/schema.sql):
 
 - `games`: one row per game from any source, keyed on `(source, source_id)`. Normalised
   columns are written from **your** point of view (`user_color`, `user_outcome`,
@@ -82,27 +83,27 @@ Principles:
 
 ## Daily updates
 
-`chessprofile update` runs the whole pipeline: sync every known account, analyse new
+`knightly update` runs the whole pipeline: sync every known account, analyse new
 games, back up the database to `backups/` (one copy per day, newest 7 kept), and record
 the run in the `runs` table. A second copy started while one is running exits straight away.
 
 To run it every day at 06:00 via launchd (if the Mac is asleep then, it runs on wake):
 
 ```bash
-uv run chessprofile schedule install      # --hour / --minute to change the time
-uv run chessprofile schedule              # status + recent runs
-uv run chessprofile schedule run-now      # trigger the scheduled job immediately
-uv run chessprofile schedule uninstall
+uv run knightly schedule install      # --hour / --minute to change the time
+uv run knightly schedule              # status + recent runs
+uv run knightly schedule run-now      # trigger the scheduled job immediately
+uv run knightly schedule uninstall
 ```
 
 Scheduled runs use 3 Stockfish workers at low priority, log to
-`~/Library/Logs/chessprofile.log`, and show a macOS notification if any step fails. The
-job runs `.venv/bin/chessprofile` from this folder, so re-run `schedule install` if you
+`~/Library/Logs/knightly.log`, and show a macOS notification if any step fails. The
+job runs `.venv/bin/knightly` from this folder, so re-run `schedule install` if you
 move the project or recreate the virtualenv.
 
 ## Engine analysis
 
-`chessprofile analyze` runs [Stockfish](https://stockfishchess.org/) (`brew install stockfish`)
+`knightly analyze` runs [Stockfish](https://stockfishchess.org/) (`brew install stockfish`)
 over every game that doesn't have analysis yet, at depth 18 by default, with one
 single-threaded engine per CPU core. It saves one game at a time, so you can stop it with
 Ctrl-C and re-run it to continue. Run it after each `sync` to analyse new games.
@@ -115,7 +116,7 @@ it replaces mistake/blunder for that move.
 
 **Great** and **Brilliant** follow Chess.com's definitions, with rules modelled on the
 open-source [WintrChess](https://github.com/WintrCat/wintrchess) reviewer (see
-[`brilliance.py`](src/chessprofile/brilliance.py)). Neither is given when the second-best
+[`brilliance.py`](src/knightly/brilliance.py)). Neither is given when the second-best
 move would still have been completely winning (+7), when you're worse after the move, or
 when escaping check. A **great** move is the engine's top choice when its second choice
 would have cost 10+ points, and isn't just taking free material. A **brilliant** move is a
@@ -129,22 +130,22 @@ After changing the thresholds in `analyze.py`, re-label saved moves without re-r
 engine:
 
 ```bash
-uv run chessprofile analyze --reclassify
+uv run knightly analyze --reclassify
 ```
 
 ## Web app
 
-`chessprofile serve` runs a FastAPI app ([`api.py`](src/chessprofile/api.py)) over the
+`knightly serve` runs a FastAPI app ([`api.py`](src/knightly/api.py)) over the
 database and serves the React frontend in [`web/`](web/) (Vite, TypeScript, shadcn/ui,
 Recharts). Pages read through a read-only connection, so it's safe to leave running during
 `sync` or `analyze`. It listens on 127.0.0.1 only.
 
 ```bash
 cd web && pnpm install && pnpm build && cd ..   # once, and after frontend changes
-uv run chessprofile serve
+uv run knightly serve
 ```
 
-For frontend work, run `uv run chessprofile serve` and `pnpm --dir web dev` side by side and
+For frontend work, run `uv run knightly serve` and `pnpm --dir web dev` side by side and
 open <http://localhost:5173>. Vite proxies `/api` to the Python server and hot-reloads.
 
 **Overview** shows rating, games played and analysed, and the improvement KPIs below, each
@@ -178,14 +179,14 @@ For any move worse than Good, **Why** and **Best line** play an engine line on t
 should have been played. Lines come from Stockfish on the first click (about a second, at
 the Settings depth), are cached in `engine_lines`, and come with a one-line explanation
 written from what the line actually does: mate, material won or lost, or the swing in win
-chance ([`lines.py`](src/chessprofile/lines.py)). ← → step through the line, Esc returns.
+chance ([`lines.py`](src/knightly/lines.py)). ← → step through the line, Esc returns.
 
 **Play** (`/play`) is a game against Stockfish in the same layout as game review: pick a
 strength from 250 to full strength and a color, then move by dragging or clicking (legal
 moves show as dots; promotions make a queen). Resign, take back, and hint (the engine's best
 move as a green arrow) sit under the move list. Stockfish only plays as weak as about 1320
 Elo, so below that the bot picks among its top moves at random, more loosely the lower the
-rating ([`play.py`](src/chessprofile/play.py)). A game in progress survives leaving the page
+rating ([`play.py`](src/knightly/play.py)). A game in progress survives leaving the page
 or reloading. A finished game is saved as an unrated game with source `bot`, so it stays out
 of the overview's stats, and analysed straight away (spread over every core, about 20s for a
 40-move game at depth 18); **Review game** opens it in game review.

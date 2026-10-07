@@ -1,6 +1,6 @@
 import chess
 
-from chessprofile import brilliance
+from knightly import brilliance
 
 
 def brilliant(fen, san, cp_after=150, cp_second=50):

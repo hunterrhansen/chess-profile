@@ -13,6 +13,18 @@ import { SettingsPage } from '@/pages/settings'
 import { StyleguidePage } from '@/pages/styleguide'
 import './index.css'
 
+// The app was called "chessprofile" until October 2026: move this browser's saved settings
+// (board, theme, last page, a game in progress) to their new keys once, before anything reads them.
+try {
+  for (const old of Object.keys(localStorage).filter((k) => k.startsWith('chessprofile.'))) {
+    const key = `knightly.${old.slice('chessprofile.'.length)}`
+    if (localStorage.getItem(key) === null) localStorage.setItem(key, localStorage.getItem(old)!)
+    localStorage.removeItem(old)
+  }
+} catch {
+  // storage blocked: nothing to move
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>

@@ -4,7 +4,7 @@ import sqlite3
 from importlib import resources
 from pathlib import Path
 
-DEFAULT_DB = os.environ.get("CHESSPROFILE_DB", "chess.db")
+DEFAULT_DB = os.environ.get("KNIGHTLY_DB", "chess.db")
 
 GAME_COLUMNS = [
     "source", "source_id", "account", "url", "played_at", "variant", "speed",
@@ -31,7 +31,7 @@ def connect(path: str | Path = DEFAULT_DB) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.executescript(resources.files("chessprofile").joinpath("schema.sql").read_text())
+    conn.executescript(resources.files("knightly").joinpath("schema.sql").read_text())
     for table, column, decl in ADDED_COLUMNS:
         if column not in {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")

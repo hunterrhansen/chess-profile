@@ -650,7 +650,7 @@ function MovePanel({
         )}
       </div>
       {!analysed || !move ? (
-        <p className="mt-1 text-muted-foreground">Not analysed yet. Run `chessprofile analyze`.</p>
+        <p className="mt-1 text-muted-foreground">Not analysed yet. Run `knightly analyze`.</p>
       ) : (
         <>
           <div className="mt-2.5 grid grid-cols-2 gap-2">
