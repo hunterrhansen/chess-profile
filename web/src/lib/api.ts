@@ -78,6 +78,7 @@ export interface DeckToday {
   mastered: number
   learning: number
   new: number
+  kinds: { mistake: number; miss: number; blunder: number } // what the cards were in your games
   today: { done: number; total: number }
   card: DeckCard | null
 }

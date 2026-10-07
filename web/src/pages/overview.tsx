@@ -4,6 +4,8 @@ import { Link, useSearchParams } from 'react-router'
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts'
 import { EmptyState, LoadingBlock } from '@/components/empty-state'
 import { ColorDot, ResultBadge } from '@/components/game-bits'
+import { KnIcon } from '@/components/kn-icon'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { StatDelta, StatLabel, StatValue } from '@/components/ui/stat'
@@ -12,9 +14,10 @@ import { CountUpText } from '@/components/ui/count-up'
 import { type ChartConfig, ChartContainer, ChartTooltip } from '@/components/ui/chart'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { type KpiPoint, type Kpis, type Overview, type Range, useApi } from '@/lib/api'
-import { longDate, num, openingLabel, pct, RANGE_LABEL, shortDate, signed } from '@/lib/format'
+import { type DeckToday, type Home, type Kpis, type Overview, type Range, type Unit, useApi } from '@/lib/api'
+import { longDate, num, openingLabel, pct, shortDate, signed } from '@/lib/format'
 import { usePreferences } from '@/lib/preferences'
+import { unitCopy } from '@/lib/units'
 import { cn } from '@/lib/utils'
 
 const ROLLING_WINDOW = 20
@@ -24,156 +27,247 @@ export function ProgressPage() {
   const { prefs } = usePreferences()
   const range = (params.get('range') as Range | null) ?? prefs.overviewRange
   const { data, error } = useApi<Overview>(`/api/overview?range=${range}`)
+  const { data: home } = useApi<Home>('/api/home')
+  const { data: deck } = useApi<DeckToday>('/api/deck')
 
   // KPI links carry this page's range into the games list.
   const gamesLink = (extra: Record<string, string> = {}) =>
     `/games?${new URLSearchParams({ ...(range !== 'all' && { range }), ...extra })}`
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-xl font-medium">Progress</h1>
+    <div className="flex max-w-5xl flex-col gap-8">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-4xl font-bold">Progress</h1>
         <ToggleGroup
           type="single"
           variant="outline"
-          size="sm"
           spacing={0}
           value={range}
           onValueChange={(v) => v && setParams(v === prefs.overviewRange ? {} : { range: v })}
         >
-          <ToggleGroupItem value="30d">30d</ToggleGroupItem>
-          <ToggleGroupItem value="90d">90d</ToggleGroupItem>
-          <ToggleGroupItem value="all">All</ToggleGroupItem>
+          <ToggleGroupItem value="30d">30 days</ToggleGroupItem>
+          <ToggleGroupItem value="90d">90 days</ToggleGroupItem>
+          <ToggleGroupItem value="all">All time</ToggleGroupItem>
         </ToggleGroup>
       </div>
 
       {error && <p className="text-sm text-destructive">Couldn't load your progress. {error}</p>}
-      {!data ? <OverviewSkeleton /> : <OverviewBody data={data} range={range} gamesLink={gamesLink} />}
+      {!data ? <OverviewSkeleton /> : <OverviewBody data={data} range={range} units={home?.units} deck={deck} gamesLink={gamesLink} />}
     </div>
   )
+}
+
+/** How each unit's KPI shows on its card here: the number, its unit, a line of context,
+ * and the games behind it. */
+const UNIT_CARD: Record<
+  Unit['id'],
+  {
+    value: (k: Kpis) => string
+    suffix: string
+    key: 'blunders_per_game' | 'conversion' | 'punish_rate' | 'comeback_rate'
+    lowerIsBetter?: boolean
+    context: (k: Kpis) => string
+    link: { kpi: string; text: string }
+  }
+> = {
+  blunders: {
+    value: (k) => num(k.blunders_per_game, 1),
+    suffix: 'blunders a game',
+    key: 'blunders_per_game',
+    lowerIsBetter: true,
+    context: (k) => `over ${k.analysed} analysed games`,
+    link: { kpi: 'blunders', text: 'Games with a blunder' },
+  },
+  conversion: {
+    value: (k) => pct(k.conversion),
+    suffix: 'conversion',
+    key: 'conversion',
+    context: (k) => `${k.thrown} wins thrown`,
+    link: { kpi: 'thrown', text: 'Thrown wins' },
+  },
+  punish: {
+    value: (k) => pct(k.punish_rate),
+    suffix: 'punished',
+    key: 'punish_rate',
+    context: (k) => `of ${k.opp_blunders} blunders`,
+    link: { kpi: 'unpunished', text: 'Missed chances' },
+  },
+  comebacks: {
+    value: (k) => pct(k.comeback_rate),
+    suffix: 'comebacks',
+    key: 'comeback_rate',
+    context: (k) => `from ${k.lost_games} losing positions`,
+    link: { kpi: 'comebacks', text: 'Comebacks' },
+  },
 }
 
 function OverviewBody({
   data,
   range,
+  units,
+  deck,
   gamesLink,
 }: {
   data: Overview
   range: Range
+  units?: Unit[]
+  deck: DeckToday | null
   gamesLink: (extra?: Record<string, string>) => string
 }) {
-  const { kpis, previous_kpis: prev, kpi_series: series } = data
-  const analysedShare = data.games_played ? data.games_analysed / data.games_played : 0
-  const vs = range === 'all' ? null : `vs previous ${RANGE_LABEL[range]}`
+  const { kpis, previous_kpis: prev } = data
+  const edge = kpis.opening_edge
+  const accDelta = kpiDelta(kpis, prev, 'accuracy', { digits: 1 })
 
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Rapid rating">
-          <span>{data.rating.current ?? '—'}</span>
-          {data.rating.change != null && <StatDelta value={data.rating.change} better={data.rating.change > 0} />}
-          <Sub>Best {data.rating.best ?? '—'}</Sub>
-        </StatCard>
-        <StatCard label="Games played">
-          <span>{data.games_played}</span>
-          <Sub>~{Math.round(data.games_per_week)} per week</Sub>
-        </StatCard>
-        <StatCard label="Games analysed" to={gamesLink({ kpi: 'analysed' })}>
-          <span>{data.games_analysed}</span>
-          <Sub>{pct(analysedShare)} of rated games</Sub>
-          <Progress value={analysedShare * 100} label="Share of rated games analysed" hideLabel size="sm" className="mt-3" />
-        </StatCard>
-      </div>
+      <Card className="flex-row flex-wrap items-start gap-x-10 gap-y-6 px-6">
+        <div className="flex min-w-44 flex-col gap-5">
+          <div>
+            <StatLabel>Rapid rating</StatLabel>
+            <StatValue className="mt-1 text-4xl">
+              <span>{data.rating.current ?? '—'}</span>
+              {data.rating.change != null && <StatDelta value={data.rating.change} better={data.rating.change > 0} />}
+            </StatValue>
+            <Sub>Best {data.rating.best ?? '—'}</Sub>
+          </div>
+          <div>
+            <StatLabel>Games played</StatLabel>
+            <StatValue className="mt-1 text-3xl">{data.games_played}</StatValue>
+            <Sub>
+              About {Math.round(data.games_per_week)} a week
+              {data.games_played > 0 &&
+                (data.games_analysed === data.games_played ? ', all analysed' : `, ${data.games_analysed} analysed`)}
+            </Sub>
+          </div>
+        </div>
+        <RatingChart data={data} />
+      </Card>
 
-      <RatingChart data={data} />
+      {deck && deck.total > 0 && (
+        <Card className="gap-4 px-6">
+          <div className="flex items-center gap-3">
+            <KnIcon glyph="drill" className="size-9" />
+            <h2 className="font-heading text-xl font-semibold">Your review deck</h2>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <StatLabel>Positions</StatLabel>
+              <StatValue className="mt-1 text-3xl">{deck.total}</StatValue>
+            </div>
+            <div>
+              <StatLabel>Today</StatLabel>
+              <StatValue className="mt-1 text-3xl">
+                {deck.today.done}
+                <span className="text-lg text-muted-foreground"> / {deck.today.total}</span>
+              </StatValue>
+            </div>
+            <div>
+              <StatLabel>Mastered</StatLabel>
+              <StatValue className="mt-1 text-3xl">{deck.mastered}</StatValue>
+            </div>
+          </div>
+          <Progress label="Mastered" value={(deck.mastered / deck.total) * 100} valueText={`${deck.mastered} of ${deck.total}`} />
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="destructive">{deck.kinds.blunder} blunders</Badge>
+            <Badge variant="secondary">{deck.kinds.miss} misses</Badge>
+            <Badge variant="secondary">{deck.kinds.mistake} mistakes</Badge>
+            {deck.today.done < deck.today.total && (
+              <Button asChild variant="outline" className="ml-auto">
+                <Link to="/practice">Review positions</Link>
+              </Button>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Every mistake from your games where one move was clearly better. A position is mastered once you've solved it 4
+            times over about two months. At most 10 a day.
+          </p>
+        </Card>
+      )}
 
-      <section className="flex flex-col gap-3">
-        <div className="flex items-baseline justify-between gap-4">
-          <h2 className="font-medium">Improvement KPIs</h2>
-          <span className="text-xs text-muted-foreground">
-            Engine KPIs use the {kpis.analysed} analysed games{vs && `, ${vs}`}
-          </span>
+      <section aria-labelledby="units-h" className="flex flex-col gap-4">
+        <div>
+          <h2 id="units-h" className="text-2xl font-semibold">Your units</h2>
+          <p className="mt-1 text-muted-foreground">
+            Each unit is one of your numbers. Your weakest is Unit 1, and the order changes as you improve.
+          </p>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <KpiCard
-            label="Blunders per game"
-            focus
-            value={num(kpis.blunders_per_game, 1)}
-            delta={kpiDelta(kpis, prev, 'blunders_per_game', { lowerIsBetter: true, digits: 1 })}
-            series={series}
-            seriesKey="blunders_per_game"
-            link={{ to: gamesLink({ kpi: 'blunders' }), text: 'Games with a blunder' }}
-          />
-          <KpiCard
-            label="Win conversion"
-            value={pct(kpis.conversion)}
-            sub={`${kpis.winning_games} winning positions`}
-            delta={kpiDelta(kpis, prev, 'conversion', { percent: true })}
-            series={series}
-            seriesKey="conversion"
-            link={{ to: gamesLink({ kpi: 'thrown' }), text: `${kpis.thrown} thrown wins` }}
-          />
-          <KpiCard
-            label="Punish rate"
-            value={pct(kpis.punish_rate)}
-            sub={`${kpis.opp_blunders} opponent blunders`}
-            delta={kpiDelta(kpis, prev, 'punish_rate', { percent: true })}
-            series={series}
-            seriesKey="punish_rate"
-            link={{ to: gamesLink({ kpi: 'unpunished' }), text: 'Games with missed chances' }}
-          />
-          <KpiCard
-            label="Accuracy"
-            value={kpis.accuracy == null ? '—' : `${num(kpis.accuracy, 1)}%`}
-            sub="Engine-analysed games"
-            delta={kpiDelta(kpis, prev, 'accuracy', { digits: 1 })}
-            series={series}
-            seriesKey="accuracy"
-          />
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <StatCard label="Opening edge, eval at move 10">
-            <span>{kpis.opening_edge == null ? '—' : signed(kpis.opening_edge / 100, 1)}</span>
-            <Sub>Pawns, from your side. Positive means you leave the opening ahead.</Sub>
-          </StatCard>
-          <StatCard label="Comeback rate" to={gamesLink({ kpi: 'comebacks' })}>
-            <span>{pct(kpis.comeback_rate)}</span>
-            <Sub>Drawn or won from {kpis.lost_games} losing positions</Sub>
-          </StatCard>
-        </div>
+        <ol className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {(units ?? []).map((u, i) => {
+            const c = UNIT_CARD[u.id]
+            const delta = kpiDelta(kpis, prev, c.key, { lowerIsBetter: c.lowerIsBetter, digits: c.key === 'blunders_per_game' ? 1 : 0, percent: c.key !== 'blunders_per_game' })
+            const lead = i === 0
+            return (
+              <li key={u.id}>
+                <Link
+                  to={gamesLink({ kpi: c.link.kpi })}
+                  className={cn(
+                    'panel panel-link flex h-full flex-col gap-2 p-5',
+                    lead && 'border-brand-lip bg-brand text-on-brand shadow-[0_4px_0_var(--brand-lip)]',
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className={cn('text-xs font-extrabold tracking-[.06em] uppercase', !lead && 'text-muted-foreground')}>
+                      Unit {i + 1}
+                      {lead ? ' · Now' : u.done ? ' · Done' : ''}
+                    </span>
+                    {!lead && !u.done && <KnIcon glyph="lock" className="size-6" />}
+                    {u.done && <KnIcon glyph="check" className="size-6" />}
+                  </div>
+                  <h3 className="font-heading text-lg font-semibold">{u.title}</h3>
+                  <p className="font-heading text-3xl font-bold">
+                    <CountUpText text={c.value(kpis)} />
+                    <span className={cn('font-sans text-base font-semibold', !lead && 'text-muted-foreground')}> {c.suffix}</span>
+                  </p>
+                  <p className="text-sm font-extrabold">
+                    {delta && delta !== 'none' && delta.value !== 0 && (
+                      <span className={cn(!lead && (delta.better ? 'text-brand-text' : 'text-danger-text'))}>
+                        {delta.value > 0 ? '▲' : '▼'} {delta.text}{' '}
+                      </span>
+                    )}
+                    <span className={cn('font-semibold', !lead && 'text-muted-foreground')}>
+                      {lead ? `target ${unitCopy(u).target}` : c.context(kpis)}
+                    </span>
+                  </p>
+                  {lead && (
+                    <>
+                      <div className="mt-1 h-3 overflow-hidden rounded-full bg-brand-lip">
+                        <div className="h-full rounded-full bg-on-brand" style={{ width: `${Math.max(4, (u.check.hits / u.check.size) * 100)}%` }} />
+                      </div>
+                      <p className="text-[13px] font-extrabold">Unit check: {unitCopy(u).checkProgress}</p>
+                    </>
+                  )}
+                  <span className={cn('mt-auto flex items-center gap-1 pt-1 text-xs', lead ? 'font-bold' : 'text-muted-foreground')}>
+                    {c.link.text} <ArrowRightIcon className="size-3" />
+                  </span>
+                </Link>
+              </li>
+            )
+          })}
+        </ol>
       </section>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader className="flex items-center justify-between">
-            <CardTitle>Recent games</CardTitle>
-            <Link to={gamesLink()} className="text-sm text-muted-foreground hover:text-foreground">
-              View all
-            </Link>
-          </CardHeader>
-          <CardContent className="flex flex-col">
-            {data.recent_games.map((g) => (
-              <Link
-                key={g.id}
-                to={`/games/${g.id}`}
-                className="flex items-center gap-3 border-b py-2 text-sm last:border-0 hover:text-foreground"
-              >
-                <ResultBadge outcome={g.outcome} />
-                <ColorDot color={g.color} />
-                <span className="min-w-0 flex-1 truncate">
-                  {g.opponent} <span className="text-muted-foreground">{g.opponent_rating}</span>
-                </span>
-                <span className="text-muted-foreground">{g.ended_by}</span>
-                <span className="w-14 text-right text-muted-foreground">{shortDate(g.played_at)}</span>
-              </Link>
-            ))}
-            {!data.recent_games.length && (
-              <EmptyState compact title="No games in this period">
-                {range === 'all' ? 'Sync an account in Settings to bring your games in.' : 'Try a longer range above.'}
-              </EmptyState>
-            )}
-          </CardContent>
-        </Card>
+      <div className="grid items-start gap-5 md:grid-cols-2">
+        {edge != null && edge > 0 ? (
+          <section aria-label="Your strength" className="flex items-center gap-4 rounded-xl border-2 border-gold-lip bg-gold p-5 text-on-gold shadow-[0_4px_0_var(--gold-lip)]">
+            <span className="grid size-16 shrink-0 place-items-center rounded-full bg-card shadow-[0_3px_0_var(--gold-lip)]">
+              <KnIcon glyph="star" className="size-11" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-xs font-extrabold tracking-[.06em] uppercase">Your strength</p>
+              <p className="font-heading text-xl font-bold">{signed(edge / 100, 1)} out of the opening</p>
+              <p className="text-sm">
+                By move 10 you're ahead by about {edge >= 150 ? `${Math.round(edge / 100)} pawns` : 'a pawn'}.
+                {kpis.accuracy != null && ` Accuracy ${num(kpis.accuracy, 1)}`}
+                {accDelta && accDelta !== 'none' && accDelta.value !== 0 && ` (${accDelta.value > 0 ? '▲' : '▼'} ${accDelta.text})`}.
+              </p>
+            </div>
+          </section>
+        ) : (
+          <StatCard label="Opening edge, eval at move 10">
+            <span>{edge == null ? '—' : signed(edge / 100, 1)}</span>
+            <Sub>Pawns, from your side. Positive means you leave the opening ahead.</Sub>
+          </StatCard>
+        )}
         <Card>
           <CardHeader>
             <CardTitle>Top openings</CardTitle>
@@ -188,9 +282,14 @@ function OverviewBody({
                 <ColorDot color={o.color} />
                 <span className="min-w-0 flex-1 truncate">{openingLabel(o.opening, o.eco)}</span>
                 <span className="text-muted-foreground">{o.games} games</span>
-                <span className="w-10 text-right font-medium">{pct(o.win_rate)}</span>
+                <span className="w-10 text-right font-extrabold">{pct(o.win_rate)}</span>
               </Link>
             ))}
+            {!data.top_openings.length && (
+              <EmptyState compact title="No games in this period">
+                {range === 'all' ? 'Sync an account in Settings to bring your games in.' : 'Try a longer range above.'}
+              </EmptyState>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -223,7 +322,7 @@ type DeltaInfo = { value: number; better: boolean; text: string } | 'none' | nul
 function kpiDelta(
   cur: Kpis,
   prev: Kpis | null,
-  key: 'blunders_per_game' | 'conversion' | 'punish_rate' | 'accuracy',
+  key: 'blunders_per_game' | 'conversion' | 'punish_rate' | 'accuracy' | 'comeback_rate',
   { lowerIsBetter = false, percent = false, digits = 0 } = {},
 ): DeltaInfo {
   if (!prev) return null
@@ -234,82 +333,6 @@ function kpiDelta(
   const shown = percent ? Math.abs(diff * 100).toFixed(digits) + ' pts' : Math.abs(diff).toFixed(digits)
   if (Number(shown.split(' ')[0]) === 0) return { value: 0, better: true, text: 'no change' }
   return { value: diff, better: lowerIsBetter ? diff < 0 : diff > 0, text: shown }
-}
-
-function KpiCard({
-  label,
-  value,
-  sub,
-  delta,
-  series,
-  seriesKey,
-  link,
-  focus,
-}: {
-  label: string
-  value: string
-  sub?: string
-  delta: DeltaInfo
-  series: KpiPoint[]
-  seriesKey: keyof Omit<KpiPoint, 'period'>
-  link?: { to: string; text: string }
-  focus?: boolean
-}) {
-  return (
-    <Card className={cn('gap-2', focus && 'border-danger')}>
-      <CardHeader>
-        {focus && <Badge variant="destructive" className="mb-1">Main focus</Badge>}
-        <StatLabel>{label}</StatLabel>
-        <StatValue className="mt-1 text-3xl">
-          <CountUpText text={value} />
-          {delta === 'none' ? (
-            <span className="ml-2 text-xs font-normal text-muted-foreground">no earlier data</span>
-          ) : delta?.value === 0 ? (
-            <span className="ml-2 text-sm font-normal text-muted-foreground">no change</span>
-          ) : (
-            delta && <StatDelta value={delta.value} better={delta.better} text={delta.text} />
-          )}
-        </StatValue>
-        {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
-      </CardHeader>
-      <CardContent className="flex flex-1 flex-col justify-end gap-2">
-        <Sparkline series={series} dataKey={seriesKey} />
-        {link && (
-          <Link
-            to={link.to}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            {link.text} <ArrowRightIcon className="size-3" />
-          </Link>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-const sparkConfig = { v: { label: 'Value', color: 'var(--foreground)' } } satisfies ChartConfig
-
-function Sparkline({ series, dataKey }: { series: KpiPoint[]; dataKey: string }) {
-  if (series.filter((p) => p[dataKey as keyof KpiPoint] != null).length < 2) {
-    return <div className="h-10" />
-  }
-  return (
-    <ChartContainer config={sparkConfig} className="aspect-auto h-10 w-full">
-      <LineChart data={series} margin={{ top: 4, bottom: 4, left: 2, right: 2 }}>
-        <YAxis hide domain={['dataMin', 'dataMax']} />
-        <Line
-          dataKey={dataKey}
-          type="monotone"
-          stroke="var(--color-v)"
-          strokeOpacity={0.6}
-          strokeWidth={1.5}
-          dot={false}
-          connectNulls
-          isAnimationActive={false}
-        />
-      </LineChart>
-    </ChartContainer>
-  )
 }
 
 const ratingConfig = {
@@ -329,9 +352,8 @@ function RatingChart({ data }: { data: Overview }) {
   const ticks = ratingTicks(points.map((p) => p.rating))
 
   return (
-    <Card>
-      <CardHeader className="flex flex-wrap items-center justify-between gap-2">
-        <CardTitle>Rating trend</CardTitle>
+    <figure className="flex min-w-0 flex-[1_1_26rem] flex-col gap-2">
+      <figcaption className="flex flex-wrap items-center justify-end gap-2">
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <span className="h-0.5 w-3 bg-muted-foreground/60" /> Each game
@@ -340,8 +362,8 @@ function RatingChart({ data }: { data: Overview }) {
             <span className="h-0.5 w-3 bg-foreground" /> {ROLLING_WINDOW}-game average
           </span>
         </div>
-      </CardHeader>
-      <CardContent>
+      </figcaption>
+      <div>
         {points.length < 2 ? (
           <p className="py-16 text-center text-sm text-muted-foreground">Not enough rated games in this period.</p>
         ) : (
@@ -386,8 +408,8 @@ function RatingChart({ data }: { data: Overview }) {
             </LineChart>
           </ChartContainer>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </figure>
   )
 }
 
