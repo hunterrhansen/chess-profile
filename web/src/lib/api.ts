@@ -80,6 +80,8 @@ export interface DeckToday {
   new: number
   kinds: { mistake: number; miss: number; blunder: number } // what the cards were in your games
   today: { done: number; total: number }
+  /** Today's answers in order (a card's first of the day), for the Done screen. */
+  results: { game_id: number; ply: number; correct: boolean; san: string; opponent: string | null }[]
   card: DeckCard | null
 }
 

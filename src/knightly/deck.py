@@ -99,10 +99,33 @@ def stats(conn, today: date | None = None) -> dict:
     }
 
 
+def today_results(conn, today: date | None = None) -> list[dict]:
+    """Today's graded answers in the order given (a card's first answer of the day only),
+    with what's needed to name the position: "29…Qxc8 vs woolcap"."""
+    today = today or date.today()
+    rows = conn.execute(
+        """SELECT r.game_id, r.ply, r.correct, m.san, g.opponent
+           FROM card_reviews r
+           JOIN moves m ON m.game_id = r.game_id AND m.ply = r.ply
+           JOIN games g ON g.id = r.game_id
+           WHERE date(r.reviewed_at, 'localtime') = ? ORDER BY r.reviewed_at, r.id""",
+        (today.isoformat(),),
+    ).fetchall()
+    seen, out = set(), []
+    for r in rows:
+        if (r["game_id"], r["ply"]) in seen:
+            continue
+        seen.add((r["game_id"], r["ply"]))
+        out.append({"game_id": r["game_id"], "ply": r["ply"], "correct": bool(r["correct"]),
+                    "san": r["san"], "opponent": r["opponent"]})
+    return out
+
+
 def answer(conn, game_id: int, ply: int, uci: str, today: date | None = None,
            now: datetime | None = None) -> dict:
     """Grade an answer and reschedule the card. Only the first answer of the day moves
-    the schedule; later ones just say whether they were right."""
+    the schedule; later ones just say whether they were right. Skip sends the null move
+    "0000", which counts as a miss."""
     today = today or date.today()
     card = conn.execute(
         """SELECT c.step, c.due, m.best_uci, m.best_san FROM cards c
