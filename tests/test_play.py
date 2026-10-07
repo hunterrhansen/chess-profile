@@ -54,3 +54,23 @@ def test_save_played_game(tmp_path):
     assert client.get("/api/games").json()["total"] == 0
     assert client.post("/api/play/games", json={"moves": ["e2e5"], "color": "white", "elo": 250,
                                                 "bot": "x", "resigned": "white"}).status_code == 400
+
+
+def _engine_or_skip():
+    import pytest
+    from knightly.analyze import find_engine
+    try:
+        return find_engine(None)
+    except SystemExit:
+        pytest.skip("Stockfish isn't installed")
+
+
+def test_blunder_check_names_the_reply(tmp_path):
+    _engine_or_skip()
+    client = TestClient(api.create_app(tmp_path / "chess.db"))
+    fen = "rnbqkbnr/ppp2ppp/8/3pp3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 3"
+    hang = client.post("/api/play/check", json={"fen": fen, "uci": "d1g4"}).json()
+    assert hang["blunder"] and hang["reply_san"] == "Bxg4" and hang["wins"] == "queen"
+    fine = client.post("/api/play/check", json={"fen": fen, "uci": "e4d5"}).json()
+    assert not fine["blunder"]
+    assert client.post("/api/play/check", json={"fen": fen, "uci": "a1a8"}).status_code == 400

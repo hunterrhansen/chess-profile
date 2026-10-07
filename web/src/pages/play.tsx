@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { Board, type Palette } from '@/components/board'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import { send, useApi } from '@/lib/api'
 import { BOARDS, usePreferences } from '@/lib/preferences'
 import { durationMs } from '@/lib/motion'
@@ -37,6 +38,20 @@ interface PlayState {
   startedAt: string
   resigned?: Side
   savedId?: number
+  /** Blunder check: once per game, the bot stops a move that loses 20+ points of chance. */
+  blunderCheck?: boolean
+  checkUsed?: boolean
+}
+
+/** What Blunder check found about your last move (play.blunder_check). */
+interface Check {
+  blunder: boolean
+  before: number
+  after: number | null
+  reply_uci?: string | null
+  reply_san?: string | null
+  wins?: string | null
+  mates?: boolean
 }
 
 function loadState(): PlayState | null {
@@ -100,9 +115,10 @@ export function PlayPage() {
     saveState(next)
     setStateRaw(next)
   }, [])
-  const [setup, setSetup] = useState<{ elo: number; color: Side | 'random' }>(() => ({
+  const [setup, setSetup] = useState<Setup>(() => ({
     elo: state?.elo ?? 800,
     color: state?.color ?? 'white',
+    blunderCheck: state?.blunderCheck ?? true,
   }))
 
   const moves = useMemo(() => state?.moves ?? [], [state])
@@ -119,10 +135,13 @@ export function PlayPage() {
   const [hintLoading, setHintLoading] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [analysis, setAnalysis] = useState<'running' | 'done' | 'failed' | null>(null)
+  // Your last move while Blunder check looks at it, then its warning if it's a blunder. The
+  // bot waits until it's cleared.
+  const [held, setHeld] = useState<{ ply: number; check?: Check } | null>(null)
 
   // The bot's turn: ask the server, and play its move after a short pause.
   useEffect(() => {
-    if (!state || !playing || myTurn) return
+    if (!state || !playing || myTurn || held) return
     const ctrl = new AbortController()
     const fen = chess.fen()
     setThinking(true)
@@ -163,7 +182,7 @@ export function PlayPage() {
     }
     // Only a new position (or a new game) should trigger a move.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [moves, playing, myTurn, retry])
+  }, [moves, playing, myTurn, retry, held])
 
   // A finished game is saved as an unrated game, then analysed so it can be reviewed. The
   // ref keeps it to one save per game, even when the effect runs twice.
@@ -202,9 +221,22 @@ export function PlayPage() {
     try {
       // Promotions always make a queen.
       const m = probe.move({ from, to, promotion: 'q' })
-      setState({ ...state, moves: [...state.moves, m.from + m.to + (m.promotion ?? '')] })
+      const uci = m.from + m.to + (m.promotion ?? '')
+      const next = { ...state, moves: [...state.moves, uci] }
+      setState(next)
       setSelected(null)
       setHint(null)
+      if (state.blunderCheck && !state.checkUsed && !probe.isGameOver()) {
+        const ply = next.moves.length
+        setHeld({ ply })
+        send<Check>('POST', '/api/play/check', { fen: chess.fen(), uci })
+          .then((check) => {
+            if (!check.blunder) return setHeld(null)
+            setHeld({ ply, check })
+            setState({ ...next, checkUsed: true }) // shown once: this was the game's check
+          })
+          .catch(() => setHeld(null)) // no engine: just play on
+      }
       return true
     } catch {
       return false
@@ -217,11 +249,22 @@ export function PlayPage() {
     setSelected(null)
     setError(null)
     setAnalysis(null)
-    setState({ elo: setup.elo, color, moves: [], startedAt: new Date().toISOString() })
+    setHeld(null)
+    setState({ elo: setup.elo, color, moves: [], startedAt: new Date().toISOString(), blunderCheck: setup.blunderCheck })
   }
+
+  // Blunder check's two answers: undo the move (the bot never saw it), or let it stand.
+  const takeItBack = () => {
+    if (!state) return
+    setHeld(null)
+    setState({ ...state, moves: state.moves.slice(0, -1) })
+  }
+  const playAnyway = () => setHeld(null)
+  const warning = held?.check && held.ply === moves.length ? held.check : null
 
   const takeback = () => {
     // Back to the last position where it was your move: your move and the bot's reply.
+    if (warning) return takeItBack()
     const back = myTurn ? 2 : 1
     if (!state || !playing || state.moves.length < back) return
     setHint(null)
@@ -273,6 +316,7 @@ export function PlayPage() {
             orientation={me}
             lastMove={squares[squares.length - 1]}
             hint={hint?.ply === moves.length ? hint.uci : null}
+            danger={warning?.reply_uci ?? null}
             selected={selected}
             interactive={playing && myTurn}
             palette={BOARDS[prefs.board]}
@@ -303,7 +347,9 @@ export function PlayPage() {
                           : result.outcome === 'loss'
                             ? 'Good game! Fancy a rematch?'
                             : 'A draw. Fair enough!'
-                        : thinking
+                        : warning
+                          ? 'Hmm, are you sure about that?'
+                          : thinking || held
                           ? null
                           : moves.length < 2
                             ? `Good luck! I play at about ${state.elo}.`
@@ -313,6 +359,15 @@ export function PlayPage() {
                   }
                   error={!!error}
                 />
+                {warning && (
+                  <BlunderWarning
+                    check={warning}
+                    you={san[san.length - 1]}
+                    them={me === 'white' ? 'Black' : 'White'}
+                    onBack={takeItBack}
+                    onPlay={playAnyway}
+                  />
+                )}
                 {error && playing && !myTurn && (
                   <div className="border-b px-3 py-2">
                     <Button size="sm" variant="outline" onClick={() => setRetry((n) => n + 1)}>
@@ -381,15 +436,13 @@ export function PlayPage() {
   )
 }
 
-function Setup({
-  setup,
-  onChange,
-  onStart,
-}: {
-  setup: { elo: number; color: Side | 'random' }
-  onChange: (s: { elo: number; color: Side | 'random' }) => void
-  onStart: () => void
-}) {
+interface Setup {
+  elo: number
+  color: Side | 'random'
+  blunderCheck: boolean
+}
+
+function Setup({ setup, onChange, onStart }: { setup: Setup; onChange: (s: Setup) => void; onStart: () => void }) {
   const level = LEVELS.find((l) => l.elo === setup.elo)
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 py-3 text-sm">
@@ -437,6 +490,13 @@ function Setup({
           ))}
         </div>
       </div>
+      <label className="flex cursor-pointer items-center gap-3 rounded-md bg-sky/12 px-3.5 py-3 shadow-[inset_0_0_0_2px_var(--sky)]">
+        <span className="min-w-0 flex-1">
+          <span className="block font-extrabold">Blunder check</span>
+          <span className="block text-[13px] text-muted-foreground">The bot stops you once per game before a move that loses a lot.</span>
+        </span>
+        <Switch checked={setup.blunderCheck} onCheckedChange={(c) => onChange({ ...setup, blunderCheck: c })} />
+      </label>
       <Button size="lg" className="mt-auto h-11 text-base" onClick={onStart}>
         Play
       </Button>
@@ -444,6 +504,44 @@ function Setup({
         Finished games are saved as unrated games, so you can review them. They stay out of your Progress stats.
       </p>
     </div>
+  )
+}
+
+/** Blunder check's warning: what your move allows, how much it costs, and the two ways on. */
+function BlunderWarning({
+  check,
+  you,
+  them,
+  onBack,
+  onPlay,
+}: {
+  check: Check
+  you: string
+  them: string
+  onBack: () => void
+  onPlay: () => void
+}) {
+  const what = check.mates ? ' and mates' : check.wins ? ` and wins your ${check.wins}` : ''
+  return (
+    <section aria-live="assertive" className="m-3 flex animate-sheet flex-col gap-3 rounded-xl border-2 border-gold-lip bg-card p-4 shadow-[0_4px_0_var(--gold-lip)]">
+      <div className="flex items-center gap-2.5">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gold text-xl font-black text-on-gold shadow-[inset_0_-3px_0_var(--move-shade)]">
+          !
+        </span>
+        <h2 className="font-heading text-xl font-semibold">Blunder check</h2>
+      </div>
+      <p className="text-[15px]">
+        After <b>{you}</b>, {them} plays <b>{check.reply_san}</b>
+        {what}. Your chance would drop from {check.before}% to {check.after}%.
+      </p>
+      <p className="text-[13px] text-muted-foreground">The red arrow shows the reply. This is your one check for this game.</p>
+      <Button className="w-full" onClick={onBack}>
+        Take it back
+      </Button>
+      <Button variant="ghost" className="w-full" onClick={onPlay}>
+        Play it anyway
+      </Button>
+    </section>
   )
 }
 
@@ -479,6 +577,7 @@ export function PlayBoard({
   orientation,
   lastMove,
   hint,
+  danger,
   selected,
   interactive,
   palette,
@@ -490,6 +589,8 @@ export function PlayBoard({
   orientation: Side
   lastMove?: { from: string; to: string }
   hint: string | null
+  /** The reply that punishes your move (Blunder check), as a red arrow. */
+  danger?: string | null
   selected: string | null
   interactive: boolean
   palette: Palette
@@ -509,7 +610,10 @@ export function PlayBoard({
       lastMove={lastMove}
       selected={selected}
       targets={targets}
-      arrows={hint ? [{ from: hint.slice(0, 2), to: hint.slice(2, 4), tone: 'best' }] : []}
+      arrows={[
+        ...(hint ? [{ from: hint.slice(0, 2), to: hint.slice(2, 4), tone: 'best' as const }] : []),
+        ...(danger ? [{ from: danger.slice(0, 2), to: danger.slice(2, 4), tone: 'danger' as const }] : []),
+      ]}
       flash={flash}
       movable={interactive ? (orientation === 'white' ? 'w' : 'b') : undefined}
       onMove={onMove}

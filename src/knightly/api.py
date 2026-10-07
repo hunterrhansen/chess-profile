@@ -246,6 +246,11 @@ class ScheduleIn(BaseModel):
     minute: int = Field(0, ge=0, le=59)
 
 
+class CheckIn(BaseModel):
+    fen: str
+    uci: str = Field(pattern=r"^[a-h][1-8][a-h][1-8][qrbn]?$")
+
+
 class AnswerIn(BaseModel):
     game_id: int
     ply: int
@@ -454,6 +459,22 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
         except SystemExit as e:  # Stockfish not installed
             raise HTTPException(503, str(e)) from None
         return {"uci": move.uci(), "san": board.san(move)}
+
+    @app.post("/api/play/check")
+    def blunder_check(body: CheckIn):
+        """Blunder check: is your move (`uci`, from `fen`) a blunder, and what punishes it?"""
+        try:
+            board = chess.Board(body.fen)
+            move = chess.Move.from_uci(body.uci)
+        except ValueError:
+            raise HTTPException(400, "not a valid position or move") from None
+        if move not in board.legal_moves:
+            raise HTTPException(400, "not a legal move here")
+        try:
+            with chess.engine.SimpleEngine.popen_uci(find_engine(None)) as engine:
+                return play.blunder_check(engine, board, move, BLUNDER_DROP)
+        except SystemExit as e:  # Stockfish not installed
+            raise HTTPException(503, str(e)) from None
 
     @app.post("/api/play/games", status_code=201)
     def save_played(body: PlayedGameIn):

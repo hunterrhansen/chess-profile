@@ -65,6 +65,40 @@ def bot_move(engine: chess.engine.SimpleEngine, board: chess.Board, elo: int | N
     return pick_weak(infos, board.turn, elo, rng or random.Random())
 
 
+CHECK_DEPTH = 14  # Blunder check: how deep the engine looks before and after your move
+PIECE_NAMES = {chess.PAWN: "pawn", chess.KNIGHT: "knight", chess.BISHOP: "bishop",
+               chess.ROOK: "rook", chess.QUEEN: "queen"}
+
+
+def blunder_check(engine: chess.engine.SimpleEngine, board: chess.Board, move: chess.Move,
+                  drop: float) -> dict:
+    """Whether `move` throws away `drop`+ points of win chance for the side playing it, and
+    the reply that punishes it: what Play's Blunder check warns about before the bot moves."""
+    me = board.turn
+    before = engine.analyse(board, chess.engine.Limit(depth=CHECK_DEPTH))
+    win_before = analyze.win_pct(before["score"].pov(me).score(mate_score=analyze.MATE_CP))
+    after_board = board.copy()
+    after_board.push(move)
+    if after_board.is_game_over():
+        return {"blunder": False, "before": round(win_before), "after": None}
+    after = engine.analyse(after_board, chess.engine.Limit(depth=CHECK_DEPTH))
+    score = after["score"].pov(me)
+    win_after = analyze.win_pct(score.score(mate_score=analyze.MATE_CP))
+    reply = (after.get("pv") or [None])[0]
+    captured = after_board.piece_at(reply.to_square) if reply else None
+    if reply and after_board.is_en_passant(reply):
+        captured = chess.Piece(chess.PAWN, me)
+    return {
+        "blunder": win_before - win_after >= drop and reply is not None,
+        "before": round(win_before),
+        "after": round(win_after),
+        "reply_uci": reply.uci() if reply else None,
+        "reply_san": after_board.san(reply) if reply else None,
+        "wins": PIECE_NAMES.get(captured.piece_type) if captured else None,
+        "mates": score.is_mate() and score.mate() < 0,
+    }
+
+
 def termination(board: chess.Board, resigned: str | None, winner: str | None) -> tuple[str, str]:
     """(PGN result, Termination text) for a finished game. The text uses the same wording
     as Chess.com's, so `api.ended_by` labels it the same way."""
