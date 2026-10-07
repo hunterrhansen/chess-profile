@@ -1,5 +1,5 @@
 import { ArrowLeftIcon, ArrowSquareOutIcon, CaretLeftIcon, CaretLineLeftIcon, CaretLineRightIcon, CaretRightIcon, PlayIcon } from '@phosphor-icons/react'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { ResultBadge } from '@/components/game-bits'
 import { LoadingBlock } from '@/components/empty-state'
@@ -14,6 +14,7 @@ import { CLASSIFICATION, isSound } from '@/lib/classification'
 import { type KeyMoment, keyMoments } from '@/lib/key-moments'
 import { changeTone, longDate, shortDate, thinkTime, timeControl } from '@/lib/format'
 import { lastLocation } from '@/lib/last-location'
+import { useWide } from '@/lib/motion'
 import { BOARDS, usePreferences } from '@/lib/preferences'
 import { type Replay, type Side, clockAt, resultPhrase, useLineView, useReplay } from '@/lib/replay'
 import { cn } from '@/lib/utils'
@@ -538,18 +539,6 @@ function CurrentMove({
         </>
       )}
     </div>
-  )
-}
-
-/** True from the md breakpoint up: the two-column layout. Below it, the phone layout. */
-function useWide() {
-  return useSyncExternalStore(
-    (onChange) => {
-      const mq = matchMedia('(min-width: 768px)')
-      mq.addEventListener('change', onChange)
-      return () => mq.removeEventListener('change', onChange)
-    },
-    () => matchMedia('(min-width: 768px)').matches,
   )
 }
 
