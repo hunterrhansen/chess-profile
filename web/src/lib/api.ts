@@ -199,6 +199,8 @@ export interface Settings {
     errors: string[]
     progress: RunProgress | null
   } | null
+  /** Up to three runs before the last one, newest first. */
+  earlier_runs: Omit<NonNullable<Settings['last_run']>, 'progress'>[]
   current_run: { id: number; started_at: string; trigger: string | null; progress: RunProgress | null } | null
   running: boolean
   engine: string | null

@@ -434,13 +434,7 @@ function UpdateSection({ settings, reload }: { settings: Settings; reload: () =>
                 {last && <RunStatus status={last.status} />}
               </span>
             }
-            hint={
-              last
-                ? `${new Date(last.started_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} · ${
-                    last.new_games ?? 0
-                  } new games, ${last.new_puzzles ?? 0} puzzles, ${last.games_analysed ?? 0} analysed`
-                : 'Never'
-            }
+            hint={last ? `${runWhen(last.started_at)} · ${runSummary(last)}` : 'Never'}
           >
             <div className="flex items-center gap-2">
               {last?.progress && (
@@ -471,11 +465,45 @@ function UpdateSection({ settings, reload }: { settings: Settings; reload: () =>
             </div>
           )}
           {!showSteps && !!last?.errors.length && <ErrorText>{last.errors.join(' · ')}</ErrorText>}
+          {settings.earlier_runs.map((r) => (
+            <Row
+              key={r.started_at}
+              label={<span className="font-semibold text-muted-foreground">{runWhen(r.started_at)}</span>}
+              hint={runSummary(r)}
+            >
+              <RunStatus status={r.status} />
+            </Row>
+          ))}
         </>
       )}
       <ErrorText>{error}</ErrorText>
     </Section>
   )
+}
+
+/** "Today, 6:00 AM", "Yesterday, 12:23 PM", "Oct 5, 6:00 AM". */
+function runWhen(iso: string) {
+  const d = new Date(iso)
+  const day = new Date(d)
+  day.setHours(0, 0, 0, 0)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const days = Math.round((today.getTime() - day.getTime()) / 86_400_000)
+  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  const date = days === 0 ? 'Today' : days === 1 ? 'Yesterday' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  return `${date}, ${time}`
+}
+
+/** "8 new games · 8 analysed · 3 puzzles" */
+function runSummary(r: { new_games: number | null; new_puzzles: number | null; games_analysed: number | null }) {
+  const n = (v: number | null, one: string, many: string) => `${v ?? 0} ${(v ?? 0) === 1 ? one : many}`
+  return [
+    n(r.new_games, 'new game', 'new games'),
+    `${r.games_analysed ?? 0} analysed`,
+    r.new_puzzles ? n(r.new_puzzles, 'puzzle', 'puzzles') : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 }
 
 const SOURCE_NAMES: Record<string, string> = { chesscom: 'Chess.com', lichess: 'Lichess' }
