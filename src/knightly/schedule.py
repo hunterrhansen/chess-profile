@@ -1,4 +1,4 @@
-"""Run `chessprofile update` daily via a macOS launchd agent.
+"""Run `knightly update` daily via a macOS launchd agent.
 
 launchd rather than cron because a StartCalendarInterval job that was missed while the Mac
 slept runs as soon as it wakes. (A Mac that was fully shut down just catches up the next day:
@@ -12,20 +12,20 @@ import subprocess
 import sys
 from pathlib import Path
 
-LABEL = "com.chessprofile.update"
+LABEL = "com.knightly.update"
 PLIST = Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
-LOG = Path.home() / "Library" / "Logs" / "chessprofile.log"
+LOG = Path.home() / "Library" / "Logs" / "knightly.log"
 SCHEDULED_WORKERS = 3  # leave most cores free; a day's games take a minute or two anyway
 
 
 def _executable() -> str:
-    """The installed `chessprofile` entry point, as an absolute path (launchd has no PATH)."""
-    candidate = Path(sys.executable).parent / "chessprofile"
+    """The installed `knightly` entry point, as an absolute path (launchd has no PATH)."""
+    candidate = Path(sys.executable).parent / "knightly"
     if candidate.exists():
         return str(candidate)
-    found = shutil.which("chessprofile")
+    found = shutil.which("knightly")
     if not found:
-        raise SystemExit("Can't find the `chessprofile` executable; run this via `uv run chessprofile`.")
+        raise SystemExit("Can't find the `knightly` executable; run this via `uv run knightly`.")
     return str(Path(found).resolve())
 
 
@@ -69,7 +69,7 @@ def install(db_path: Path, hour: int = 6, minute: int = 0, log=print) -> None:
     result = _launchctl("bootstrap", domain, str(PLIST))
     if result.returncode != 0:
         raise SystemExit(f"launchctl bootstrap failed: {result.stderr.strip() or result.stdout.strip()}")
-    log(f"Installed: `chessprofile update` runs daily at {hour:02d}:{minute:02d} "
+    log(f"Installed: `knightly update` runs daily at {hour:02d}:{minute:02d} "
         f"(or on wake if the Mac was asleep).")
     log(f"  database: {Path(db_path).resolve()}")
     log(f"  log:      {LOG}")
@@ -89,7 +89,7 @@ def run_now(log=print) -> None:
     """Kick the installed job immediately, exactly as launchd would run it."""
     result = _launchctl("kickstart", f"gui/{os.getuid()}/{LABEL}")
     if result.returncode != 0:
-        raise SystemExit("Not installed (run `chessprofile schedule install` first).")
+        raise SystemExit("Not installed (run `knightly schedule install` first).")
     log(f"Started; follow it with: tail -f {LOG}")
 
 
@@ -112,7 +112,7 @@ def status(conn, log=print) -> None:
         log(f"  database: {cfg['ProgramArguments'][2]}")
         log(f"  log:      {LOG}")
     else:
-        log("Schedule: not installed (`chessprofile schedule install`).")
+        log("Schedule: not installed (`knightly schedule install`).")
     rows = conn.execute("""SELECT started_at, status, trigger, new_games, new_puzzles,
                                   games_analysed, errors FROM runs ORDER BY id DESC LIMIT 5""").fetchall()
     if not rows:

@@ -68,7 +68,7 @@ export function AppShell() {
           <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
             <ChessKnight className="size-5" strokeWidth={2.25} />
           </span>
-          <span className={cn('truncate text-lg font-semibold tracking-tight', label)}>Chess profile</span>
+          <span className={cn('truncate text-lg font-semibold tracking-tight', label)}>Knightly</span>
         </div>
 
         <nav className="flex flex-col gap-1 px-2 pt-2">

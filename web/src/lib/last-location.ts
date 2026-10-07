@@ -5,7 +5,7 @@
  */
 export type Section = 'overview' | 'practice' | 'games' | 'games-list' | 'play' | 'settings'
 
-const KEY = 'chessprofile.lastLocation'
+const KEY = 'knightly.lastLocation'
 let memory: Partial<Record<Section, string>> = {}
 
 function load(): Partial<Record<Section, string>> {

@@ -3,8 +3,8 @@ import plistlib
 
 import pytest
 
-from chessprofile import analyze, db, schedule, update
-from chessprofile.sources import chesscom, lichess
+from knightly import analyze, db, schedule, update
+from knightly.sources import chesscom, lichess
 
 quiet = lambda _: None
 
@@ -101,7 +101,7 @@ def test_plist(tmp_path):
     p = schedule.build_plist(tmp_path / "chess.db", hour=6, minute=30, stockfish="/opt/sf")
     assert p["Label"] == schedule.LABEL
     args = p["ProgramArguments"]
-    assert args[0].endswith("chessprofile") and args[1:3] == ["--db", str((tmp_path / "chess.db").resolve())]
+    assert args[0].endswith("knightly") and args[1:3] == ["--db", str((tmp_path / "chess.db").resolve())]
     assert args[3:5] == ["update", "--scheduled"]
     assert p["StartCalendarInterval"] == {"Hour": 6, "Minute": 30}
     assert p["EnvironmentVariables"]["STOCKFISH"] == "/opt/sf"

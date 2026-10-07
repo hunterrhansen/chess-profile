@@ -8,8 +8,8 @@ import urllib.error
 import urllib.request
 from collections.abc import Iterator
 
-USER_AGENT = "chessprofile/0.1 (+personal data aggregator)"
-if contact := os.environ.get("CHESSPROFILE_CONTACT"):
+USER_AGENT = "knightly/0.1 (+personal data aggregator)"
+if contact := os.environ.get("KNIGHTLY_CONTACT"):
     # Chess.com asks API clients to include contact info in the User-Agent.
     USER_AGENT += f" contact: {contact}"
 

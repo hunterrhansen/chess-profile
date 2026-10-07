@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-from chessprofile import api, db
+from knightly import api, db
 
 NOW = datetime.now(timezone.utc)
 
@@ -187,7 +187,7 @@ def test_analysis_depth(client, system, tmp_path):
 
 
 def test_schedule_and_run_now(client, system):
-    # Not installed: "run now" starts a detached `chessprofile update`.
+    # Not installed: "run now" starts a detached `knightly update`.
     assert client.post("/api/update/run").status_code == 202
     assert system["spawned"][-3:] == ["update", "--workers", "3"] and system["run_now"] == 0
 

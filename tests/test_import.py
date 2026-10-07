@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from chessprofile import db
-from chessprofile.sources import chesscom, lichess, pgn_file
+from knightly import db
+from knightly.sources import chesscom, lichess, pgn_file
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

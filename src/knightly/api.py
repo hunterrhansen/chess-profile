@@ -1,4 +1,4 @@
-"""HTTP API over chess.db for the web frontend (`chessprofile serve`).
+"""HTTP API over chess.db for the web frontend (`knightly serve`).
 
 Every number on the overview is computed from one row per game (GAME_FACTS), and the
 games list filters on the same rows, so a KPI and the games it links to always agree.
@@ -225,7 +225,7 @@ def _note_json(r, plies: list[int]) -> dict:
 
 SOURCES = ("chesscom", "lichess")
 HANDLE = re.compile(r"^[A-Za-z0-9_-]{2,40}$")
-KEYCHAIN_SERVICE = "chessprofile-lichess"  # same entry `cli.keychain_token` reads
+KEYCHAIN_SERVICE = "knightly-lichess"  # same entry `cli.keychain_token` reads
 STALE_RUN = timedelta(hours=3)  # a "running" row older than this is a crashed run
 
 
@@ -316,7 +316,7 @@ def lichess_token_saved() -> bool:
 
 def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = None) -> FastAPI:
     db_path = str(Path(db_path).resolve())
-    app = FastAPI(title="chessprofile")
+    app = FastAPI(title="knightly")
 
     def query(sql: str, params=()) -> list[sqlite3.Row]:
         # Read-only, so the API never competes with `sync` or `analyze` for the write lock.
@@ -370,7 +370,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
                         FROM moves m JOIN games g ON g.id = m.game_id
                         WHERE m.game_id = ? AND m.ply = ?""", (game_id, ply))
         if not move:
-            raise HTTPException(404, "No analysed move there; run `chessprofile analyze` first.")
+            raise HTTPException(404, "No analysed move there; run `knightly analyze` first.")
         m = move[0]
         # Who answers the move in the "why" line: you, after the opponent's moves.
         other_side = "you" if m["is_user"] == 0 else (m["opponent"] or "your opponent")
@@ -575,14 +575,14 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
     @app.post("/api/update/run", status_code=202)
     def run_update():
         """Start the update pipeline in the background: via launchd when the daily job is
-        installed (same low priority and log), else as a detached `chessprofile update`."""
+        installed (same low priority and log), else as a detached `knightly update`."""
         if schedule.current():
             try:
                 schedule.run_now(log=lambda _: None)
             except SystemExit as e:
                 raise HTTPException(400, str(e)) from None
         else:
-            exe = Path(sys.executable).parent / "chessprofile"
+            exe = Path(sys.executable).parent / "knightly"
             schedule.LOG.parent.mkdir(parents=True, exist_ok=True)
             with open(schedule.LOG, "a") as log_file:
                 subprocess.Popen(

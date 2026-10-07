@@ -1,4 +1,4 @@
-"""`chessprofile update`: the whole pipeline in one step, for running on a schedule.
+"""`knightly update`: the whole pipeline in one step, for running on a schedule.
 
     lock -> sync every account -> analyse new games -> back up the DB -> record the run
 
@@ -28,7 +28,7 @@ class Progress:
         self.state = {"plan": plan or [], "current": None, "detail": None, "done": []}
 
     def _save(self) -> None:
-        if self.conn is None:  # e.g. `chessprofile sync`, which has no run row
+        if self.conn is None:  # e.g. `knightly sync`, which has no run row
             return
         with self.conn:
             self.conn.execute("UPDATE runs SET progress = ? WHERE id = ?",
@@ -206,7 +206,7 @@ def _run_locked(conn, db_path, token, workers, depth, engine_path, backup_dir, k
         errors.append(f"{type(e).__name__}: {e}")
         _finish(conn, run_id, status="failed", errors=json.dumps(errors), **counts)
         if notify_on_failure:
-            notify("chessprofile update failed", errors[-1])
+            notify("knightly update failed", errors[-1])
         raise
 
     status = "partial" if errors else "ok"
@@ -215,5 +215,5 @@ def _run_locked(conn, db_path, token, workers, depth, engine_path, backup_dir, k
         f"{counts.get('new_puzzles', 0)} new puzzle attempts, "
         f"{counts.get('games_analysed', 0)} games analysed.")
     if errors and notify_on_failure:
-        notify("chessprofile update had problems", "; ".join(errors)[:200])
+        notify("knightly update had problems", "; ".join(errors)[:200])
     return status

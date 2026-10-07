@@ -13,12 +13,12 @@ def log(msg: str) -> None:
     print(msg, file=sys.stderr)
 
 
-KEYCHAIN_SERVICE = "chessprofile-lichess"
+KEYCHAIN_SERVICE = "knightly-lichess"
 
 
 def keychain_token() -> str | None:
     """Lichess token from the macOS Keychain, stored with:
-    security add-generic-password -a "$USER" -s chessprofile-lichess -w
+    security add-generic-password -a "$USER" -s knightly-lichess -w
     """
     try:
         out = subprocess.run(["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"],
@@ -35,12 +35,12 @@ def lichess_token(explicit: str | None = None) -> str | None:
 def cmd_sync(conn, args) -> None:
     if args.source:
         if not args.username:
-            sys.exit("usage: chessprofile sync {chesscom,lichess} USERNAME")
+            sys.exit("usage: knightly sync {chesscom,lichess} USERNAME")
         targets = [(args.source, args.username)]
     else:  # re-sync every account we've seen before
         targets = update.known_accounts(conn)
         if not targets:
-            sys.exit("No accounts yet. Start with e.g. `chessprofile sync lichess <username>`.")
+            sys.exit("No accounts yet. Start with e.g. `knightly sync lichess <username>`.")
     update.sync_accounts(conn, targets, lichess_token(args.token), since=args.since,
                          puzzles=not args.no_puzzles, log=log)
 
@@ -147,9 +147,9 @@ def cmd_serve(conn, args) -> None:
 
 
 def main(argv=None) -> None:
-    p = argparse.ArgumentParser(prog="chessprofile", description=__doc__ or
+    p = argparse.ArgumentParser(prog="knightly", description=__doc__ or
                                 "Aggregate your chess data into one SQLite database.")
-    p.add_argument("--db", default=db.DEFAULT_DB, help="SQLite file (default: $CHESSPROFILE_DB or ./chess.db)")
+    p.add_argument("--db", default=db.DEFAULT_DB, help="SQLite file (default: $KNIGHTLY_DB or ./chess.db)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("sync", help="Pull games (and Lichess puzzles) from Chess.com / Lichess. "

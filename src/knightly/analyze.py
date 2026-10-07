@@ -326,7 +326,7 @@ def run(conn, depth: int = 18, workers: int | None = None, engine_path: str | No
                 eta = elapsed / done * (len(todo) - done)
                 log(f"  {done}/{len(todo)} games  ({elapsed / 60:.1f} min elapsed, ~{eta / 60:.0f} min left)")
     except KeyboardInterrupt:
-        log(f"Interrupted; {done} games saved. Run `chessprofile analyze` again to continue.")
+        log(f"Interrupted; {done} games saved. Run `knightly analyze` again to continue.")
         pool.shutdown(wait=False, cancel_futures=True)
         raise
     finally:

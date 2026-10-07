@@ -2,9 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "chessprofile",
+      "name": "knightly",
       "runtimeExecutable": "uv",
-      "runtimeArgs": ["run", "chessprofile", "serve"],
+      "runtimeArgs": ["run", "knightly", "serve"],
       "port": 8000
     },
     {

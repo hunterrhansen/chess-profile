@@ -101,7 +101,7 @@ def game_row(moves: list[str], user_color: str, user_name: str, bot_name: str, e
 
     game = chess.pgn.Game.from_board(board)
     game.headers.update({
-        "Event": f"vs {bot_name}", "Site": "chessprofile",
+        "Event": f"vs {bot_name}", "Site": "knightly",
         "Date": started.strftime("%Y.%m.%d"), "UTCDate": started.strftime("%Y.%m.%d"),
         "UTCTime": started.strftime("%H:%M:%S"),
         "White": white, "Black": black, "Result": result, "Termination": term,

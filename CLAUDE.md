@@ -1,4 +1,4 @@
-# chessprofile
+# Knightly
 
 ## Web UI
 
