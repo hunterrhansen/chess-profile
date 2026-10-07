@@ -1,15 +1,18 @@
-import { ArrowRight, Play } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { ArrowRight, Check, Play, RotateCcw, Star, X } from 'lucide-react'
+import { type ReactNode, useState } from 'react'
+import { Confetti } from '@/components/confetti'
 import { EvalBar } from '@/components/eval-bar'
 import { ResultBadge } from '@/components/game-bits'
 import { MoveBadge } from '@/components/move-badge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader } from '@/components/ui/card'
+import { CountUp, CountUpText } from '@/components/ui/count-up'
 import { Progress } from '@/components/ui/progress'
 import { StatDelta, StatLabel, StatValue } from '@/components/ui/stat'
 import type { Classification } from '@/lib/api'
 import { CLASSIFICATION } from '@/lib/classification'
+import { cn } from '@/lib/utils'
 
 /**
  * Every token and component, rendered from the real code: the design system's living
@@ -149,6 +152,8 @@ export function StyleguidePage() {
         </div>
       </Block>
 
+      <MotionBlock />
+
       <Block title="Eval bar" note="White's share of the win chance; the eval sits on the side that's ahead.">
         <Row>
           <div className="flex h-60 gap-4">
@@ -159,6 +164,194 @@ export function StyleguidePage() {
           </div>
         </Row>
       </Block>
+    </div>
+  )
+}
+
+const DURATIONS = ['press', 'quick', 'move', 'pop', 'sheet', 'fill', 'celebrate'] as const
+const EASINGS = [
+  ['ease-out', 'Arriving, filling. The default.'],
+  ['ease-move', 'A piece sliding: in and out, like a hand.'],
+  ['ease-bounce', 'Rewards and unlocks: overshoots once.'],
+  ['ease-in', 'Leaving.'],
+] as const
+
+/** The motion tokens and every animation, each one replayable. */
+function MotionBlock() {
+  const [take, setTake] = useState(0) // bump to replay everything
+  const [done, setDone] = useState(3)
+  const [party, setParty] = useState(0)
+  return (
+    <Block
+      title="Motion"
+      note="Quick for small things, bouncy for rewards, never in the way. Reduced motion keeps the end state and drops the movement."
+    >
+      <Row>
+        <Button variant="outline" onClick={() => setTake((t) => t + 1)}>
+          <RotateCcw /> Replay all
+        </Button>
+      </Row>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Demo title="Durations" note="--duration-*. The bar runs for each one.">
+          <div key={take} className="grid gap-1.5">
+            {DURATIONS.map((d) => (
+              <div key={d} className="grid grid-cols-[5.5rem_1fr] items-center gap-2">
+                <code className="font-mono text-xs">{d}</code>
+                <span className="h-2 overflow-hidden rounded-full bg-surface-muted">
+                  <span
+                    className="block h-full origin-left animate-[grow_var(--d)_var(--ease-out)_both] rounded-full bg-brand"
+                    style={{ '--d': `var(--duration-${d})` } as React.CSSProperties}
+                  />
+                </span>
+              </div>
+            ))}
+          </div>
+        </Demo>
+
+        <Demo title="Easings" note="--ease-*. Same distance, same time.">
+          <div key={take} className="grid gap-2">
+            {EASINGS.map(([e, what]) => (
+              <div key={e} className="grid gap-0.5">
+                <span className="flex justify-between text-xs">
+                  <code className="font-mono">{e}</code>
+                  <span className="text-muted-foreground">{what}</span>
+                </span>
+                <span className="relative h-3 rounded-full bg-surface-muted">
+                  <span
+                    className="absolute top-0 left-0 size-3 animate-[slide_900ms_var(--e)_both] rounded-full bg-sky"
+                    style={{ '--e': `var(--${e})` } as React.CSSProperties}
+                  />
+                </span>
+              </div>
+            ))}
+          </div>
+        </Demo>
+
+        <Demo title="Badge lands" note="animate-pop, after the piece. Brilliant and Great send a ring out.">
+          <div key={take} className="flex items-center gap-4">
+            {(['brilliant', 'great', 'best', 'mistake', 'blunder'] as const).map((k) => (
+              <MoveBadge key={k} kind={k} pop className="size-9 text-base [&_svg]:size-5" />
+            ))}
+          </div>
+        </Demo>
+
+        <Demo title="Square flash" note="animate-flash on the square you moved to: green for right, red for wrong.">
+          <div key={take} className="flex gap-3">
+            {(['right', 'wrong'] as const).map((tone) => (
+              <span key={tone} className="relative size-16 overflow-hidden rounded-sm bg-board-dark">
+                <span
+                  className={cn(
+                    'absolute inset-0 animate-flash [animation-delay:var(--duration-move)]',
+                    tone === 'right' ? 'bg-brand/70' : 'bg-danger/70',
+                  )}
+                />
+              </span>
+            ))}
+          </div>
+        </Demo>
+
+        <Demo title="Verdict" note="animate-sheet slides it up; the mark bounces in when right, shakes once when wrong.">
+          <div key={take} className="grid gap-2">
+            {[true, false].map((right) => (
+              <div
+                key={String(right)}
+                className={cn(
+                  'panel flex animate-sheet items-center gap-3 p-3',
+                  right ? 'border-brand bg-brand/15' : 'border-danger bg-danger/15',
+                )}
+              >
+                <span
+                  className={cn(
+                    'grid size-8 shrink-0 place-items-center rounded-full [animation-delay:calc(var(--duration-sheet)*0.6)]',
+                    right ? 'animate-bounce-in bg-brand text-on-brand' : 'animate-shake bg-danger text-on-danger',
+                  )}
+                >
+                  {right ? <Check className="size-5" strokeWidth={3} /> : <X className="size-5" strokeWidth={3} />}
+                </span>
+                <span className={cn('font-heading text-lg font-semibold', right ? 'text-brand-text' : 'text-danger-text')}>
+                  {right ? 'Found it: Rxh7+' : 'The move was Rxh7+'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Demo>
+
+        <Demo title="Progress and counts" note="The fill eases and lights up when it grows; the count bumps.">
+          <div className="grid gap-3">
+            <div className="flex items-center gap-3">
+              <Progress className="flex-1" label="Today's positions" hideLabel value={(done / 10) * 100} />
+              <span key={done} className="animate-bump text-sm font-extrabold tabular-nums">
+                {done} of 10
+              </span>
+            </div>
+            <Row>
+              <Button size="sm" variant="outline" onClick={() => setDone((d) => (d >= 10 ? 0 : d + 1))}>
+                Answer one
+              </Button>
+            </Row>
+          </div>
+        </Demo>
+
+        <Demo title="Numbers count up" note="CountUp and CountUpText; the change rises in after, or floats off (animate-float-up).">
+          <div key={take} className="flex items-end gap-6">
+            <StatValue>
+              <CountUpText text="87.4" />
+              <StatDelta value={3.2} better text="3.2" />
+            </StatValue>
+            <StatValue className="relative text-3xl">
+              <CountUp value={652} />
+              <span className="absolute -top-4 right-0 animate-float-up font-sans text-sm font-extrabold text-brand-text [animation-delay:var(--duration-fill)]">
+                +12
+              </span>
+            </StatValue>
+          </div>
+        </Demo>
+
+        <Demo title="Start here" note="animate-beacon: the only loop. Just the current step, never decoration.">
+          <div className="flex items-center gap-6 py-2">
+            <span className="grid size-14 place-items-center rounded-full bg-surface-muted text-ink-muted shadow-[0_4px_0_var(--line)]">
+              <Check className="size-6" strokeWidth={3} />
+            </span>
+            <span className="grid size-14 animate-beacon place-items-center rounded-full bg-brand text-on-brand shadow-[0_4px_0_var(--brand-lip)] [--beacon:var(--brand)]">
+              <Star className="size-6" fill="currentColor" />
+            </span>
+          </div>
+        </Demo>
+
+        <Demo
+          title="Celebrate"
+          note="Confetti and animate-bounce-in. The big moments only: one per view, never on a loop."
+          className="sm:col-span-2"
+        >
+          <div className="flex flex-col items-center gap-4 py-4">
+            <div className="relative">
+              {party > 0 && <Confetti key={`confetti-${party}`} seed={party} />}
+              <span
+                key={party}
+                className="grid size-20 animate-bounce-in place-items-center rounded-full bg-gold text-on-gold shadow-[0_6px_0_var(--gold-lip)]"
+              >
+                <Check className="size-10" strokeWidth={3} />
+              </span>
+            </div>
+            <Button variant="gold" onClick={() => setParty((p) => p + 1)}>
+              Celebrate
+            </Button>
+          </div>
+        </Demo>
+      </div>
+    </Block>
+  )
+}
+
+function Demo({ title, note, className, children }: { title: string; note: string; className?: string; children: ReactNode }) {
+  return (
+    <div className={cn('panel flex flex-col gap-3 p-5', className)}>
+      <div>
+        <h3 className="font-heading text-lg font-semibold">{title}</h3>
+        <p className="text-sm text-muted-foreground">{note}</p>
+      </div>
+      {children}
     </div>
   )
 }

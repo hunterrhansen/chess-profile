@@ -2,11 +2,13 @@ import { Chess } from 'chess.js'
 import { Check, LoaderCircle, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router'
+import { Confetti } from '@/components/confetti'
 import { MoveBadge } from '@/components/move-badge'
 import { MarkedText } from '@/components/move-text'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader } from '@/components/ui/card'
+import { CountUp } from '@/components/ui/count-up'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatLabel, StatValue } from '@/components/ui/stat'
@@ -112,7 +114,7 @@ function Position({ deck, card, onNext }: { deck: DeckToday; card: DeckCard; onN
           hideLabel
           value={(doneToday / Math.max(1, deck.today.total)) * 100}
         />
-        <span className="text-sm font-extrabold tabular-nums">
+        <span key={doneToday} className="animate-bump text-sm font-extrabold tabular-nums">
           {doneToday} of {deck.today.total}
         </span>
       </header>
@@ -147,6 +149,7 @@ function Position({ deck, card, onNext }: { deck: DeckToday; card: DeckCard; onN
           selected={selected}
           interactive={!tried}
           palette={BOARDS[prefs.board]}
+          flash={result && tried ? { square: tried.slice(2, 4), tone: result.correct ? 'right' : 'wrong' } : undefined}
           onMove={tryMove}
           onSelect={setSelected}
         />
@@ -170,15 +173,15 @@ function Verdict({ result, why, onNext }: { result: DeckAnswer; why: string | nu
     <section
       aria-live="polite"
       className={cn(
-        'panel flex flex-col gap-3 p-5',
+        'panel flex animate-sheet flex-col gap-3 p-5',
         right ? 'border-brand bg-brand/15' : 'border-danger bg-danger/15',
       )}
     >
       <div className="flex items-start gap-3">
         <span
           className={cn(
-            'grid size-10 shrink-0 place-items-center rounded-full',
-            right ? 'bg-brand text-on-brand' : 'bg-danger text-on-danger',
+            'grid size-10 shrink-0 place-items-center rounded-full [animation-delay:calc(var(--duration-sheet)*0.6)]',
+            right ? 'animate-bounce-in bg-brand text-on-brand' : 'animate-shake bg-danger text-on-danger',
           )}
         >
           {right ? <Check className="size-6" strokeWidth={3} /> : <X className="size-6" strokeWidth={3} />}
@@ -237,19 +240,22 @@ function DoneForToday({ deck }: { deck: DeckToday }) {
   }
   return (
     <div className="flex flex-col items-center gap-6 py-6 text-center">
-      <span className="grid size-24 animate-pop place-items-center rounded-full bg-gold text-on-gold shadow-[0_6px_0_var(--gold-lip)]">
-        <Check className="size-12" strokeWidth={3} />
-      </span>
-      <div>
+      <div className="relative">
+        <Confetti />
+        <span className="grid size-24 animate-bounce-in place-items-center rounded-full bg-gold text-on-gold shadow-[0_6px_0_var(--gold-lip)]">
+          <Check className="size-12" strokeWidth={3} />
+        </span>
+      </div>
+      <div className="animate-rise [animation-delay:calc(var(--duration-celebrate)*0.4)]">
         <h1 className="text-4xl font-bold">Done for today</h1>
         <p className="mt-2 text-muted-foreground">
           {deck.today.done} position{deck.today.done === 1 ? '' : 's'} reviewed. The next ones come due tomorrow.
         </p>
       </div>
       <div className="grid w-full grid-cols-3 gap-4 text-left">
-        <Stat label="Mastered" value={deck.mastered} />
-        <Stat label="Learning" value={deck.learning} />
-        <Stat label="Not seen yet" value={deck.new} />
+        <Stat label="Mastered" value={deck.mastered} order={0} />
+        <Stat label="Learning" value={deck.learning} order={1} />
+        <Stat label="Not seen yet" value={deck.new} order={2} />
       </div>
       <Button asChild size="lg" variant="outline">
         <Link to="/">Back to overview</Link>
@@ -258,12 +264,15 @@ function DoneForToday({ deck }: { deck: DeckToday }) {
   )
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+/** A stat tile that rises in after the ones before it (`order`) and counts up. */
+function Stat({ label, value, order }: { label: string; value: number; order: number }) {
   return (
-    <Card size="sm">
+    <Card size="sm" className="animate-rise" style={{ animationDelay: `calc(var(--duration-celebrate) * 0.5 + ${order} * 80ms)` }}>
       <CardHeader>
         <StatLabel>{label}</StatLabel>
-        <StatValue className="mt-1 text-3xl">{value}</StatValue>
+        <StatValue className="mt-1 text-3xl">
+          <CountUp value={value} />
+        </StatValue>
       </CardHeader>
     </Card>
   )

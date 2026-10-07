@@ -22,7 +22,7 @@ export function EvalBar({
       )}
       aria-label={`White's winning chance ${Math.round(whiteWin)}%`}
     >
-      <div className="bg-eval-white transition-[height] duration-200" style={{ height: `${whiteWin}%` }} />
+      <div className="bg-eval-white transition-[height] duration-(--duration-fill) ease-out" style={{ height: `${whiteWin}%` }} />
       {score && (
         <span
           className={cn(

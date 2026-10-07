@@ -13,10 +13,11 @@ export function StatValue({ className, children }: { className?: string; childre
 }
 
 /** ▲ / ▼ and the amount. `better` decides the color: green when it went the right way, red
- * when it didn't (for blunders, down is better). */
+ * when it didn't (for blunders, down is better). It rises in once the number beside it has
+ * counted up. */
 export function StatDelta({ value, better, text }: { value: number; better: boolean; text?: string }) {
   return (
-    <span className={cn('ml-2 font-sans text-sm font-extrabold', better ? 'text-brand-text' : 'text-danger-text')}>
+    <span className={cn('ml-2 inline-block animate-rise font-sans text-sm font-extrabold [animation-delay:var(--duration-fill)]', better ? 'text-brand-text' : 'text-danger-text')}>
       {value > 0 ? '▲' : '▼'} {text ?? Math.abs(value)}
     </span>
   )

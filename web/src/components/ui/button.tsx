@@ -5,11 +5,12 @@ import { Slot } from "radix-ui"
 
 /**
  * Pressable buttons sit on a solid ledge (`--lip`, `--ledge` deep) and sink onto it when
- * pressed. Bright fills take their on-* text color and an uppercase label; one `default`
- * (brand green) per view, `gold` only for a reward.
+ * pressed: instantly on the way down, eased on the way back up. Bright fills take their on-*
+ * text color and an uppercase label; one `default` (brand green) per view, `gold` only for
+ * a reward.
  */
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-bold whitespace-nowrap outline-none select-none [--ledge:4px] transition-[transform,box-shadow,filter,background-color] duration-75 ease-out focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:pointer-events-none aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-bold whitespace-nowrap outline-none select-none [--ledge:4px] transition-[transform,box-shadow,filter,background-color] duration-(--duration-quick) ease-out active:duration-0 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:pointer-events-none aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {

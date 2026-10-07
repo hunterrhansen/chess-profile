@@ -1,9 +1,11 @@
+import { useBumpOnIncrease } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 
 const FILL = { brand: 'bg-brand', sky: 'bg-sky', gold: 'bg-gold' } as const
 
 /** A thick rounded bar with a highlight stripe. `gold` only when it shows a record or a full
- * goal. Give it a `label` (shown, or for screen readers only with `hideLabel`). */
+ * goal. Give it a `label` (shown, or for screen readers only with `hideLabel`). The fill
+ * eases to a new value, and lights up for a moment each time it grows. */
 export function Progress({
   value,
   label,
@@ -24,6 +26,7 @@ export function Progress({
   className?: string
 }) {
   const v = Math.max(0, Math.min(100, value))
+  const grew = useBumpOnIncrease(v)
   return (
     <div className={cn('grid gap-1.5', className)}>
       {!hideLabel && (
@@ -43,14 +46,18 @@ export function Progress({
         {v > 0 && (
           <div
             className={cn(
-              'relative h-full min-w-(--h) rounded-full transition-[width] duration-400 ease-out',
+              'relative h-full min-w-(--h) rounded-full transition-[width] duration-(--duration-fill) ease-out',
               size === 'sm' ? '[--h:--spacing(2.5)]' : '[--h:--spacing(4)]',
               FILL[tone],
               // the highlight stripe along the top of the fill
               size === 'default' && 'after:absolute after:inset-x-2 after:top-1 after:h-1 after:rounded-full after:bg-sheen',
             )}
             style={{ width: `${v}%` }}
-          />
+          >
+            {grew > 0 && (
+              <span key={grew} className="absolute inset-0 animate-flash rounded-full bg-sheen [animation-delay:var(--duration-quick)]" />
+            )}
+          </div>
         )}
       </div>
     </div>
