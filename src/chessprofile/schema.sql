@@ -187,3 +187,30 @@ CREATE TABLE IF NOT EXISTS engine_lines (
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     PRIMARY KEY (game_id, ply, depth)
 );
+
+-- The review deck (deck.py): one card per position where you went wrong and one move was
+-- clearly better. Keyed like `moves` but not tied to its rows, so re-analysing a game keeps
+-- the card's history.
+CREATE TABLE IF NOT EXISTS cards (
+    game_id           INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+    ply               INTEGER NOT NULL,
+    added_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    step              INTEGER NOT NULL DEFAULT 0,  -- right answers in a row; 4 = mastered
+    due               TEXT,                        -- YYYY-MM-DD (local) of the next review; NULL = new, or mastered
+    reviews           INTEGER NOT NULL DEFAULT 0,
+    lapses            INTEGER NOT NULL DEFAULT 0,  -- wrong answers
+    last_reviewed_at  TEXT,
+    PRIMARY KEY (game_id, ply)
+);
+
+-- Every graded answer (a card's first of the day), for history and the daily count.
+CREATE TABLE IF NOT EXISTS card_reviews (
+    id           INTEGER PRIMARY KEY,
+    game_id      INTEGER NOT NULL,
+    ply          INTEGER NOT NULL,
+    reviewed_at  TEXT NOT NULL,             -- ISO-8601 UTC
+    answer_uci   TEXT NOT NULL,
+    correct      INTEGER NOT NULL,
+    FOREIGN KEY (game_id, ply) REFERENCES cards(game_id, ply) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS card_reviews_at ON card_reviews (reviewed_at);

@@ -462,7 +462,8 @@ function BotSays({ elo, text, error }: { elo: number; text: string | null; error
   )
 }
 
-function PlayBoard({
+/** The board for making moves yourself: click or drag, with legal-move dots. */
+export function PlayBoard({
   chess,
   orientation,
   lastMove,
