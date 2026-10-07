@@ -138,6 +138,20 @@ def test_api_serves_a_card_and_grades_it(tmp_path):
     assert graded["correct"] and graded["best_san"] == "e5"
     after = client.get("/api/deck").json()
     assert after["card"] is None and after["today"] == {"done": 1, "total": 1}
+    assert after["results"] == [{"game_id": 1, "ply": 2, "correct": True, "san": "g5", "opponent": "opp"}]
 
     assert client.post("/api/deck/answer", json={"game_id": 9, "ply": 2, "uci": "e7e5"}).status_code == 404
     assert client.post("/api/deck/answer", json={"game_id": 1, "ply": 2, "uci": "nonsense"}).status_code == 422
+
+
+def test_skip_counts_as_a_miss(tmp_path):
+    path = tmp_path / "chess.db"
+    with db.connect(path) as c:
+        add_game(c, 1)
+        add_move(c, 1, 1, cls="best", is_user=0, color="white", uci="e2e4", best_uci="e2e4")
+        add_move(c, 1, 2)
+    client = TestClient(api.create_app(path))
+    client.get("/api/deck")
+    skipped = client.post("/api/deck/answer", json={"game_id": 1, "ply": 2, "uci": "0000"}).json()
+    assert not skipped["correct"] and skipped["step"] == 0
+    assert [r["correct"] for r in client.get("/api/deck").json()["results"]] == [False]

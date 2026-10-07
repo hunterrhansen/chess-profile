@@ -15,6 +15,7 @@ import { StatLabel, StatValue } from '@/components/ui/stat'
 import { type DeckAnswer, type DeckCard, type DeckToday, type EngineLines, send, useApi } from '@/lib/api'
 import { CLASSIFICATION } from '@/lib/classification'
 import { shortDate } from '@/lib/format'
+import { moveLabel } from '@/lib/key-moments'
 import { BOARDS, usePreferences } from '@/lib/preferences'
 import { durationMs } from '@/lib/motion'
 import { playSound } from '@/lib/sound'
@@ -72,25 +73,29 @@ function Position({ deck, card, onNext }: { deck: DeckToday; card: DeckCard; onN
     }
   }, [result, card.game_id, card.ply])
 
+  const submit = (uci: string) => {
+    setTried(uci)
+    setSelected(null)
+    send<DeckAnswer>('POST', '/api/deck/answer', { game_id: card.game_id, ply: card.ply, uci })
+      .then(setResult)
+      .catch((e: Error) => {
+        setTried(null)
+        setFailed(`Couldn't check that move. ${e.message}`)
+      })
+  }
   const tryMove = (from: string, to: string) => {
     if (result) return false
     const probe = new Chess(card.fen_before)
     try {
       const m = probe.move({ from, to, promotion: 'q' })
-      const uci = m.from + m.to + (m.promotion ?? '')
-      setTried(uci)
-      setSelected(null)
-      send<DeckAnswer>('POST', '/api/deck/answer', { game_id: card.game_id, ply: card.ply, uci })
-        .then(setResult)
-        .catch((e: Error) => {
-          setTried(null)
-          setFailed(`Couldn't check that move. ${e.message}`)
-        })
+      submit(m.from + m.to + (m.promotion ?? ''))
       return true
     } catch {
       return false
     }
   }
+  // Skip: a miss, so it comes back tomorrow; the null move "0000" tells the server.
+  const skipped = tried === SKIP
 
   // The board shows your answer once it's checked: the move itself when right, the engine's
   // move as an arrow when not.
@@ -156,7 +161,7 @@ function Position({ deck, card, onNext }: { deck: DeckToday; card: DeckCard; onN
           selected={selected}
           interactive={!tried}
           palette={BOARDS[prefs.board]}
-          flash={result && tried ? { square: tried.slice(2, 4), tone: result.correct ? 'right' : 'wrong' } : undefined}
+          flash={result && tried && !skipped ? { square: tried.slice(2, 4), tone: result.correct ? 'right' : 'wrong' } : undefined}
           onMove={tryMove}
           onSelect={setSelected}
         />
@@ -166,13 +171,20 @@ function Position({ deck, card, onNext }: { deck: DeckToday; card: DeckCard; onN
       {result ? (
         <Verdict result={result} why={why} onNext={onNext} />
       ) : (
-        <p className="text-center text-sm text-muted-foreground">
-          {tried ? 'Checking…' : selected ? 'Now pick where it goes.' : 'Tap a piece, then where it goes. Or drag it.'}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t-2 pt-4">
+          <Button variant="outline" onClick={() => submit(SKIP)} disabled={!!tried}>
+            Skip
+          </Button>
+          <p className="text-sm text-muted-foreground">
+            {tried ? 'Checking…' : selected ? 'Now pick where it goes.' : 'Tap a piece, then where it goes. Or drag it.'}
+          </p>
+        </div>
       )}
     </>
   )
 }
+
+const SKIP = '0000'
 
 function Verdict({ result, why, onNext }: { result: DeckAnswer; why: string | null | undefined; onNext: () => void }) {
   const right = result.correct
@@ -249,6 +261,9 @@ function DoneForToday({ deck }: { deck: DeckToday }) {
       </Card>
     )
   }
+  const results = deck.results
+  const right = results.filter((r) => r.correct).length
+  const misses = results.filter((r) => !r.correct)
   return (
     <div className="flex flex-col items-center gap-6 py-6 text-center">
       <div className="relative">
@@ -260,14 +275,38 @@ function DoneForToday({ deck }: { deck: DeckToday }) {
       <div className="animate-rise [animation-delay:calc(var(--duration-celebrate)*0.4)]">
         <h1 className="text-4xl font-bold">Done for today</h1>
         <p className="mt-2 text-muted-foreground">
-          {deck.today.done} position{deck.today.done === 1 ? '' : 's'} reviewed. The next ones come due tomorrow.
+          {deck.today.done} position{deck.today.done === 1 ? '' : 's'} reviewed.
+          {results.length > 0 &&
+            ` ${right} right${misses.length ? `, ${misses.length} back tomorrow` : ''}.`}
         </p>
       </div>
+      {results.length > 0 && (
+        <Card className="w-full animate-rise gap-2.5 px-5 text-left [animation-delay:calc(var(--duration-celebrate)*0.45)]">
+          <p className="eyebrow">Today, one by one</p>
+          <div className="flex gap-1.5">
+            {results.map((r, i) => (
+              <span
+                key={i}
+                role="img"
+                aria-label={`Position ${i + 1}: ${r.correct ? 'right' : 'back tomorrow'}`}
+                className={cn('h-3.5 flex-1 rounded-full', r.correct ? 'bg-brand' : 'bg-danger')}
+              />
+            ))}
+          </div>
+          {misses.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Misses:{' '}
+              {misses.map((r) => `${moveLabel(r.ply, r.san)}${r.opponent ? ` vs ${r.opponent}` : ''}`).join(', ')}.
+            </p>
+          )}
+        </Card>
+      )}
       <div className="grid w-full grid-cols-3 gap-4 text-left">
         <Stat label="Mastered" value={deck.mastered} order={0} />
         <Stat label="Learning" value={deck.learning} order={1} />
         <Stat label="Not seen yet" value={deck.new} order={2} />
       </div>
+      <p className="-mt-2 text-sm text-muted-foreground">A position is mastered after 4 right in a row, over about two months.</p>
       <div className="flex w-full flex-wrap justify-between gap-3 border-t-2 pt-5">
         <Button asChild size="lg" variant="outline">
           <Link to="/progress">See your deck</Link>

@@ -249,7 +249,7 @@ class ScheduleIn(BaseModel):
 class AnswerIn(BaseModel):
     game_id: int
     ply: int
-    uci: str = Field(pattern=r"^[a-h][1-8][a-h][1-8][qrbn]?$")
+    uci: str = Field(pattern=r"^([a-h][1-8][a-h][1-8][qrbn]?|0000)$")  # 0000: skipped
 
 
 class AnalysisIn(BaseModel):
@@ -490,6 +490,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
         with write() as conn, conn:
             deck.sync(conn)
             info = deck.stats(conn)
+            info["results"] = deck.today_results(conn)
             nxt = deck.queue(conn)[:1]
         card = None
         if nxt:

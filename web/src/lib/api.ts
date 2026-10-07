@@ -79,6 +79,8 @@ export interface DeckToday {
   learning: number
   new: number
   today: { done: number; total: number }
+  /** Today's answers in order (a card's first of the day), for the Done screen. */
+  results: { game_id: number; ply: number; correct: boolean; san: string; opponent: string | null }[]
   card: DeckCard | null
 }
 
