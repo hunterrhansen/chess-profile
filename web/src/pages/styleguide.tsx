@@ -1,11 +1,31 @@
-import { ArrowRight, Check, Play, RotateCcw, Star, Volume2, X } from 'lucide-react'
+import {
+  ArrowCounterClockwiseIcon,
+  ArrowRightIcon,
+  ArrowUUpLeftIcon,
+  CaretLeftIcon,
+  CaretRightIcon,
+  CheckIcon,
+  CircleNotchIcon,
+  FlagIcon,
+  FunnelIcon,
+  LightbulbIcon,
+  MagnifyingGlassIcon,
+  PlayIcon,
+  RobotIcon,
+  SpeakerHighIcon,
+  StarIcon,
+  XIcon,
+} from '@phosphor-icons/react'
 import { type ReactNode, useState } from 'react'
+import { Board, type BoardArrow } from '@/components/board'
 import { Confetti } from '@/components/confetti'
 import { EmptyState, LoadingBlock } from '@/components/empty-state'
 import { EvalBar } from '@/components/eval-bar'
+import { GLYPH_NAMES, KnIcon } from '@/components/kn-icon'
 import { Logo, LogoMark } from '@/components/logo'
 import { ResultBadge } from '@/components/game-bits'
 import { MoveBadge } from '@/components/move-badge'
+import { Piece, type PieceKind } from '@/components/pieces'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader } from '@/components/ui/card'
@@ -14,6 +34,7 @@ import { Progress } from '@/components/ui/progress'
 import { StatDelta, StatLabel, StatValue } from '@/components/ui/stat'
 import type { Classification } from '@/lib/api'
 import { CLASSIFICATION } from '@/lib/classification'
+import { BOARDS } from '@/lib/preferences'
 import { playSound, type SoundName } from '@/lib/sound'
 import { cn } from '@/lib/utils'
 
@@ -65,6 +86,28 @@ export function StyleguidePage() {
         </div>
       </Block>
 
+      <Block
+        title="Icons"
+        note="KnIcon (components/kn-icon.tsx) for navigation, the path and the big moments. Phosphor, bold by default (fill for objects), for everything else."
+      >
+        <div className="grid grid-cols-3 gap-4 sm:grid-cols-5">
+          {GLYPH_NAMES.map((g) => (
+            <div key={g} className="flex flex-col items-center gap-1.5">
+              <KnIcon glyph={g} className="size-12" />
+              <code className="font-mono text-xs">{g}</code>
+            </div>
+          ))}
+        </div>
+        <Row>
+          {[CaretLeftIcon, CaretRightIcon, CheckIcon, XIcon, MagnifyingGlassIcon, ArrowUUpLeftIcon, CircleNotchIcon].map((Icon, i) => (
+            <Icon key={i} className="size-6" />
+          ))}
+          {[RobotIcon, FlagIcon, LightbulbIcon, FunnelIcon, StarIcon].map((Icon, i) => (
+            <Icon key={i} weight="fill" className="size-6" />
+          ))}
+        </Row>
+      </Block>
+
       <Block title="Color" note="Tokens in src/styles/tokens.css. Use them as Tailwind colors (bg-brand) or var(--brand).">
         {COLOR_GROUPS.map(([group, names]) => (
           <div key={group} className="flex flex-col gap-2">
@@ -105,14 +148,14 @@ export function StyleguidePage() {
         </Row>
         <Row>
           <Button size="lg">
-            <Play /> Review game
+            <PlayIcon weight="fill" /> Review game
           </Button>
           <Button size="sm">Save</Button>
           <Button size="xs" variant="outline">
             Edit
           </Button>
           <Button size="icon" variant="outline" aria-label="Next">
-            <ArrowRight />
+            <ArrowRightIcon />
           </Button>
         </Row>
       </Block>
@@ -178,7 +221,7 @@ export function StyleguidePage() {
             <Card className="h-full">
               <CardHeader>
                 <StatLabel>
-                  Games analysed <ArrowRight className="size-3.5" />
+                  Games analysed <ArrowRightIcon className="size-3.5" />
                 </StatLabel>
                 <StatValue className="mt-1">404</StatValue>
               </CardHeader>
@@ -188,6 +231,8 @@ export function StyleguidePage() {
       </Block>
 
       <MotionBlock />
+
+      <BoardBlock />
 
       <Block title="Eval bar" note="White's share of the win chance; the eval sits on the side that's ahead.">
         <Row>
@@ -200,6 +245,84 @@ export function StyleguidePage() {
         </Row>
       </Block>
     </div>
+  )
+}
+
+const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
+const BOARD_STATES: { title: string; note: string; props: Omit<React.ComponentProps<typeof Board>, 'palette' | 'orientation'> & { arrows?: BoardArrow[] } }[] = [
+  {
+    title: 'Review',
+    note: 'The last move in yellow with its badge; the better move as a green arrow.',
+    props: {
+      fen: 'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5Q2/PPPP1PPP/RNB1K1NR b KQkq - 3 3',
+      lastMove: { from: 'd1', to: 'f3' },
+      badge: { square: 'f3', kind: 'inaccuracy' },
+      arrows: [{ from: 'g1', to: 'f3', tone: 'best' }],
+    },
+  },
+  {
+    title: 'Your turn',
+    note: 'The piece you picked up is ringed in sky; dots for moves, rings for captures.',
+    props: { fen: START, selected: 'g1', targets: new Set(['f3', 'h3']) },
+  },
+  {
+    title: 'Engine line',
+    note: 'Not the game: highlights, frame and arrow turn blue.',
+    props: {
+      fen: 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3',
+      lastMove: { from: 'b8', to: 'c6' },
+      inLine: true,
+      arrows: [{ from: 'f1', to: 'b5', tone: 'line' }],
+    },
+  },
+  {
+    title: 'Check',
+    note: "Shows the attack: the king's square red, the path from the checker tinted.",
+    props: { fen: 'rnb1kbnr/pppp1ppp/8/4p3/5PPq/8/PPPPP2P/RNBQKBNR w KQkq - 1 3', lastMove: { from: 'd8', to: 'h4' } },
+  },
+  {
+    title: 'Knight check',
+    note: "No path to show: just the king's square and the knight's.",
+    props: { fen: 'r1bqkbnr/pppp1ppp/8/4p3/4P3/3n4/PPPP1PPP/RNBQKBNR w KQkq - 0 4', lastMove: { from: 'c5', to: 'd3' } },
+  },
+  {
+    title: 'Danger',
+    note: 'The reply that punishes a move, as a red arrow (blunder check).',
+    props: {
+      fen: 'rnbqkb1r/pppp1ppp/5n2/4p3/4P3/2N5/PPPP1PPP/R1BQKBNR w KQkq - 2 3',
+      arrows: [{ from: 'f6', to: 'e4', tone: 'danger' }],
+    },
+  },
+]
+
+/** The board in each of its states, with the piece set. */
+function BoardBlock() {
+  return (
+    <Block
+      title="Board"
+      note="Board (components/board.tsx) everywhere a position is shown: Knightly's pieces on the Sage board, on a 4px ledge."
+    >
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3">
+        {BOARD_STATES.map(({ title, note, props }) => (
+          <div key={title} className="flex flex-col gap-2">
+            <Board palette={BOARDS.sage} orientation="white" className="flex-none" {...props} />
+            <div className="mt-2">
+              <h3 className="font-heading text-lg font-semibold">{title}</h3>
+              <p className="text-sm text-muted-foreground">{note}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="panel flex flex-wrap justify-center gap-2 p-4">
+        {(['w', 'b'] as const).flatMap((side) =>
+          (['k', 'q', 'r', 'b', 'n', 'p'] as PieceKind[]).map((kind) => (
+            <div key={side + kind} className="size-14">
+              <Piece kind={kind} side={side} />
+            </div>
+          )),
+        )}
+      </div>
+    </Block>
   )
 }
 
@@ -229,7 +352,7 @@ function MotionBlock() {
     >
       <Row>
         <Button variant="outline" onClick={() => setTake((t) => t + 1)}>
-          <RotateCcw /> Replay all
+          <ArrowCounterClockwiseIcon /> Replay all
         </Button>
       </Row>
 
@@ -308,7 +431,7 @@ function MotionBlock() {
                     right ? 'animate-bounce-in bg-brand text-on-brand' : 'animate-shake bg-danger text-on-danger',
                   )}
                 >
-                  {right ? <Check className="size-5" strokeWidth={3} /> : <X className="size-5" strokeWidth={3} />}
+                  {right ? <CheckIcon className="size-5" /> : <XIcon className="size-5" />}
                 </span>
                 <span className={cn('font-heading text-lg font-semibold', right ? 'text-brand-text' : 'text-danger-text')}>
                   {right ? 'Found it: Rxh7+' : 'The move was Rxh7+'}
@@ -352,10 +475,10 @@ function MotionBlock() {
         <Demo title="Start here" note="animate-beacon: the only loop. Just the current step, never decoration.">
           <div className="flex items-center gap-6 py-2">
             <span className="grid size-14 place-items-center rounded-full bg-surface-muted text-ink-muted shadow-[0_4px_0_var(--line)]">
-              <Check className="size-6" strokeWidth={3} />
+              <CheckIcon className="size-6" />
             </span>
             <span className="grid size-14 animate-beacon place-items-center rounded-full bg-brand text-on-brand shadow-[0_4px_0_var(--brand-lip)] [--beacon:var(--brand)]">
-              <Star className="size-6" fill="currentColor" />
+              <StarIcon weight="fill" className="size-6" />
             </span>
           </div>
         </Demo>
@@ -371,7 +494,7 @@ function MotionBlock() {
                 <span className="eyebrow w-20">{group}</span>
                 {names.map(([name, label]) => (
                   <Button key={name} size="sm" variant="outline" onClick={() => playSound(name)}>
-                    <Volume2 /> {label}
+                    <SpeakerHighIcon weight="fill" /> {label}
                   </Button>
                 ))}
               </div>
@@ -391,7 +514,7 @@ function MotionBlock() {
                 key={party}
                 className="grid size-20 animate-bounce-in place-items-center rounded-full bg-gold text-on-gold shadow-[0_6px_0_var(--gold-lip)]"
               >
-                <Check className="size-10" strokeWidth={3} />
+                <CheckIcon className="size-10" />
               </span>
             </div>
             <Button variant="gold" onClick={() => setParty((p) => p + 1)}>
@@ -422,7 +545,10 @@ const COLOR_GROUPS: [string, string[]][] = [
   ['Surfaces and text', ['page', 'surface', 'surface-muted', 'line', 'lip', 'ink', 'ink-muted', 'focus']],
   ['Brand and accents', ['brand', 'brand-lip', 'on-brand', 'brand-text', 'gold', 'gold-lip', 'on-gold', 'gold-text']],
   ['More accents', ['sky', 'sky-lip', 'on-sky', 'danger', 'danger-lip', 'on-danger', 'danger-text']],
-  ['Chess', ['board-light', 'board-dark', 'board-highlight-light', 'board-highlight-dark', 'eval-white', 'eval-black', 'win', 'loss', 'draw']],
+  ['Chess', ['board-light', 'board-dark', 'board-highlight-light', 'board-highlight-dark', 'line-highlight-light', 'line-highlight-dark', 'selected', 'move-hint']],
+  ['Arrows and check', ['arrow-best', 'arrow-line', 'arrow-danger', 'check', 'check-path', 'eval-white', 'eval-black']],
+  ['Pieces (same in both themes)', ['piece-white', 'piece-white-shade', 'piece-black', 'piece-black-shade', 'piece-black-detail', 'piece-black-eye', 'piece-outline', 'piece-black-outline']],
+  ['Results', ['win', 'loss', 'draw']],
   ['Move classifications', KINDS.map((k) => `move-${k}`)],
 ]
 

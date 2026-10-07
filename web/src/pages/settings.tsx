@@ -1,4 +1,4 @@
-import { Check, Circle, LoaderCircle, Play, Plus, X } from 'lucide-react'
+import { CheckIcon, CircleIcon, CircleNotchIcon, PlayIcon, PlusIcon, XIcon } from '@phosphor-icons/react'
 import { type ReactNode, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { LoadingBlock } from '@/components/empty-state'
@@ -184,9 +184,9 @@ function AppearanceSection() {
           ]}
         />
       </Row>
-      <Row label="Overview opens on">
+      <Row label="Progress opens on">
         <Segmented<Preferences['overviewRange']>
-          label="Overview opens on"
+          label="Progress opens on"
           value={prefs.overviewRange}
           onChange={(overviewRange) => set({ overviewRange })}
           options={[
@@ -296,7 +296,7 @@ function AccountsSection({ settings, reload }: { settings: Settings; reload: () 
       >
         {settings.lichess_token ? (
           <Badge variant="secondary" className="gap-1">
-            <Check className="size-3" /> Saved
+            <CheckIcon className="size-3" /> Saved
           </Badge>
         ) : (
           <Badge variant="outline">Not set</Badge>
@@ -323,7 +323,7 @@ function AccountsSection({ settings, reload }: { settings: Settings; reload: () 
           className="h-8 w-48"
         />
         <Button type="submit" size="sm" disabled={busy}>
-          <Plus /> Add account
+          <PlusIcon /> Add account
         </Button>
         <span className="basis-full text-xs text-muted-foreground">
           Its full game history is imported on the next update.
@@ -408,7 +408,7 @@ function UpdateSection({ settings, reload }: { settings: Settings; reload: () =>
         <div className="px-4 py-3 text-sm">
           <div className="mb-2 flex items-center justify-between gap-4">
             <span className="flex items-center gap-2 font-medium">
-              <LoaderCircle className="size-4 animate-spin" /> Updating
+              <CircleNotchIcon className="size-4 animate-spin" /> Updating
             </span>
             <span className="text-muted-foreground tabular-nums">
               <Elapsed since={settings.current_run.started_at} />
@@ -455,7 +455,7 @@ function UpdateSection({ settings, reload }: { settings: Settings; reload: () =>
                   })
                 }
               >
-                {running ? <LoaderCircle className="animate-spin" /> : <Play />}
+                {running ? <CircleNotchIcon className="animate-spin" /> : <PlayIcon weight="fill" />}
                 {running ? 'Starting' : 'Run now'}
               </Button>
             </div>
@@ -494,13 +494,13 @@ function StepList({ progress }: { progress: RunProgress }) {
           <li key={key} className="flex items-start gap-2.5">
             <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
               {result?.error ? (
-                <X className="size-4 text-danger-text" />
+                <XIcon className="size-4 text-danger-text" />
               ) : result ? (
-                <Check className="size-4 text-brand-text" />
+                <CheckIcon className="size-4 text-brand-text" />
               ) : active ? (
-                <LoaderCircle className="size-4 animate-spin" />
+                <CircleNotchIcon className="size-4 animate-spin" />
               ) : (
-                <Circle className="size-3 text-muted-foreground/50" />
+                <CircleIcon className="size-3 text-muted-foreground/50" />
               )}
             </span>
             <span className="min-w-0">
@@ -537,7 +537,7 @@ function RunStatus({ status }: { status: 'ok' | 'partial' | 'failed' }) {
   }[status]
   return (
     <span className={cn('rounded px-1.5 text-xs', look.className)}>
-      {status === 'ok' ? <Check className="mr-0.5 inline size-3" /> : <X className="mr-0.5 inline size-3" />}
+      {status === 'ok' ? <CheckIcon className="mr-0.5 inline size-3" /> : <XIcon className="mr-0.5 inline size-3" />}
       {look.label}
     </span>
   )

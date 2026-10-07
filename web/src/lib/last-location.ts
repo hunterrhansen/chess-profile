@@ -3,7 +3,7 @@
  * to the same game and move, or the same filtered list, instead of starting over. Kept for
  * the browser session; falls back to memory if storage is blocked.
  */
-export type Section = 'overview' | 'practice' | 'games' | 'games-list' | 'play' | 'settings'
+export type Section = 'progress' | 'practice' | 'games' | 'games-list' | 'play' | 'settings'
 
 const KEY = 'knightly.lastLocation'
 let memory: Partial<Record<Section, string>> = {}
@@ -18,7 +18,7 @@ function load(): Partial<Record<Section, string>> {
 
 /** The sections a path belongs to: a game review is in "games"; the list is in both. */
 export function sectionsOf(pathname: string): Section[] {
-  if (pathname === '/') return ['overview']
+  if (pathname === '/progress') return ['progress']
   if (pathname === '/games') return ['games', 'games-list']
   if (pathname.startsWith('/games/')) return ['games']
   if (pathname === '/practice') return ['practice']

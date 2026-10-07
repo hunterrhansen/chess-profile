@@ -41,6 +41,9 @@
     --color-eval-white: var(--eval-white);
     --color-eval-black: var(--eval-black);
     --color-move-hint: var(--move-hint);
+    --color-check: var(--check);
+    --color-check-path: var(--check-path);
+    --color-selected: var(--selected);
     --color-move-brilliant: var(--move-brilliant);
     --color-move-great: var(--move-great);
     --color-move-best: var(--move-best);

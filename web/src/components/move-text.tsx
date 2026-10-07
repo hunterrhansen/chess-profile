@@ -1,7 +1,5 @@
-import { ChessBishop, ChessKing, ChessKnight, ChessQueen, ChessRook } from 'lucide-react'
+import { type PieceKind, PieceGlyph } from '@/components/pieces'
 import { splitPiece } from '@/lib/format'
-
-const PIECES = { K: ChessKing, Q: ChessQueen, R: ChessRook, B: ChessBishop, N: ChessKnight }
 
 /**
  * A move in figurine notation, "♜d2": an outlined piece for White, a filled one for Black,
@@ -20,19 +18,11 @@ export function MoveText({
   side?: 'white' | 'black'
 }) {
   const [piece, rest] = splitPiece(san)
-  const Icon = piece ? PIECES[piece as keyof typeof PIECES] : null
   const white = side ? side === 'white' : ply % 2 === 1
   return (
-    <span className="inline-flex items-center whitespace-nowrap">
+    <span className="whitespace-nowrap">
       {number && <span className="mr-1">{Math.ceil(ply / 2)}.</span>}
-      {Icon && (
-        <Icon
-          aria-hidden
-          className="mr-px size-[1.1em] shrink-0"
-          strokeWidth={2}
-          fill={white ? 'none' : 'currentColor'}
-        />
-      )}
+      {piece && <PieceGlyph kind={piece.toLowerCase() as PieceKind} side={white ? 'w' : 'b'} className="mr-px" />}
       {piece && <span className="sr-only">{piece}</span>}
       {rest}
     </span>

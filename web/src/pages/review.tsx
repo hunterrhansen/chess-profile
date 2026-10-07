@@ -1,8 +1,8 @@
 import { Chess } from 'chess.js'
-import { ArrowLeft, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ExternalLink, LoaderCircle, Play, Plus, Trash2, Undo2 } from 'lucide-react'
+import { ArrowLeftIcon, ArrowSquareOutIcon, ArrowUUpLeftIcon, CaretLeftIcon, CaretLineLeftIcon, CaretLineRightIcon, CaretRightIcon, CircleNotchIcon, PlayIcon, PlusIcon, TrashIcon } from '@phosphor-icons/react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { type Arrow, Chessboard } from 'react-chessboard'
 import { Link, useParams, useSearchParams } from 'react-router'
+import { Board, type BoardArrow, type Palette } from '@/components/board'
 import { ResultBadge } from '@/components/game-bits'
 import { EvalBar as EvalBarView } from '@/components/eval-bar'
 import { LoadingBlock } from '@/components/empty-state'
@@ -16,18 +16,10 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { type Classification, type EngineLine, type EngineLines, type GameDetail, type LineKind, type MoveRow, type Note, send, useApi } from '@/lib/api'
 import { CLASSIFICATION, isSound } from '@/lib/classification'
 import { clock, longDate, shortDate, thinkTime, timeControl } from '@/lib/format'
-import { useMoveMs } from '@/lib/motion'
-import { useMoveSound } from '@/lib/sound'
 import { lastLocation } from '@/lib/last-location'
 import { BOARDS, usePreferences } from '@/lib/preferences'
-import { token } from '@/lib/tokens'
 import { cn } from '@/lib/utils'
 
-export const BEST_ARROW = '--arrow-best'
-// Engine lines are drawn in blue so they never look like the real game's yellow.
-const LINE_ARROW = '--arrow-line'
-const LINE_LIGHT = 'var(--line-highlight-light)'
-const LINE_DARK = 'var(--line-highlight-dark)'
 const TIME_BAR_FULL = 100 // seconds of thinking that fill a time bar
 const BLUNDER_DROP = 20 // keep in step with analyze.THRESHOLDS
 
@@ -179,7 +171,7 @@ export function ReviewPage() {
           to={lastLocation('games-list', '/games')}
           className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft className="size-4" /> Games
+          <ArrowLeftIcon className="size-4" /> Games
         </Link>
         <span className="flex min-w-0 items-center gap-2">
           <ResultBadge outcome={game.outcome} />
@@ -200,7 +192,7 @@ export function ReviewPage() {
             rel="noreferrer"
             className="ml-auto flex items-center gap-1 text-muted-foreground hover:text-foreground"
           >
-            Chess.com <ExternalLink className="size-3.5" />
+            Chess.com <ArrowSquareOutIcon className="size-3.5" />
           </a>
         )}
       </div>
@@ -224,7 +216,7 @@ export function ReviewPage() {
               <EvalBar whiteWin={replay.whiteWin[ply]} move={move} orientation={me} />
             )}
             {lineView ? (
-              <Board
+              <ReviewBoard
                 fen={lineView.fens[step]}
                 orientation={me}
                 lastMove={lineView.squares[step - 1]}
@@ -234,7 +226,7 @@ export function ReviewPage() {
                 inLine
               />
             ) : (
-              <Board
+              <ReviewBoard
                 fen={replay.fens[ply]}
                 orientation={me}
                 lastMove={replay.squares[ply - 1]}
@@ -329,18 +321,18 @@ export function ReviewPage() {
             </div>
             {/* While a line is open these step through the line instead of the game. */}
             <div className="grid grid-cols-4 gap-2 border-t p-2">
-              <NavButton label="First move" onClick={() => (line ? setStep(1) : setPly(0))} icon={<ChevronFirst />} />
+              <NavButton label="First move" onClick={() => (line ? setStep(1) : setPly(0))} icon={<CaretLineLeftIcon />} />
               <NavButton
                 label="Previous move"
                 onClick={() => (line ? setStep(step - 1) : setPly(Math.max(0, ply - 1)))}
-                icon={<ChevronLeft />}
+                icon={<CaretLeftIcon />}
               />
               <NavButton
                 label="Next move"
                 onClick={() => (line ? setStep(step + 1) : setPly(Math.min(last, ply + 1)))}
-                icon={<ChevronRight />}
+                icon={<CaretRightIcon />}
               />
-              <NavButton label="Last move" onClick={() => (line ? setStep(lineLength) : setPly(last))} icon={<ChevronLast />} />
+              <NavButton label="Last move" onClick={() => (line ? setStep(lineLength) : setPly(last))} icon={<CaretLineRightIcon />} />
             </div>
           </aside>
         </div>
@@ -436,11 +428,9 @@ function EvalBar({
   return <EvalBarView whiteWin={whiteWin} score={score} whiteAtBottom={orientation === 'white'} />
 }
 
-function isLightSquare(square: string) {
-  return (square.charCodeAt(0) - 97 + Number(square[1])) % 2 === 0
-}
-
-function Board({
+/** The game's board: the last move with its badge and, when asked, the engine's better move
+ * in green. In a line, everything turns blue and the arrow is the line's next move. */
+function ReviewBoard({
   fen,
   orientation,
   lastMove,
@@ -456,67 +446,24 @@ function Board({
   move?: MoveRow
   nextMove?: { from: string; to: string }
   showBest: boolean
-  palette: (typeof BOARDS)[keyof typeof BOARDS]
+  palette: Palette
   inLine?: boolean
 }) {
-  const moveMs = useMoveMs()
-  useMoveSound(fen)
-  const squareStyles = lastMove
-    ? Object.fromEntries(
-        [lastMove.from, lastMove.to].map((sq) => [
-          sq,
-          {
-            backgroundColor: isLightSquare(sq)
-              ? inLine ? LINE_LIGHT : palette.lightHl
-              : inLine ? LINE_DARK : palette.darkHl,
-          },
-        ]),
-      )
-    : {}
-  // In the game: the engine's better move in green. In a line: the line's next move in blue.
-  const arrows: Arrow[] = inLine
-    ? nextMove ? [{ startSquare: nextMove.from, endSquare: nextMove.to, color: token(LINE_ARROW) }] : []
+  const arrows: BoardArrow[] = inLine
+    ? nextMove ? [{ ...nextMove, tone: 'line' }] : []
     : showBest && move && !isSound(move.classification) && move.best_uci
-      ? [{ startSquare: move.best_uci.slice(0, 2), endSquare: move.best_uci.slice(2, 4), color: token(BEST_ARROW) }]
+      ? [{ from: move.best_uci.slice(0, 2), to: move.best_uci.slice(2, 4), tone: 'best' }]
       : []
-  const badge = move?.classification && lastMove ? { square: lastMove.to, kind: move.classification } : null
-
   return (
-    <div
-      className={cn(
-        'min-w-0 flex-1 overflow-visible rounded-sm',
-        inLine && 'outline-3 outline-offset-2 outline-sky',
-      )}
-    >
-      <Chessboard
-        options={{
-          position: fen,
-          boardOrientation: orientation,
-          allowDragging: false,
-          animationDurationInMs: moveMs,
-          lightSquareStyle: { backgroundColor: palette.light },
-          darkSquareStyle: { backgroundColor: palette.dark },
-          lightSquareNotationStyle: { color: palette.dark },
-          darkSquareNotationStyle: { color: palette.light },
-          arrows,
-          // A custom renderer replaces the library's own square wrapper, which is where it
-          // applies `squareStyles`, so the last-move highlight is applied here instead.
-          squareRenderer: ({ square, children }) => (
-            <div className="relative size-full" style={squareStyles[square]}>
-              {children}
-              {badge?.square === square && (
-                <MoveBadge
-                  key={fen}
-                  kind={badge.kind}
-                  pop
-                  className="pointer-events-none absolute -top-2 -right-2 z-10 size-[38%] max-h-7 max-w-7 text-[clamp(11px,1.8vw,14px)] shadow-[inset_0_-2px_0_var(--move-shade),0_0_0_2px_var(--surface)] [&_svg]:size-[75%]"
-                />
-              )}
-            </div>
-          ),
-        }}
-      />
-    </div>
+    <Board
+      fen={fen}
+      orientation={orientation}
+      palette={palette}
+      lastMove={lastMove}
+      inLine={inLine}
+      arrows={arrows}
+      badge={move?.classification && lastMove ? { square: lastMove.to, kind: move.classification } : null}
+    />
   )
 }
 
@@ -703,10 +650,10 @@ function MovePanel({
                 )}
                 <span className="ml-auto flex gap-1.5">
                   <Button variant="outline" size="sm" className="h-7 px-2.5 text-foreground" onClick={() => onShow('why')}>
-                    <Play className="size-3 fill-current" /> Why
+                    <PlayIcon weight="fill" className="size-3" /> Why
                   </Button>
                   <Button variant="outline" size="sm" className="h-7 px-2.5 text-foreground" onClick={() => onShow('best')}>
-                    <Play className="size-3 fill-current" /> Best line
+                    <PlayIcon weight="fill" className="size-3" /> Best line
                   </Button>
                 </span>
               </span>
@@ -781,7 +728,7 @@ function LinePanel({
         <p className="mt-2 text-destructive">Couldn't get the line. {error}</p>
       ) : !view ? (
         <p className="mt-2 flex items-center gap-2 text-muted-foreground">
-          <LoaderCircle className="size-4 animate-spin" /> Asking Stockfish…
+          <CircleNotchIcon className="size-4 animate-spin" /> Asking Stockfish…
         </p>
       ) : (
         <>
@@ -824,7 +771,7 @@ function LinePanel({
       )}
       <div className="mt-2.5 flex gap-2">
         <Button size="sm" onClick={onBack}>
-          <Undo2 /> Back to game
+          <ArrowUUpLeftIcon /> Back to game
         </Button>
         <Button size="sm" variant="outline" onClick={onSwitch}>
           {kind === 'why' ? 'Show best line' : 'Show why'}
@@ -922,7 +869,7 @@ function PositionNotes({
                   aria-label="Delete note"
                   title="Delete note"
                 >
-                  <Trash2 className="size-3.5" />
+                  <TrashIcon weight="fill" className="size-3.5" />
                 </button>
               </li>
             )
@@ -967,7 +914,7 @@ function PositionNotes({
             onClick={() => setOpen(true)}
             className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
           >
-            <Plus className="size-3.5" /> Note on this position
+            <PlusIcon className="size-3.5" /> Note on this position
           </button>
         </>
       )}

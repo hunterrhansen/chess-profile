@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js'
-import { Check, LoaderCircle, X } from 'lucide-react'
+import { CheckIcon, CircleNotchIcon, XIcon } from '@phosphor-icons/react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { Confetti } from '@/components/confetti'
@@ -111,8 +111,8 @@ function Position({ deck, card, onNext }: { deck: DeckToday; card: DeckCard; onN
     <>
       <header className="flex items-center gap-3">
         <Button asChild variant="ghost" size="icon" aria-label="Stop for now">
-          <Link to="/">
-            <X />
+          <Link to="/progress">
+            <XIcon />
           </Link>
         </Button>
         <Progress
@@ -191,7 +191,7 @@ function Verdict({ result, why, onNext }: { result: DeckAnswer; why: string | nu
             right ? 'animate-bounce-in bg-brand text-on-brand' : 'animate-shake bg-danger text-on-danger',
           )}
         >
-          {right ? <Check className="size-6" strokeWidth={3} /> : <X className="size-6" strokeWidth={3} />}
+          {right ? <CheckIcon className="size-6" /> : <XIcon className="size-6" />}
         </span>
         <div className="min-w-0">
           <h2 className={cn('text-2xl font-semibold', right ? 'text-brand-text' : 'text-danger-text')}>
@@ -200,7 +200,7 @@ function Verdict({ result, why, onNext }: { result: DeckAnswer; why: string | nu
           <p className="mt-1">
             {why === undefined ? (
               <span className="flex items-center gap-2 text-muted-foreground">
-                <LoaderCircle className="size-4 animate-spin" /> Asking Stockfish why…
+                <CircleNotchIcon className="size-4 animate-spin" /> Asking Stockfish why…
               </span>
             ) : (
               <MarkedText text={why ?? 'It keeps the position; the move you played gave it away.'} />
@@ -254,7 +254,7 @@ function DoneForToday({ deck }: { deck: DeckToday }) {
       <div className="relative">
         <Confetti />
         <span className="grid size-24 animate-bounce-in place-items-center rounded-full bg-gold text-on-gold shadow-[0_6px_0_var(--gold-lip)]">
-          <Check className="size-12" strokeWidth={3} />
+          <CheckIcon className="size-12" />
         </span>
       </div>
       <div className="animate-rise [animation-delay:calc(var(--duration-celebrate)*0.4)]">
@@ -269,7 +269,7 @@ function DoneForToday({ deck }: { deck: DeckToday }) {
         <Stat label="Not seen yet" value={deck.new} order={2} />
       </div>
       <Button asChild size="lg" variant="outline">
-        <Link to="/">Back to overview</Link>
+        <Link to="/progress">Back to progress</Link>
       </Button>
     </div>
   )
