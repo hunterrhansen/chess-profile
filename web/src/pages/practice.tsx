@@ -16,6 +16,7 @@ import { type DeckAnswer, type DeckCard, type DeckToday, type EngineLines, send,
 import { CLASSIFICATION } from '@/lib/classification'
 import { shortDate } from '@/lib/format'
 import { moveLabel } from '@/lib/key-moments'
+import { PATTERNS, patternOf } from '@/lib/patterns'
 import { BOARDS, usePreferences } from '@/lib/preferences'
 import { durationMs } from '@/lib/motion'
 import { playSound } from '@/lib/sound'
@@ -169,7 +170,7 @@ function Position({ deck, card, onNext }: { deck: DeckToday; card: DeckCard; onN
 
       {failed && <p className="text-sm text-destructive">{failed}</p>}
       {result ? (
-        <Verdict result={result} why={why} onNext={onNext} />
+        <Verdict result={result} why={why} tactic={card.pattern} onNext={onNext} />
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-3 border-t-2 pt-4">
           <Button variant="outline" onClick={() => submit(SKIP)} disabled={!!tried}>
@@ -186,8 +187,20 @@ function Position({ deck, card, onNext }: { deck: DeckToday; card: DeckCard; onN
 
 const SKIP = '0000'
 
-function Verdict({ result, why, onNext }: { result: DeckAnswer; why: string | null | undefined; onNext: () => void }) {
+function Verdict({
+  result,
+  why,
+  tactic,
+  onNext,
+}: {
+  result: DeckAnswer
+  why: string | null | undefined
+  /** The tactic behind the position, said only once you've answered. */
+  tactic: string | null
+  onNext: () => void
+}) {
   const right = result.correct
+  const pattern = patternOf(tactic)
   return (
     <section
       aria-live="polite"
@@ -218,6 +231,11 @@ function Verdict({ result, why, onNext }: { result: DeckAnswer; why: string | nu
               <MarkedText text={why ?? 'It keeps the position; the move you played gave it away.'} />
             )}
           </p>
+          {pattern && pattern.label !== PATTERNS.other.label && (
+            <p className="mt-2 text-sm">
+              <span className="font-extrabold">{pattern.one}.</span> {pattern.tip}
+            </p>
+          )}
           <p className="mt-1 text-sm text-muted-foreground">{nextTime(result)}</p>
         </div>
       </div>

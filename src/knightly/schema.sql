@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS moves (
     clock_left      REAL,                   -- seconds on mover's clock after the move, if recorded
     time_spent      REAL,                   -- seconds spent on this move (increment-adjusted)
     eval_second     INTEGER,                -- eval of the engine's 2nd choice in fen_before, White POV; NULL if one legal move
+    pattern         TEXT,                   -- your mistakes only: the tactic behind it (patterns.py), a Lichess theme or "other"
     PRIMARY KEY (game_id, ply)
 );
 CREATE INDEX IF NOT EXISTS moves_user_class ON moves (is_user, classification);

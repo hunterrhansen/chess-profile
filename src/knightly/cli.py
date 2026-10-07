@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import analyze, db, schedule, update
+from . import analyze, db, patterns, schedule, update
 from .sources import pgn_file
 
 
@@ -93,6 +93,17 @@ def cmd_analyze(conn, args) -> None:
         sys.exit(130)
     if n:
         log(f"-> {n} games analysed")
+
+
+def cmd_patterns(conn, args) -> None:
+    with conn:
+        n = patterns.tag_all(conn)
+    log(f"{n} new mistakes tagged from the moves already stored")
+    try:
+        m = patterns.deepen(conn, args.engine, workers=args.workers, log=log)
+    except KeyboardInterrupt:
+        sys.exit(130)
+    log(f"-> {m} more tagged from the engine's lines")
 
 
 def cmd_stats(conn, args) -> None:
@@ -187,6 +198,12 @@ def main(argv=None) -> None:
     s.add_argument("--reclassify", action="store_true",
                    help="Re-label saved moves (best ... blunder, miss) without running the engine")
     s.set_defaults(func=cmd_analyze)
+
+    s = sub.add_parser("patterns", help="Tag each of your mistakes with the tactic behind it "
+                                        "(fork, pin, loose piece...). The daily update does this too.")
+    s.add_argument("--workers", type=int, help="Parallel engine processes (default: CPU cores - 1)")
+    s.add_argument("--engine", help="Path to Stockfish (default: $STOCKFISH or `stockfish` on PATH)")
+    s.set_defaults(func=cmd_patterns)
 
     s = sub.add_parser("update", help="Sync every account, analyse new games, back up the DB. "
                                       "What the daily schedule runs.")

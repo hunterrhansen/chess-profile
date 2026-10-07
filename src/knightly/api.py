@@ -29,7 +29,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import db, deck, lines, play, schedule, units, update
+from . import db, deck, lines, patterns, play, schedule, units, update
 from .analyze import THRESHOLDS, find_engine
 
 # A position counts as "winning" once the user's win chance reaches this after one of
@@ -510,6 +510,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
         Adds cards for newly analysed games first, so the deck is always current."""
         with write() as conn, conn:
             deck.sync(conn)
+            patterns.tag_all(conn)
             info = deck.stats(conn)
             info["results"] = deck.today_results(conn)
             nxt = deck.queue(conn)[:1]
@@ -517,7 +518,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
         if nxt:
             rows = query(
                 """SELECT c.game_id, c.ply, c.step, c.reviews, m.fen_before, m.color, m.san,
-                          m.uci, m.move_number, m.classification, m.win_pct_before,
+                          m.uci, m.move_number, m.classification, m.pattern, m.win_pct_before,
                           prev.uci AS prev_uci, g.opponent, g.played_at, g.time_control,
                           g.speed, g.user_outcome
                    FROM cards c
@@ -643,6 +644,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
 
         with write() as conn, conn:
             deck.sync(conn)
+            patterns.tag_all(conn)
             positions = deck.stats(conn)
         return {
             "units": path,
@@ -654,6 +656,28 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
                 "deck_total": positions["total"],
             },
         }
+
+    @app.get("/api/patterns")
+    def what_you_blunder(range: str = Query("90d", pattern="^(30d|90d|all)$")):
+        """What your mistakes come down to (patterns.py): how many of your blunders, mistakes
+        and misses in rated games in the range carry each tactic, most common first."""
+        with write() as conn, conn:
+            patterns.tag_all(conn)
+        start, _, _ = period_bounds(range)
+        rows = query(
+            f"""SELECT m.pattern, m.classification AS kind, count(*) AS n FROM moves m
+                JOIN games g ON g.id = m.game_id
+                WHERE m.is_user = 1 AND g.rated = 1 AND m.pattern IS NOT NULL
+                  {"AND g.played_at >= ?" if start else ""}
+                GROUP BY m.pattern, m.classification""", (start,) if start else ())
+        by: dict[str, dict] = {}
+        for r in rows:
+            p = by.setdefault(r["pattern"], {"pattern": r["pattern"], "total": 0, "blunder": 0, "mistake": 0, "miss": 0})
+            p[r["kind"]] = r["n"]
+            p["total"] += r["n"]
+        pending = by.pop(patterns.PENDING, None)
+        ranked = sorted(by.values(), key=lambda p: (p["pattern"] == patterns.OTHER, -p["total"]))
+        return {"range": range, "patterns": ranked, "pending": pending["total"] if pending else 0}
 
     @app.get("/api/overview")
     def overview(range: str = Query("90d", pattern="^(30d|90d|all)$")):
