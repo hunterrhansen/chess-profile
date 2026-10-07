@@ -5,9 +5,22 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Knightly</title>
+    <!-- Shown until the app's code has loaded, then React replaces it. Colors are copied from
+         styles/tokens.css (page, brand…), since the stylesheet isn't loaded yet. -->
+    <style>
+      .boot { position: fixed; inset: 0; display: grid; place-items: center; background: #f4f6ef; }
+      @media (prefers-color-scheme: dark) { .boot { background: #161513; } }
+      .boot svg { width: 64px; height: 64px; animation: boot-hop 1.2s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+      @keyframes boot-hop { 0%, 55%, 100% { transform: translateY(0); } 25% { transform: translateY(-14%); } }
+      @media (prefers-reduced-motion: reduce) { .boot svg { animation: none; } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot" role="status" aria-label="Loading Knightly">
+        <svg viewBox="0 0 100 100" aria-hidden="true"><rect x="4" y="8" width="92" height="88" rx="22" fill="#4a9620"/><rect x="4" y="4" width="92" height="88" rx="22" fill="#6cc23a"/><circle cx="72" cy="27" r="13" fill="#ffc233"/><circle cx="78.5" cy="22" r="11" fill="#6cc23a"/><g transform="translate(6 18) scale(.7)"><path fill="#13200c" d="M30 88 L74 88 Q78 88 77 84 L72 66 Q81 54 80 40 Q78 21 60 12 L57 6 Q55 3 52 6 L48 13 Q41 14 35 19 L21 37 Q17 43 21 47 L26 52 Q30 55 35 52 L44 46 Q49 45 48 50 Q45 60 36 68 Q29 75 30 84 Z"/><circle cx="50" cy="28" r="3.8" fill="#6cc23a"/></g></svg>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

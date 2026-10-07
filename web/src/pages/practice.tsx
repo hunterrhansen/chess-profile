@@ -3,6 +3,7 @@ import { Check, LoaderCircle, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { Confetti } from '@/components/confetti'
+import { EmptyState, LoadingBlock } from '@/components/empty-state'
 import { MoveBadge } from '@/components/move-badge'
 import { MarkedText } from '@/components/move-text'
 import { Badge } from '@/components/ui/badge'
@@ -10,7 +11,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardHeader } from '@/components/ui/card'
 import { CountUp } from '@/components/ui/count-up'
 import { Progress } from '@/components/ui/progress'
-import { Skeleton } from '@/components/ui/skeleton'
 import { StatLabel, StatValue } from '@/components/ui/stat'
 import { type DeckAnswer, type DeckCard, type DeckToday, type EngineLines, send, useApi } from '@/lib/api'
 import { CLASSIFICATION } from '@/lib/classification'
@@ -33,7 +33,7 @@ export function PracticePage() {
     <div className="mx-auto flex w-full max-w-xl flex-col gap-5">
       {error && <p className="text-sm text-destructive">Couldn't load your positions. {error}</p>}
       {!data ? (
-        <Skeleton className="aspect-square w-full rounded-xl" />
+        <LoadingBlock label="Picking today's positions…" className="aspect-square w-full rounded-xl" />
       ) : data.card ? (
         // Keyed by position, so the board and answer reset for each card.
         <Position key={`${data.card.game_id}-${data.card.ply}`} deck={data} card={data.card} onNext={reload} />
@@ -235,13 +235,17 @@ function DoneForToday({ deck }: { deck: DeckToday }) {
   if (deck.total === 0) {
     return (
       <Card>
-        <CardHeader>
-          <h1 className="text-2xl font-semibold">No positions yet</h1>
-          <p className="text-muted-foreground">
-            Positions come from your analysed games: every mistake where one move was clearly better. Run an
-            update in Settings, then come back.
-          </p>
-        </CardHeader>
+        <EmptyState
+          title="No positions yet"
+          action={
+            <Button asChild>
+              <Link to="/settings">Go to Settings</Link>
+            </Button>
+          }
+        >
+          Positions come from your analysed games: every mistake where one move was clearly better. Run an update
+          in Settings, then come back.
+        </EmptyState>
       </Card>
     )
   }

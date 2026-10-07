@@ -65,6 +65,7 @@
     --animate-float-up: float-up 1100ms var(--ease-out) both;
     --animate-bump: bump var(--duration-pop) var(--ease-out) both;
     --animate-beacon: beacon 2s var(--ease-out) infinite;
+    --animate-hop: hop 1.2s var(--ease-move) infinite;
     --animate-confetti: confetti var(--duration-celebrate) var(--ease-out) both;
     /* a badge lands: grows past its size, settles */
     @keyframes pop {
@@ -125,6 +126,11 @@
     @keyframes beacon {
         0% { box-shadow: 0 0 0 0 var(--beacon, var(--brand)); }
         70%, 100% { box-shadow: 0 0 0 14px transparent; }
+    }
+    /* loading: the logo hops in place, a knight about to move */
+    @keyframes hop {
+        0%, 55%, 100% { transform: translateY(0); }
+        25% { transform: translateY(-14%); }
     }
     /* one piece of confetti: thrown up and out to (--dx, --up), then falls to --fall,
        spinning and fading */
