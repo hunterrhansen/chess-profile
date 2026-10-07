@@ -1,1201 +1,459 @@
 import { Chess } from 'chess.js'
-import { ArrowLeftIcon, ArrowRightIcon, ArrowSquareOutIcon, ArrowUUpLeftIcon, CaretLeftIcon, CaretLineLeftIcon, CaretLineRightIcon, CaretRightIcon, CircleNotchIcon, PlayIcon, PlusIcon, TrashIcon } from '@phosphor-icons/react'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
-import { Board, type BoardArrow, type Palette } from '@/components/board'
-import { ResultBadge } from '@/components/game-bits'
-import { EvalBar as EvalBarView } from '@/components/eval-bar'
+import { CheckIcon, CircleNotchIcon, ListIcon, XIcon } from '@phosphor-icons/react'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router'
 import { LoadingBlock } from '@/components/empty-state'
 import { MoveBadge } from '@/components/move-badge'
 import { MarkedText, MoveText } from '@/components/move-text'
+import { LinePanel, ReviewBoard } from '@/components/review-bits'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { type Classification, type EngineLine, type EngineLines, type GameDetail, type LineKind, type MoveRow, type Note, send, useApi } from '@/lib/api'
-import { CLASSIFICATION, isSound } from '@/lib/classification'
-import { type KeyMoment, keyMoments } from '@/lib/key-moments'
-import { clock, longDate, shortDate, thinkTime, timeControl } from '@/lib/format'
+import { type DeckAnswer, type GameDetail, type LineKind, send, useApi } from '@/lib/api'
+import { CLASSIFICATION } from '@/lib/classification'
+import { nextTime, shortDate } from '@/lib/format'
+import { type LessonStep, type StepMark, keyMoments, lessonSteps, moveLabel } from '@/lib/key-moments'
 import { lastLocation } from '@/lib/last-location'
+import { durationMs } from '@/lib/motion'
 import { BOARDS, usePreferences } from '@/lib/preferences'
+import { type Replay, type Side, useEngineLines, useLineView, useReplay } from '@/lib/replay'
+import { playSound } from '@/lib/sound'
 import { cn } from '@/lib/utils'
+import { PlayBoard } from '@/pages/play'
 
-const TIME_BAR_FULL = 100 // seconds of thinking that fill a time bar
-
-type Side = 'white' | 'black'
-
-/** Everything derived from the game once: positions, last-move squares, win%s, clocks. */
-function useReplay(game: GameDetail | null) {
-  return useMemo(() => {
-    if (!game) return null
-    const chess = new Chess(game.start_fen ?? undefined)
-    const fens = [chess.fen()]
-    const squares: { from: string; to: string }[] = []
-    for (const san of game.san) {
-      try {
-        const m = chess.move(san)
-        fens.push(chess.fen())
-        squares.push({ from: m.from, to: m.to })
-      } catch {
-        break // stop at anything chess.js can't play rather than show a wrong position
-      }
-    }
-    const moves = game.plies.length === squares.length ? game.plies : []
-    // White's win% after each ply (index 0 = start position).
-    const whiteWin = [moves[0]?.win_pct_before ?? 50]
-    for (const m of moves) {
-      const wa = m.win_pct_after ?? 50
-      whiteWin.push(m.color === 'white' ? wa : 100 - wa)
-    }
-    const [base] = (game.time_control ?? '').split('+').map(Number)
-    return { fens, squares, moves, whiteWin, baseClock: Number.isFinite(base) && base > 0 ? base : null }
-  }, [game])
-}
-
-/** "Why" / "Best line" for one move, fetched the first time it's asked for, then kept. */
-function useEngineLines(gameId: string | undefined, ply: number | null) {
-  const [cache, setCache] = useState<Record<number, { data?: EngineLines; error?: string }>>({})
-  const entry = ply == null ? undefined : cache[ply]
-  useEffect(() => {
-    if (ply == null || entry) return
-    const ctrl = new AbortController()
-    fetch(`/api/games/${gameId}/lines/${ply}`, { signal: ctrl.signal })
-      .then(async (res) => {
-        const body = await res.json()
-        if (!res.ok) throw new Error(body.detail ?? res.status)
-        setCache((c) => ({ ...c, [ply]: { data: body } }))
-      })
-      .catch((e: Error) => {
-        if (e.name !== 'AbortError') setCache((c) => ({ ...c, [ply]: { error: e.message } }))
-      })
-    return () => ctrl.abort()
-  }, [gameId, ply, entry])
-  return entry ?? null
-}
-
+/**
+ * A game's review, as a lesson: one step per key moment, the way Practice and Puzzles work.
+ * Where you went wrong and one move was clearly better, you find it on the board (your answer
+ * is that review-deck position's answer for the day); where no single move fixes it, the step
+ * shows what happened; a great move gets a gold sheet. All moves (the whole game) is one tap
+ * away, and the last step finishes the review.
+ */
 export function ReviewPage() {
   const { id } = useParams()
   const { data: game, error } = useApi<GameDetail>(`/api/games/${id}`)
   const replay = useReplay(game)
-  const notes = useApi<Note[]>(`/api/games/${id}/notes`)
-  const notedPlies = useMemo(() => new Set(notes.data?.flatMap((n) => n.plies)), [notes.data])
+  const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
-  const last = replay ? replay.fens.length - 1 : 0
-  const ply = Math.min(Number(params.get('ply') ?? 0), last)
-  const analysed = !!replay?.moves.length
-  // Key moments first; All moves is a tab away (?tab=moves).
-  const tab = analysed && params.get('tab') !== 'moves' ? 'moments' : 'moves'
   const me: Side = game?.color ?? 'white'
   const opponent = (me === 'white' ? game?.black : game?.white) ?? 'They'
-  const moments = useMemo(() => (replay ? keyMoments(replay.moves, me, opponent) : []), [replay, me, opponent])
-  const navigate = useNavigate()
+  const steps = useMemo(
+    () => (game && replay ? lessonSteps(keyMoments(replay.moves, me, opponent), game.deck_plies) : []),
+    [game, replay, me, opponent],
+  )
+  const index = Math.max(0, Math.min(steps.length - 1, Number(params.get('step') ?? 1) - 1))
+  const [marks, setMarks] = useState<Record<number, StepMark>>({})
   const [finishing, setFinishing] = useState(false)
-  const { prefs } = usePreferences()
-  // With the "on request" preference, the best move stays hidden until asked for, per move.
-  const [revealedPly, setRevealedPly] = useState<number | null>(null)
-  const showBest = prefs.bestArrow === 'auto' || revealedPly === ply
-  // An engine line shown on the board in place of the game; leaving the move closes it.
-  const [line, setLine] = useState<{ kind: LineKind; step: number } | null>(null)
-  const lineEntry = useEngineLines(id, line ? ply : null)
-  const lineView = useMemo(() => {
-    const data = line && lineEntry?.data?.[line.kind]
-    if (!data) return null
-    const chess = new Chess(data.start_fen)
-    const fens = [chess.fen()]
-    const squares: { from: string; to: string }[] = []
-    for (const uci of data.moves) {
-      const m = chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] })
-      fens.push(chess.fen())
-      squares.push({ from: m.from, to: m.to })
-    }
-    return { data, fens, squares, firstPly: data.kind === 'best' ? ply : ply + 1 }
-  }, [line, lineEntry, ply])
-  const lineLength = lineView?.squares.length ?? 0
-  const step = line ? Math.min(Math.max(line.step, 1), Math.max(lineLength, 1)) : 0
-  const setStep = useCallback(
-    (s: number) => setLine((l) => (l ? { ...l, step: Math.max(1, Math.min(lineLength, s)) } : l)),
-    [lineLength],
-  )
-
-  const setPly = useCallback(
-    (p: number) => {
-      setLine(null)
-      return setParams(
-        (prev) => {
-          const next = new URLSearchParams(prev)
-          if (p > 0) next.set('ply', String(p))
-          else next.delete('ply')
-          return next
-        },
-        { replace: true },
-      )
-    },
-    [setParams],
-  )
-
-  // A game opens on its first key moment, unless the link says where to start.
-  const opened = useRef<string | null>(null)
-  useEffect(() => {
-    if (!replay || opened.current === id) return
-    opened.current = id ?? null
-    if (!params.has('ply') && moments.length) setPly(moments[0].ply)
-  }, [replay, id, params, moments, setPly])
-
-  // On the Key moments tab, ← and → jump between moments; on All moves, between moves.
-  const prevMoment = [...moments].reverse().find((k) => k.ply < ply)
-  const nextMoment = moments.find((k) => k.ply > ply)
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.metaKey || e.ctrlKey || e.altKey) return
-      if (line) {
-        // While a line is open the keys step through it; Escape goes back to the game.
-        if (e.key === 'Escape') setLine(null)
-        const to = { ArrowLeft: step - 1, ArrowRight: step + 1, Home: 1, End: lineLength }[e.key]
-        if (to !== undefined) setStep(to)
-        if (to !== undefined || e.key === 'Escape') e.preventDefault()
-        return
-      }
-      const byMoment = tab === 'moments' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')
-      const to = byMoment
-        ? (e.key === 'ArrowLeft' ? prevMoment : nextMoment)?.ply
-        : { ArrowLeft: ply - 1, ArrowRight: ply + 1, Home: 0, End: last }[e.key]
-      if (byMoment) e.preventDefault()
-      if (to === undefined) return
-      e.preventDefault()
-      setPly(Math.max(0, Math.min(last, to)))
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [ply, last, setPly, line, step, lineLength, setStep, tab, prevMoment, nextMoment])
 
   if (error) return <p className="text-sm text-destructive">Couldn't load this game. {error}</p>
-  if (!game || !replay) return <ReviewSkeleton />
-
-  const them: Side = me === 'white' ? 'black' : 'white'
-  const move = replay.moves[ply - 1] as MoveRow | undefined
-  const san = game.san[ply - 1]
-  const mine = ply > 0 && (ply % 2 === 1) === (me === 'white')
-  const moverWhite = ply % 2 === 1
-  // Your win chance (not the mover's): before the move, and at the end of the open line.
-  const yours = (moverPct: number | null | undefined) =>
-    moverPct == null ? null : Math.round(mine ? moverPct : 100 - moverPct)
-  const inLine = !!lineView
-  const lineWhiteWin =
-    lineView?.data.win_pct != null ? (moverWhite ? lineView.data.win_pct : 100 - lineView.data.win_pct) : null
+  if (!game || !replay) return <LoadingBlock label="Setting up the lesson…" className="mx-auto aspect-square w-full max-w-xl rounded-xl" />
+  // Not analysed yet: nothing to teach, but the moves can still be stepped through.
+  if (!replay.moves.length) return <Navigate to={`/games/${game.id}/moves`} replace />
 
   const finish = async () => {
     setFinishing(true)
     try {
       await send('POST', `/api/games/${game.id}/review`)
-      navigate(`/games/${game.id}/done`, { state: { celebrate: true } })
+      const results = steps.map((s) => ({
+        ply: s.ply,
+        san: replay.moves[s.ply - 1].san,
+        mark: marks[s.ply] ?? (s.type === 'praise' ? 'praise' : 'seen'),
+      }))
+      navigate(`/games/${game.id}/done`, { state: { celebrate: true, marks: results } })
     } catch {
       setFinishing(false)
     }
   }
 
-  return (
-    <div className="flex flex-col gap-3">
-      {/* Title row: which game this is, so the analysis sidebar can start with the move. */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-        <Link
-          to={lastLocation('games-list', '/games')}
-          className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeftIcon className="size-4" /> Games
-        </Link>
-        <span className="flex min-w-0 items-center gap-2">
-          <ResultBadge outcome={game.outcome} />
-          <span className="font-medium">
-            vs {me === 'white' ? game.black : game.white}{' '}
-            <span className="font-normal text-muted-foreground">{me === 'white' ? game.black_elo : game.white_elo}</span>
-          </span>
-          <span className="truncate text-muted-foreground">
-            {[resultPhrase(game.outcome, game.ended_by), longDate(game.played_at), timeControl(game.time_control)]
-              .filter(Boolean)
-              .join(' · ')}
-          </span>
-        </span>
-        {game.url && (
-          <a
-            href={game.url}
-            target="_blank"
-            rel="noreferrer"
-            className="ml-auto flex items-center gap-1 text-muted-foreground hover:text-foreground"
-          >
-            Chess.com <ArrowSquareOutIcon className="size-3.5" />
-          </a>
-        )}
-      </div>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-[auto_minmax(0,1fr)_auto]">
-        {/* On a phone the stepper's headline sits above the board; on wider screens it heads
-            the right column. */}
-        {analysed && moments.length > 0 && (
-          <MomentStepper
-            moments={moments}
-            ply={ply}
-            prev={prevMoment}
-            next={nextMoment}
-            dim={inLine}
-            onGo={setPly}
-            className="lg:col-start-2 lg:row-start-1"
-          />
-        )}
-        <div className="mx-auto flex w-full max-w-[calc(100svh-170px)] min-w-72 flex-col gap-1.5 lg:col-start-1 lg:row-span-3 lg:row-start-1">
-          <PlayerStrip
-            name={me === 'white' ? game.black : game.white}
-            rating={me === 'white' ? game.black_elo : game.white_elo}
-            seconds={clockAt(replay.moves, them, ply, replay.baseClock)}
-            dim={inLine}
-            tag={inLine ? 'Engine line · not played' : undefined}
-          />
-          <div className="flex gap-2">
-            {lineView ? (
-              <EvalBar
-                whiteWin={lineWhiteWin ?? replay.whiteWin[ply]}
-                label={lineView.data.mate != null ? `M${Math.abs(lineView.data.mate)}` : null}
-                orientation={me}
-              />
-            ) : (
-              <EvalBar whiteWin={replay.whiteWin[ply]} move={move} orientation={me} />
-            )}
-            {lineView ? (
-              <ReviewBoard
-                fen={lineView.fens[step]}
-                orientation={me}
-                lastMove={lineView.squares[step - 1]}
-                nextMove={lineView.squares[step]}
-                showBest={false}
-                palette={BOARDS[prefs.board]}
-                inLine
-              />
-            ) : (
-              <ReviewBoard
-                fen={replay.fens[ply]}
-                orientation={me}
-                lastMove={replay.squares[ply - 1]}
-                move={move}
-                showBest={showBest}
-                palette={BOARDS[prefs.board]}
-              />
-            )}
-          </div>
-          <PlayerStrip
-            name={me === 'white' ? game.white : game.black}
-            rating={me === 'white' ? game.white_elo : game.black_elo}
-            seconds={clockAt(replay.moves, me, ply, replay.baseClock)}
-            dim={inLine}
-            you
-          />
-        </div>
+  if (!steps.length) return <QuietGame game={game} opponent={opponent} finishing={finishing} onFinish={finish} />
 
-        <div className="relative min-h-[28rem] lg:col-start-2 lg:row-start-2">
-          <aside className="panel flex flex-col overflow-hidden lg:absolute lg:inset-0">
-            {prefs.showGraph && replay.moves.length > 0 && (
-              <WinGraph replay={replay} me={me} ply={ply} onSelect={setPly} />
-            )}
-            {line && move && san ? (
-              <LinePanel
-                kind={line.kind}
-                view={lineView}
-                error={lineEntry?.error ?? null}
-                step={step}
-                onStep={setStep}
-                ply={ply}
-                san={san}
-                classification={move.classification}
-                yourBefore={yours(move.win_pct_before)}
-                yourEnd={yours(lineView?.data.win_pct)}
-                onBack={() => setLine(null)}
-                onSwitch={() => setLine({ kind: line.kind === 'why' ? 'best' : 'why', step: 1 })}
-              />
-            ) : (
-            <MovePanel
-              ply={ply}
-              san={san}
-              move={move}
-              analysed={replay.moves.length > 0}
-              mine={mine}
-              opponent={me === 'white' ? game.black : game.white}
-              clockBefore={ply ? clockAt(replay.moves, ply % 2 === 1 ? 'white' : 'black', ply - 1, replay.baseClock) : null}
-              clockAfter={ply ? clockAt(replay.moves, ply % 2 === 1 ? 'white' : 'black', ply, replay.baseClock) : null}
-              showBest={showBest}
-              onReveal={() => setRevealedPly(ply)}
-              onShow={(kind) => setLine({ kind, step: 1 })}
-            />
-            )}
-            {!line && notes.data && (
-              <PositionNotes
-                key={ply}
-                gameId={game.id}
-                ply={ply}
-                fen={replay.fens[ply]}
-                notes={notes.data.filter((n) => n.plies.includes(ply) || (ply === 0 && !n.plies.length))}
-                onChange={notes.reload}
-              />
-            )}
-            <Tabs
-              value={tab}
-              onValueChange={(v) =>
-                setParams(
-                  (prev) => {
-                    const next = new URLSearchParams(prev)
-                    if (v === 'moves') next.set('tab', v)
-                    else next.delete('tab')
-                    return next
-                  },
-                  { replace: true },
-                )
-              }
-              className="border-b px-3 pt-2 pb-2"
-            >
-              <TabsList className="w-full">
-                <TabsTrigger value="moments" disabled={!analysed}>
-                  Key moments
-                </TabsTrigger>
-                <TabsTrigger value="moves">All moves</TabsTrigger>
-              </TabsList>
-            </Tabs>
-            <div className={cn('flex min-h-0 flex-1 flex-col transition-opacity', inLine && 'opacity-40')}>
-              {tab === 'moves' ? (
-                <MoveList san={game.san} moves={replay.moves} ply={ply} noted={notedPlies} onSelect={setPly} />
-              ) : (
-                <KeyMoments moments={moments} moves={replay.moves} ply={ply} onSelect={setPly} />
-              )}
-            </div>
-            {/* While a line is open these step through the line instead of the game. */}
-            <div className="grid grid-cols-4 gap-2 border-t p-2">
-              <NavButton label="First move" onClick={() => (line ? setStep(1) : setPly(0))} icon={<CaretLineLeftIcon />} />
-              <NavButton
-                label="Previous move"
-                onClick={() => (line ? setStep(step - 1) : setPly(Math.max(0, ply - 1)))}
-                icon={<CaretLeftIcon />}
-              />
-              <NavButton
-                label="Next move"
-                onClick={() => (line ? setStep(step + 1) : setPly(Math.min(last, ply + 1)))}
-                icon={<CaretRightIcon />}
-              />
-              <NavButton label="Last move" onClick={() => (line ? setStep(lineLength) : setPly(last))} icon={<CaretLineRightIcon />} />
-            </div>
-          </aside>
-        </div>
-        {analysed && (
-          <div className="flex flex-col gap-1.5 lg:col-start-2 lg:row-start-3">
-            <Button size="lg" className="w-full" onClick={finish} disabled={finishing}>
-              {finishing && <CircleNotchIcon className="animate-spin" />}
-              {game.reviewed_at ? 'Finish review again' : 'Finish review'}
-            </Button>
-            {game.reviewed_at && (
-              <p className="text-center text-xs text-muted-foreground">
-                Reviewed {shortDate(game.reviewed_at)} ·{' '}
-                <Link to={`/games/${game.id}/done`} className="font-bold text-brand-text hover:underline">
-                  See the summary
-                </Link>
-              </p>
-            )}
-          </div>
-        )}
-      </div>
+  const step = steps[index]
+  const last = index === steps.length - 1
+  return (
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-5">
+      {/* Keyed by move, so the board, answer and sheet reset for each step. */}
+      <Step
+        key={step.ply}
+        game={game}
+        replay={replay}
+        step={step}
+        index={index}
+        total={steps.length}
+        me={me}
+        opponent={opponent}
+        last={last}
+        finishing={finishing}
+        onMark={(mark) => setMarks((m) => ({ ...m, [step.ply]: mark }))}
+        onNext={last ? finish : () => setParams({ step: String(index + 2) }, { replace: true })}
+      />
     </div>
   )
 }
 
-/** "Key moment 2 of 5", a bar of how far through you are, ← / →, and what happened here. */
-function MomentStepper({
-  moments,
-  ply,
-  prev,
-  next,
-  dim,
-  onGo,
-  className,
+const SKIP = '0000'
+
+function Step({
+  game,
+  replay,
+  step,
+  index,
+  total,
+  me,
+  opponent,
+  last,
+  finishing,
+  onMark,
+  onNext,
 }: {
-  moments: KeyMoment[]
-  ply: number
-  prev?: KeyMoment
-  next?: KeyMoment
-  dim?: boolean
-  onGo: (ply: number) => void
-  className?: string
+  game: GameDetail
+  replay: Replay
+  step: LessonStep
+  index: number
+  total: number
+  me: Side
+  opponent: string
+  last: boolean
+  finishing: boolean
+  onMark: (mark: StepMark) => void
+  onNext: () => void
 }) {
-  const at = moments.findIndex((k) => k.ply === ply)
-  const seen = moments.filter((k) => k.ply <= ply).length
+  const { prefs } = usePreferences()
+  const ply = step.ply
+  const move = replay.moves[ply - 1]
+  const before = useMemo(() => new Chess(replay.fens[ply - 1]), [replay, ply])
+  const [selected, setSelected] = useState<string | null>(null)
+  const [tried, setTried] = useState<string | null>(null) // your answer, as UCI
+  const [result, setResult] = useState<DeckAnswer | null>(null)
+  const [failed, setFailed] = useState<string | null>(null)
+  const [line, setLine] = useState<{ kind: LineKind; step: number } | null>(null)
+  const { view: lineView, error: lineError } = useLineView(game.id, ply, line)
+  const lineLength = lineView?.squares.length ?? 0
+  const lineStep = line ? Math.min(Math.max(line.step, 1), Math.max(lineLength, 1)) : 0
+
+  const find = step.type === 'find'
+  const answered = !find || !!result
+  // The engine's one-line explanation of the best line, once there's something to explain.
+  const lines = useEngineLines(game.id, answered && step.type !== 'praise' ? ply : null)
+  const why = lines?.data ? (lines.data.best?.summary ?? null) : lines?.error ? null : undefined
+
+  // The verdict's sound lands with the square's flash, after the piece.
+  useEffect(() => {
+    if (result) return playSound(result.correct ? 'right' : 'wrong', durationMs('--duration-move'))
+  }, [result])
+
+  const submit = (uci: string) => {
+    setTried(uci)
+    setSelected(null)
+    send<DeckAnswer>('POST', '/api/deck/answer', { game_id: game.id, ply, uci })
+      .then((r) => {
+        setResult(r)
+        onMark(r.correct ? 'found' : 'missed')
+      })
+      .catch((e: Error) => {
+        setTried(null)
+        setFailed(`Couldn't check that move. ${e.message}`)
+      })
+  }
+  const tryMove = (from: string, to: string) => {
+    if (tried) return false
+    const probe = new Chess(before.fen())
+    try {
+      const m = probe.move({ from, to, promotion: 'q' })
+      submit(m.from + m.to + (m.promotion ?? ''))
+      return true
+    } catch {
+      return false
+    }
+  }
+  const skipped = tried === SKIP
+
+  // A found move is shown played; a miss shows the engine's move as an arrow.
+  const shown = useMemo(() => {
+    if (!result?.correct || !tried) return before
+    const after = new Chess(before.fen())
+    after.move({ from: tried.slice(0, 2), to: tried.slice(2, 4), promotion: tried[4] })
+    return after
+  }, [result, tried, before])
+
+  const san = move.san
+  const pctBefore = Math.round(move.win_pct_before ?? 50)
+  const pctAfter = Math.round(move.win_pct_after ?? 50)
+  const slipped = step.kind === 'miss' || step.short.startsWith('Missed')
+  const prompt =
+    step.type === 'praise'
+      ? step.headline
+      : step.type === 'look'
+        ? `You played ${san} here.`
+        : slipped
+          ? `${opponent} just slipped. Find the move that punishes it.`
+          : `You played ${san} here. Find a better move.`
+  const sub =
+    step.type === 'praise'
+      ? step.headline.includes('%') ? '' : `Your chance: ${pctAfter}%.`
+      : step.type === 'look'
+        ? step.headline
+        : slipped
+          ? `You played ${san}, and your chance fell from ${pctBefore}% to ${pctAfter}%.`
+          : `${san} took your chance from ${pctBefore}% to ${pctAfter}%.${step.short.includes('they missed it') ? ` ${opponent} missed it.` : ''}`
+  const kind = CLASSIFICATION[step.kind]
+  const done = index + (answered ? 1 : 0)
+  const label = moveLabel(ply, san)
+
+  return (
+    <>
+      <header className="flex items-center gap-3">
+        <Button asChild variant="ghost" size="icon" aria-label="Stop reviewing">
+          <Link to={lastLocation('games-list', '/games')}>
+            <XIcon />
+          </Link>
+        </Button>
+        <Progress className="flex-1" label="Key moments" hideLabel value={(done / total) * 100} />
+        <span key={done} className="animate-bump text-sm font-extrabold tabular-nums">
+          {done} of {total}
+        </span>
+        <Button asChild variant="outline" size="sm" className="ml-1">
+          <Link to={`/games/${game.id}/moves?ply=${ply}`} aria-label="All moves">
+            <ListIcon />
+            <span className="hidden sm:inline">All moves</span>
+          </Link>
+        </Button>
+      </header>
+
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary">
+            vs {opponent} · {shortDate(game.played_at)} · move {Math.ceil(ply / 2)}
+          </Badge>
+          <span className="flex items-center gap-1.5 text-sm font-bold" style={{ color: kind.color }}>
+            <MoveBadge kind={step.kind} />
+            {kind.label}
+          </span>
+        </div>
+        <h1 className="text-3xl font-bold text-balance">{prompt}</h1>
+        {sub && <p className="text-muted-foreground">{sub}</p>}
+      </div>
+
+      {/* As big as fits: the full width, or the window's height minus the prompt and answer. */}
+      <div className="mx-auto flex w-full max-w-[calc(100svh-300px)] min-w-64 flex-col gap-2">
+        {line && (
+          <p className="flex items-center gap-2 rounded-lg bg-sky/15 px-3 py-2 text-sm font-extrabold">
+            <span className="size-2.5 rounded-full bg-sky" /> Engine line, not the game.
+            {lineView && ` Move ${lineStep} of ${lineLength}.`}
+          </p>
+        )}
+        {line ? (
+          <ReviewBoard
+            fen={lineView ? lineView.fens[lineStep] : replay.fens[ply - 1]}
+            orientation={me}
+            lastMove={lineView?.squares[lineStep - 1]}
+            nextMove={lineView?.squares[lineStep]}
+            showBest={false}
+            palette={BOARDS[prefs.board]}
+            inLine
+          />
+        ) : find ? (
+          <PlayBoard
+            chess={shown}
+            orientation={me}
+            lastMove={result?.correct && tried ? { from: tried.slice(0, 2), to: tried.slice(2, 4) } : replay.squares[ply - 2]}
+            hint={result && !result.correct ? result.best_uci : null}
+            selected={selected}
+            interactive={!tried}
+            palette={BOARDS[prefs.board]}
+            flash={result && tried && !skipped ? { square: tried.slice(2, 4), tone: result.correct ? 'right' : 'wrong' } : undefined}
+            onMove={tryMove}
+            onSelect={setSelected}
+          />
+        ) : (
+          <ReviewBoard
+            fen={replay.fens[ply]}
+            orientation={me}
+            lastMove={replay.squares[ply - 1]}
+            move={move}
+            showBest={step.type === 'look'}
+            palette={BOARDS[prefs.board]}
+          />
+        )}
+      </div>
+
+      {failed && <p className="text-sm text-destructive">{failed}</p>}
+      {line ? (
+        <div className="panel overflow-hidden">
+          <LinePanel
+            kind={line.kind}
+            view={lineView}
+            error={lineError}
+            step={lineStep}
+            onStep={(s) => setLine((l) => (l ? { ...l, step: Math.max(1, Math.min(lineLength, s)) } : l))}
+            ply={ply}
+            san={san}
+            classification={move.classification}
+            yourBefore={pctBefore}
+            yourEnd={lineView?.data.win_pct != null ? Math.round(lineView.data.win_pct) : null}
+            onBack={() => setLine(null)}
+            backLabel="Back to the lesson"
+            onSwitch={() => setLine({ kind: line.kind === 'why' ? 'best' : 'why', step: 1 })}
+          />
+        </div>
+      ) : !answered ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t-2 pt-4">
+          <Button variant="outline" onClick={() => submit(SKIP)} disabled={!!tried}>
+            Show me
+          </Button>
+          <p className="text-sm text-muted-foreground">
+            {tried ? 'Checking…' : selected ? 'Now pick where it goes.' : 'Tap a piece, then where it goes. Or drag it.'}
+          </p>
+        </div>
+      ) : (
+        <Sheet
+          tone={step.type === 'praise' ? 'gold' : result?.correct ? 'right' : 'wrong'}
+          icon={
+            step.type === 'praise' ? (
+              <MoveBadge kind={step.kind} pop className="size-10 text-lg [&_svg]:size-6" />
+            ) : result?.correct ? (
+              <CheckIcon className="size-6" />
+            ) : (
+              <XIcon className="size-6" />
+            )
+          }
+          title={
+            step.type === 'praise' ? (
+              step.kind === 'best' ? (
+                <>You punished it: <MoveText ply={ply} san={san} number /></>
+              ) : (
+                <>{kind.label} move: <MoveText ply={ply} san={san} number /></>
+              )
+            ) : result?.correct ? (
+              `Found it: ${result.best_san}`
+            ) : (
+              `The move was ${result?.best_san ?? move.best_san}`
+            )
+          }
+          onLine={step.type === 'praise' ? undefined : () => setLine({ kind: result?.correct ? 'best' : 'why', step: 1 })}
+          next={last ? 'Finish review' : 'Continue'}
+          busy={finishing}
+          onNext={onNext}
+        >
+          <p>
+            {step.type === 'praise' ? (
+              PRAISE[step.kind] ?? step.headline
+            ) : why === undefined ? (
+              <span className="flex items-center gap-2 text-muted-foreground">
+                <CircleNotchIcon className="size-4 animate-spin" /> Asking Stockfish why…
+              </span>
+            ) : (
+              <MarkedText text={why ?? `${label} gave it away; the engine's move keeps the position.`} />
+            )}
+          </p>
+          {step.type !== 'praise' && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {step.type === 'look'
+                ? "It wasn't the only good move, so this one stays out of your review deck."
+                : `In your review deck. ${result ? nextTime(result) : ''}`}
+            </p>
+          )}
+        </Sheet>
+      )}
+    </>
+  )
+}
+
+const PRAISE: Partial<Record<LessonStep['kind'], string>> = {
+  brilliant: 'A sound sacrifice: it gives up material and the engine agrees.',
+  great: 'The only move that held. Anything else lost a lot.',
+  best: "They blundered, and you took what they gave: the engine's top choice.",
+}
+
+/** The sheet that slides up under the board: green found, red missed, gold for a great move. */
+function Sheet({
+  tone,
+  icon,
+  title,
+  children,
+  onLine,
+  next,
+  busy,
+  onNext,
+}: {
+  tone: 'right' | 'wrong' | 'gold'
+  icon: React.ReactNode
+  title: React.ReactNode
+  children: React.ReactNode
+  onLine?: () => void
+  next: string
+  busy: boolean
+  onNext: () => void
+}) {
   return (
     <section
-      aria-label="Key moments"
-      className={cn('panel flex flex-col gap-2.5 px-4 py-3.5 transition-opacity', dim && 'opacity-40', className)}
+      aria-live="polite"
+      className={cn(
+        'panel flex animate-sheet flex-col gap-3 p-5',
+        tone === 'right' ? 'border-brand bg-brand/15' : tone === 'wrong' ? 'border-danger bg-danger/15' : 'border-gold bg-gold/20',
+      )}
     >
-      <div className="flex items-center justify-between gap-2">
-        <span className="eyebrow">
-          {at >= 0 ? `Key moment ${at + 1} of ${moments.length}` : `Between key moments · ${seen} of ${moments.length}`}
+      <div className="flex items-start gap-3">
+        <span
+          className={cn(
+            'grid size-10 shrink-0 place-items-center rounded-full [animation-delay:calc(var(--duration-sheet)*0.6)]',
+            tone === 'right' && 'animate-bounce-in bg-brand text-on-brand',
+            tone === 'wrong' && 'animate-shake bg-danger text-on-danger',
+          )}
+        >
+          {icon}
         </span>
-        <span className="flex gap-1.5">
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label="Previous key moment"
-            title="Previous key moment (←)"
-            disabled={!prev}
-            onClick={() => prev && onGo(prev.ply)}
+        <div className="min-w-0">
+          <h2
+            className={cn(
+              'text-2xl font-semibold',
+              tone === 'right' ? 'text-brand-text' : tone === 'wrong' ? 'text-danger-text' : 'text-gold-text',
+            )}
           >
-            <ArrowLeftIcon />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label="Next key moment"
-            title="Next key moment (→)"
-            disabled={!next}
-            onClick={() => next && onGo(next.ply)}
-          >
-            <ArrowRightIcon />
-          </Button>
-        </span>
+            {title}
+          </h2>
+          <div className="mt-1">{children}</div>
+        </div>
       </div>
-      <Progress value={(seen / moments.length) * 100} tone="sky" label="Key moments seen" valueText={`${seen} of ${moments.length}`} hideLabel />
-      <p className="font-heading text-lg leading-snug font-semibold text-balance">
-        {at >= 0 ? moments[at].headline : next ? `Next up: ${next.short.toLowerCase()}.` : 'That was the last key moment.'}
-      </p>
+      <div className="flex flex-wrap justify-end gap-2">
+        {onLine && (
+          <Button size="lg" variant="outline" onClick={onLine}>
+            Show the line
+          </Button>
+        )}
+        <Button size="lg" variant={tone === 'right' ? 'default' : tone === 'wrong' ? 'danger' : 'gold'} onClick={onNext} disabled={busy}>
+          {busy && <CircleNotchIcon className="animate-spin" />}
+          {next}
+        </Button>
+      </div>
     </section>
   )
 }
 
-/** "Lost on time", "Won by checkmate", "Draw by repetition" from the outcome and ending. */
-function resultPhrase(outcome: GameDetail['outcome'], endedBy: string | null) {
-  if (!outcome) return null
-  if (outcome === 'draw') {
-    const how: Record<string, string> = {
-      'Time vs material': 'timeout vs insufficient material',
-      Material: 'insufficient material',
-    }
-    return endedBy ? `Draw by ${how[endedBy] ?? endedBy.toLowerCase()}` : 'Draw'
-  }
-  const verb = outcome === 'win' ? 'Won' : 'Lost'
-  const how: Record<string, string> = {
-    Checkmate: 'by checkmate',
-    Resigned: 'by resignation',
-    Time: 'on time',
-    Abandoned: 'by abandonment',
-  }
-  return endedBy ? `${verb} ${how[endedBy] ?? `· ${endedBy}`}` : verb
-}
-
-/** Seconds left on `side`'s clock after `ply` half-moves, from the last clock it recorded. */
-function clockAt(moves: MoveRow[], side: Side, ply: number, base: number | null) {
-  let left = base
-  for (const m of moves.slice(0, ply)) if (m.color === side && m.clock_left != null) left = m.clock_left
-  return left
-}
-
-/** A player above or below the board. `inset` lines the name up with the board past the
- * eval bar; leave it off where there's no eval bar. */
-export function PlayerStrip({
-  name,
-  rating,
-  seconds,
-  you,
-  dim,
-  tag,
-  inset = true,
-}: {
-  name: string
-  rating: number | null
-  seconds: number | null
-  you?: boolean
-  dim?: boolean
-  tag?: string
-  inset?: boolean
-}) {
+/** A game with no key moments: no big swings either way. Nothing to drill, so straight to done. */
+function QuietGame({ game, opponent, finishing, onFinish }: { game: GameDetail; opponent: string; finishing: boolean; onFinish: () => void }) {
   return (
-    <div className={cn('flex h-9 items-center gap-2 text-sm', inset && 'pl-6')}>
-      <span className="font-medium">{name}</span>
-      <span className="text-muted-foreground">
-        {rating}
-        {you && ' · you'}
-      </span>
-      {tag && (
-        <Badge variant="sky" className="ml-1">
-          {tag}
-        </Badge>
-      )}
-      {seconds != null && (
-        <ClockChip seconds={seconds} className={cn('ml-auto text-base transition-opacity', dim && 'opacity-40')} />
-      )}
-    </div>
-  )
-}
-
-function EvalBar({
-  whiteWin,
-  move,
-  label,
-  orientation,
-}: {
-  whiteWin: number
-  move?: MoveRow
-  label?: string | null
-  orientation: Side
-}) {
-  const score =
-    label !== undefined
-      ? label
-      : move?.mate_after != null
-      ? `M${Math.abs(move.mate_after)}`
-      : move?.eval_after != null
-        ? (Math.abs(move.eval_after) / 100).toFixed(1)
-        : null
-  return <EvalBarView whiteWin={whiteWin} score={score} whiteAtBottom={orientation === 'white'} />
-}
-
-/** The game's board: the last move with its badge and, when asked, the engine's better move
- * in green. In a line, everything turns blue and the arrow is the line's next move. */
-function ReviewBoard({
-  fen,
-  orientation,
-  lastMove,
-  move,
-  nextMove,
-  showBest,
-  palette,
-  inLine,
-}: {
-  fen: string
-  orientation: Side
-  lastMove?: { from: string; to: string }
-  move?: MoveRow
-  nextMove?: { from: string; to: string }
-  showBest: boolean
-  palette: Palette
-  inLine?: boolean
-}) {
-  const arrows: BoardArrow[] = inLine
-    ? nextMove ? [{ ...nextMove, tone: 'line' }] : []
-    : showBest && move && !isSound(move.classification) && move.best_uci
-      ? [{ from: move.best_uci.slice(0, 2), to: move.best_uci.slice(2, 4), tone: 'best' }]
-      : []
-  return (
-    <Board
-      fen={fen}
-      orientation={orientation}
-      palette={palette}
-      lastMove={lastMove}
-      inLine={inLine}
-      arrows={arrows}
-      badge={move?.classification && lastMove ? { square: lastMove.to, kind: move.classification } : null}
-    />
-  )
-}
-
-function WinGraph({
-  replay,
-  me,
-  ply,
-  onSelect,
-}: {
-  replay: NonNullable<ReturnType<typeof useReplay>>
-  me: Side
-  ply: number
-  onSelect: (ply: number) => void
-}) {
-  const W = 300
-  const H = 64
-  const n = replay.whiteWin.length - 1
-  const mine = replay.whiteWin.map((w) => (me === 'white' ? w : 100 - w))
-  const x = (p: number) => (p / Math.max(1, n)) * W
-  const y = (w: number) => H - 2 - (w / 100) * (H - 4)
-  const line = mine.map((w, p) => `${x(p).toFixed(1)},${y(w).toFixed(1)}`).join(' ')
-  const errors = replay.moves.filter(
-    (m) => m.color === me && (m.classification === 'mistake' || m.classification === 'blunder' || m.classification === 'miss'),
-  )
-
-  return (
-    <div className="border-b px-3 py-2">
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="block w-full cursor-pointer"
-        role="slider"
-        aria-label="Win chance from your side; click to jump to a move"
-        aria-valuemin={0}
-        aria-valuemax={n}
-        aria-valuenow={ply}
-        onClick={(e) => {
-          const r = e.currentTarget.getBoundingClientRect()
-          onSelect(Math.round(((e.clientX - r.left) / r.width) * n))
-        }}
-      >
-        <polygon points={`0,${H} ${line} ${W},${H}`} className="fill-muted" />
-        <line x1={0} x2={W} y1={y(50)} y2={y(50)} className="stroke-border" strokeDasharray="3 3" />
-        <polyline points={line} fill="none" className="stroke-foreground" strokeWidth={1.5} />
-        {errors.map((m) => (
-          <circle key={m.ply} cx={x(m.ply)} cy={y(mine[m.ply])} r={3.2} style={{ fill: CLASSIFICATION[m.classification!].color }} />
-        ))}
-        <line x1={x(ply)} x2={x(ply)} y1={0} y2={H} className="stroke-foreground" strokeWidth={1} />
-      </svg>
-    </div>
-  )
-}
-
-/** The same clock chip as the player strips; red under a minute. */
-function ClockChip({ seconds, className }: { seconds: number; className?: string }) {
-  return (
-    <span
-      className={cn(
-        'rounded-md bg-muted px-2.5 py-0.5 font-mono tabular-nums',
-        seconds < 60 && 'bg-loss/15 text-danger-text',
-        className,
-      )}
-    >
-      {clock(seconds)}
-    </span>
-  )
-}
-
-/**
- * Color for a change in YOUR win chance, whoever moved: what it means for you, not how good
- * the move was (the badge says that). +10 or more green, -10 or more red, -5 to -10 amber.
- */
-function changeTone(change: number) {
-  if (change >= 10) return { text: 'text-brand-text', chip: 'bg-win/15 text-brand-text' }
-  if (change <= -10) return { text: 'text-danger-text', chip: 'bg-loss/15 text-danger-text' }
-  if (change <= -5) return { text: 'text-gold-text', chip: 'text-gold-text' }
-  return { text: '', chip: 'text-muted-foreground' }
-}
-
-/**
- * The selected move: your win chance before and after it (from your side even on the
- * opponent's moves, like the graph), then the mover's clock before and after with the
- * thinking time.
- */
-function MovePanel({
-  ply,
-  san,
-  move,
-  analysed,
-  mine,
-  opponent,
-  clockBefore,
-  clockAfter,
-  showBest,
-  onReveal,
-  onShow,
-}: {
-  ply: number
-  san?: string
-  move?: MoveRow
-  analysed: boolean
-  mine: boolean
-  opponent: string
-  clockBefore: number | null
-  clockAfter: number | null
-  showBest: boolean
-  onReveal: () => void
-  onShow: (kind: LineKind) => void
-}) {
-  if (!ply || !san) {
-    return (
-      <div className="min-h-24 border-b px-3 py-2.5 text-sm">
-        <p className="font-medium">Starting position</p>
-        <p className="text-muted-foreground">Step forward, or pick a move or key moment.</p>
-      </div>
-    )
-  }
-  const kind = move?.classification
-  // Stored win%s are the mover's; flip the opponent's moves to your side.
-  const yours = (v: number | null) => Math.round(mine ? (v ?? 50) : 100 - (v ?? 50))
-  const before = yours(move?.win_pct_before ?? null)
-  const after = yours(move?.win_pct_after ?? null)
-  const change = after - before
-  const tone = changeTone(change)
-  return (
-    <div className="min-h-24 border-b px-3 py-2.5 text-sm">
-      <div className="flex items-center gap-2 text-base font-medium">
-        <MoveText ply={ply} san={san} number />
-        <span className="text-sm font-normal text-muted-foreground">{mine ? 'You' : opponent}</span>
-        {kind && (
-          <span className="ml-auto flex items-center gap-1.5 text-sm font-normal">
-            <MoveBadge kind={kind} />
-            {CLASSIFICATION[kind].label}
-          </span>
-        )}
-      </div>
-      {!analysed || !move ? (
-        <p className="mt-1 text-muted-foreground">Not analysed yet. Run `knightly analyze`.</p>
-      ) : (
-        <>
-          <div className="mt-2.5 grid grid-cols-2 gap-2">
-            <div className="flex flex-col gap-0.5 rounded-lg bg-muted px-2.5 py-2">
-              <span className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                Chance
-                <span className={cn('rounded px-1 font-medium tabular-nums', tone.chip)}>
-                  {change > 0 ? '+' : change < 0 ? '−' : '±'}
-                  {Math.abs(change)}%
-                </span>
-              </span>
-              <span className="whitespace-nowrap tabular-nums">
-                <span className="text-base font-medium">{before}</span>
-                <span className="text-muted-foreground"> → </span>
-                <span className={cn('text-base font-medium', tone.text)}>{after}%</span>
-              </span>
-            </div>
-            {clockBefore != null && clockAfter != null && (
-              <div className="flex flex-col gap-0.5 rounded-lg bg-muted px-2.5 py-2">
-                <span className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                  {mine ? 'Your clock' : 'Their clock'}
-                  {move.time_spent != null && <span className="tabular-nums">{thinkTime(move.time_spent)}</span>}
-                </span>
-                <span className="whitespace-nowrap font-mono text-[15px] tabular-nums">
-                  <span className={cn(clockBefore < 60 && 'text-danger-text')}>{clock(clockBefore)}</span>
-                  <span className="text-muted-foreground"> → </span>
-                  <span className={cn(clockAfter < 60 && 'text-danger-text')}>{clock(clockAfter)}</span>
-                </span>
-              </div>
-            )}
-          </div>
-          <div className="mt-2.5 text-muted-foreground">
-            {!isSound(kind ?? null) && move.best_san ? (
-              <span className="flex items-center gap-2">
-                Best
-                {showBest ? (
-                  <span className="rounded-md bg-win/15 px-2 py-0.5 font-medium text-brand-text">
-                    <MoveText ply={ply} san={move.best_san} />
-                  </span>
-                ) : (
-                  <button
-                    onClick={onReveal}
-                    className="rounded-md border border-dashed px-2 py-0.5 text-foreground hover:bg-muted"
-                  >
-                    Show best move
-                  </button>
-                )}
-                <span className="ml-auto flex gap-1.5">
-                  <Button variant="outline" size="sm" className="h-7 px-2.5 text-foreground" onClick={() => onShow('why')}>
-                    <PlayIcon weight="fill" className="size-3" /> Why
-                  </Button>
-                  <Button variant="outline" size="sm" className="h-7 px-2.5 text-foreground" onClick={() => onShow('best')}>
-                    <PlayIcon weight="fill" className="size-3" /> Best line
-                  </Button>
-                </span>
-              </span>
-            ) : kind === 'brilliant' ? (
-              'A sound sacrifice: it gives up material and the engine agrees'
-            ) : kind === 'great' ? (
-              'The only move that held: anything else lost a lot'
-            ) : kind === 'best' ? (
-              "The engine's top choice"
-            ) : kind === 'excellent' ? (
-              'Nearly as good as the best move'
-            ) : (
-              'A solid move'
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
-/** An engine line in place of the move panel: title, the moves as steps, why it matters. */
-function LinePanel({
-  kind,
-  view,
-  error,
-  step,
-  onStep,
-  ply,
-  san,
-  classification,
-  yourBefore,
-  yourEnd,
-  onBack,
-  onSwitch,
-}: {
-  kind: LineKind
-  view: { data: EngineLine; firstPly: number; squares: unknown[] } | null
-  error: string | null
-  step: number
-  onStep: (step: number) => void
-  ply: number
-  san: string
-  classification: Classification | null
-  yourBefore: number | null
-  yourEnd: number | null
-  onBack: () => void
-  onSwitch: () => void
-}) {
-  const label = classification ? CLASSIFICATION[classification].label.toLowerCase() : 'move'
-  const article = /^[aeiou]/.test(label) ? 'an' : 'a'
-  return (
-    <div className="border-b bg-sky/10 px-3 py-2.5 text-sm">
-      <div className="flex items-center gap-2 font-medium">
-        {kind === 'why' ? (
-          <span>
-            Why <MoveText ply={ply} san={san} number /> is {article} {label}
-          </span>
-        ) : (
-          <span>
-            Best line{view && <>: <MoveText ply={ply} san={view.data.san[0]} number /></>}
-          </span>
-        )}
-        {view && (
-          <span className="ml-auto text-xs font-normal text-muted-foreground tabular-nums">
-            {step} / {view.squares.length}
-          </span>
-        )}
-      </div>
-
-      {error ? (
-        <p className="mt-2 text-destructive">Couldn't get the line. {error}</p>
-      ) : !view ? (
-        <p className="mt-2 flex items-center gap-2 text-muted-foreground">
-          <CircleNotchIcon className="size-4 animate-spin" /> Asking Stockfish…
-        </p>
-      ) : (
-        <>
-          <ol className="mt-2 flex flex-wrap gap-1" aria-label="Engine line">
-            {view.data.san.map((s, i) => {
-              const linePly = view.firstPly + i
-              return (
-                <li key={i}>
-                  <button
-                    onClick={() => onStep(i + 1)}
-                    aria-current={i + 1 === step ? 'step' : undefined}
-                    className={cn(
-                      'rounded-md px-2 py-0.5 tabular-nums',
-                      i + 1 === step
-                        ? 'bg-sky font-bold text-on-sky'
-                        : 'bg-muted hover:bg-foreground/10',
-                      i + 1 > step && 'opacity-60',
-                    )}
-                  >
-                    <MoveText ply={linePly} san={s} number={linePly % 2 === 1 || i === 0} />
-                  </button>
-                </li>
-              )
-            })}
-          </ol>
-          {view.data.summary && (
-            <p className="mt-2 leading-relaxed">
-              <MarkedText text={view.data.summary} />
-            </p>
-          )}
-          {yourBefore != null && yourEnd != null && (
-            <p className="mt-1 text-muted-foreground">
-              Your chance{' '}
-              <span className="text-foreground tabular-nums">
-                {yourBefore}% → {yourEnd}%
-              </span>
-            </p>
-          )}
-        </>
-      )}
-      <div className="mt-2.5 flex gap-2">
-        <Button size="sm" onClick={onBack}>
-          <ArrowUUpLeftIcon /> Back to game
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-5">
+      <header className="flex items-center gap-3">
+        <Button asChild variant="ghost" size="icon" aria-label="Stop reviewing">
+          <Link to={lastLocation('games-list', '/games')}>
+            <XIcon />
+          </Link>
         </Button>
-        <Button size="sm" variant="outline" onClick={onSwitch}>
-          {kind === 'why' ? 'Show best line' : 'Show why'}
+        <span className="flex-1" />
+        <Button asChild variant="outline" size="sm">
+          <Link to={`/games/${game.id}/moves`}>
+            <ListIcon /> All moves
+          </Link>
         </Button>
-      </div>
-    </div>
-  )
-}
-
-/**
- * Notes on the position on the board (after the selected move): ones written here, and ones
- * from other games that reached the same position. On the starting position, also the notes
- * on the game as a whole.
- */
-function PositionNotes({
-  gameId,
-  ply,
-  fen,
-  notes,
-  onChange,
-}: {
-  gameId: number
-  ply: number
-  fen: string
-  notes: Note[]
-  onChange: () => void
-}) {
-  const [open, setOpen] = useState(false)
-  const [body, setBody] = useState('')
-  const [tags, setTags] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const save = async () => {
-    setBusy(true)
-    setError(null)
-    try {
-      await send('POST', '/api/notes', {
-        body,
-        tags: tags.split(/[\s,]+/).filter(Boolean),
-        game_id: gameId,
-        ply,
-        fen,
-      })
-      setBody('')
-      setTags('')
-      setOpen(false)
-      onChange()
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const remove = async (note: Note) => {
-    if (!window.confirm('Delete this note?')) return
-    try {
-      await send('DELETE', `/api/notes/${note.id}`)
-      onChange()
-    } catch (e) {
-      setError((e as Error).message)
-    }
-  }
-
-  return (
-    <div className="border-b px-3 py-2 text-sm">
-      {notes.length > 0 && (
-        <ul className="mb-2 flex max-h-36 flex-col gap-1.5 overflow-y-auto">
-          {notes.map((n) => {
-            const elsewhere = n.game && n.game.id !== gameId
-            return (
-              <li key={n.id} className="group flex gap-2 rounded-md bg-gold/15 px-2.5 py-1.5">
-                <div className="min-w-0 flex-1">
-                  <p className="leading-snug whitespace-pre-wrap">{n.body}</p>
-                  <p className="mt-0.5 flex flex-wrap gap-x-1.5 text-xs text-muted-foreground">
-                    {n.tags.map((t) => (
-                      <span key={t}>#{t}</span>
-                    ))}
-                    {!n.plies.length && <span>On the whole game</span>}
-                    {elsewhere && (
-                      <Link
-                        to={`/games/${n.game!.id}${n.game!.ply ? `?ply=${n.game!.ply}` : ''}`}
-                        className="underline-offset-2 hover:text-foreground hover:underline"
-                      >
-                        Same position vs {n.game!.opponent ?? 'another game'}
-                        {n.game!.played_at && `, ${shortDate(n.game!.played_at)}`}
-                      </Link>
-                    )}
-                  </p>
-                </div>
-                <button
-                  onClick={() => remove(n)}
-                  className="h-fit shrink-0 rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
-                  aria-label="Delete note"
-                  title="Delete note"
-                >
-                  <TrashIcon weight="fill" className="size-3.5" />
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-      {open ? (
-        <form
-          className="flex flex-col gap-1.5"
-          onSubmit={(e) => {
-            e.preventDefault()
-            save()
-          }}
-        >
-          <textarea
-            autoFocus
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save()
-              if (e.key === 'Escape') setOpen(false)
-            }}
-            rows={3}
-            placeholder="What did you learn here?"
-            className="w-full resize-none rounded-lg border border-input bg-transparent px-2.5 py-1.5 outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-          />
-          <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="Tags, e.g. tactics fork" />
-          {error && <p className="text-destructive">{error}</p>}
-          <div className="flex gap-2">
-            <Button size="sm" type="submit" disabled={busy || !body.trim()}>
-              Save note
-            </Button>
-            <Button size="sm" variant="ghost" type="button" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-          </div>
-        </form>
-      ) : (
-        <>
-          {error && <p className="mb-1 text-destructive">{error}</p>}
-          <button
-            onClick={() => setOpen(true)}
-            className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
-          >
-            <PlusIcon className="size-3.5" /> Note on this position
-          </button>
-        </>
-      )}
-    </div>
-  )
-}
-
-export function MoveList({
-  san,
-  moves,
-  ply,
-  noted,
-  onSelect,
-}: {
-  san: string[]
-  moves: MoveRow[]
-  ply: number
-  noted: Set<number>
-  onSelect: (ply: number) => void
-}) {
-  const listRef = useRef<HTMLDivElement>(null)
-  // Keep the selected move centred in the list without scrolling the page.
-  useLayoutEffect(() => {
-    const list = listRef.current
-    const sel = list?.querySelector<HTMLElement>('[data-selected="true"]')
-    if (!list) return
-    list.scrollTop = sel ? sel.offsetTop - list.clientHeight / 2 + sel.offsetHeight / 2 : 0
-  }, [ply])
-
-  const rows = []
-  for (let i = 0; i < san.length; i += 2) rows.push(i)
-
-  return (
-    <div ref={listRef} className="relative min-h-40 flex-1 overflow-y-auto">
-      {rows.map((i) => (
-        <div
-          key={i}
-          className="group grid h-8 grid-cols-[2.25rem_1fr_1fr_3rem] items-center px-3 text-sm even:bg-muted/40"
-        >
-          <span className="text-muted-foreground">{i / 2 + 1}.</span>
-          {[i, i + 1].map((j) =>
-            j < san.length ? (
-              <button
-                key={j}
-                data-selected={j + 1 === ply}
-                onClick={() => onSelect(j + 1)}
-                className={cn(
-                  'flex w-fit items-center gap-1 rounded px-1.5 py-0.5 text-left hover:bg-foreground/10',
-                  j + 1 === ply && 'bg-foreground/15 font-medium',
-                )}
-              >
-                <MoveText ply={j + 1} san={san[j]} />
-                {noted.has(j + 1) && <span className="size-1.5 rounded-full bg-gold" aria-label="has a note" />}
-              </button>
-            ) : (
-              <span key={j} />
-            ),
-          )}
-          <TimeCell white={moves[i]?.time_spent} black={moves[i + 1]?.time_spent} />
-        </div>
-      ))}
-    </div>
-  )
-}
-
-/** Thinking-time bars (White on top, Black below); hovering the row shows the seconds. */
-function TimeCell({ white, black }: { white?: number | null; black?: number | null }) {
-  if (white == null && black == null) return <span />
-  const bar = (s: number | null | undefined, className: string) =>
-    s == null ? (
-      <span className="h-1.5" />
-    ) : (
-      <span
-        className={cn('h-1.5 min-w-1 rounded-sm', className)}
-        style={{ width: `${(Math.min(s, TIME_BAR_FULL) / TIME_BAR_FULL) * 100}%` }}
-      />
-    )
-  return (
-    <div className="flex h-7 flex-col items-end justify-center">
-      <div className="flex w-full flex-col items-end gap-1 group-hover:hidden">
-        {bar(white, 'bg-foreground/25')}
-        {bar(black, 'bg-foreground/60')}
-      </div>
-      <div className="hidden flex-col items-end text-[11px] leading-3.5 text-muted-foreground tabular-nums group-hover:flex">
-        <span>{white != null ? thinkTime(white) : ''}</span>
-        <span>{black != null ? thinkTime(black) : ''}</span>
-      </div>
-    </div>
-  )
-}
-
-/** The key moments as a list: badge, the move, and what kind of moment it was. */
-function KeyMoments({
-  moments,
-  moves,
-  ply,
-  onSelect,
-}: {
-  moments: KeyMoment[]
-  moves: MoveRow[]
-  ply: number
-  onSelect: (ply: number) => void
-}) {
-  if (!moments.length) {
-    return <p className="px-4 py-3 text-sm text-muted-foreground">No key moments: a quiet game, with no big swings either way.</p>
-  }
-  return (
-    <div className="flex min-h-40 flex-1 flex-col gap-1 overflow-y-auto p-2">
-      {moments.map((k) => (
-        <button
-          key={k.ply}
-          onClick={() => onSelect(k.ply)}
-          aria-current={k.ply === ply ? 'step' : undefined}
-          className={cn(
-            'flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm hover:bg-muted/60',
-            k.ply === ply && 'bg-sky/15 shadow-[inset_0_0_0_2px_var(--sky)] hover:bg-sky/15',
-          )}
-        >
-          <MoveBadge kind={k.kind} />
-          <span className="min-w-[4.5rem] font-bold">
-            <MoveText ply={k.ply} san={moves[k.ply - 1].san} number />
-          </span>
-          <span className="min-w-0 truncate text-muted-foreground">{k.short}</span>
-        </button>
-      ))}
-    </div>
-  )
-}
-
-export function NavButton({
-  label,
-  onClick,
-  icon,
-  disabled,
-}: {
-  label: string
-  onClick: () => void
-  icon: React.ReactNode
-  disabled?: boolean
-}) {
-  return (
-    <Button
-      variant="secondary"
-      className="h-10 [&_svg]:size-5"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      disabled={disabled}
-    >
-      {icon}
-    </Button>
-  )
-}
-
-function ReviewSkeleton() {
-  return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <LoadingBlock label="Setting up the board…" className="mx-auto aspect-square w-full max-w-[calc(100svh-170px)] rounded-sm" />
-      <Skeleton className="h-[28rem] rounded-xl" />
+      </header>
+      <h1 className="text-3xl font-bold text-balance">A quiet game vs {opponent}</h1>
+      <p className="text-muted-foreground">
+        No key moments: no big swings either way, and nothing to drill. Look through All moves if you like, or finish the
+        review.
+      </p>
+      <Button size="lg" className="self-start" onClick={onFinish} disabled={finishing}>
+        {finishing && <CircleNotchIcon className="animate-spin" />}
+        Finish review
+      </Button>
     </div>
   )
 }

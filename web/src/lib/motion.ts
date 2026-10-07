@@ -19,9 +19,12 @@ export function useReducedMotion() {
   )
 }
 
-/** A duration token in milliseconds, for libraries that want a number (the board). */
+/** A duration token in milliseconds, for libraries that want a number (the board). The
+ * production build's CSS minifier rewrites `200ms` as `.2s`, so read the unit. */
 export function durationMs(name: `--duration-${string}`) {
-  return parseFloat(token(name)) || 0
+  const value = token(name).trim()
+  const n = parseFloat(value) || 0
+  return value.endsWith('ms') ? n : value.endsWith('s') ? n * 1000 : n
 }
 
 /** The board's piece slide, in ms (0 when reduced motion is on). */

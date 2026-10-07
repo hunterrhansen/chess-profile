@@ -99,17 +99,6 @@ CREATE TABLE IF NOT EXISTS snapshots (
     data        TEXT NOT NULL           -- JSON
 );
 
--- Free-form learnings, optionally pinned to a game and/or position.
-CREATE TABLE IF NOT EXISTS notes (
-    id          INTEGER PRIMARY KEY,
-    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-    body        TEXT NOT NULL,
-    tags        TEXT,                   -- JSON array
-    game_id     INTEGER REFERENCES games(id),
-    fen         TEXT,                   -- the position the note is about
-    ply         INTEGER                 -- where in game_id that position is, for linking back
-);
-
 -- Incremental-sync cursors.
 CREATE TABLE IF NOT EXISTS sync_state (
     source      TEXT NOT NULL,

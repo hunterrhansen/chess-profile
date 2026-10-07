@@ -1,5 +1,5 @@
 import { Chess, type Square } from 'chess.js'
-import { useMemo } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { type Arrow, Chessboard } from 'react-chessboard'
 import { MoveBadge } from '@/components/move-badge'
 import { BOARD_PIECES } from '@/components/pieces'
@@ -99,7 +99,15 @@ export function Board({
   className?: string
 }) {
   const moveMs = useMoveMs()
-  useMoveSound(fen)
+  // A dragged piece is already on its square, so its sound plays at once; any other change
+  // slides first. Read (and reset) when the position changes.
+  const dropped = useRef(false)
+  const landed = useCallback(() => {
+    const was = dropped.current
+    dropped.current = false
+    return was
+  }, [])
+  useMoveSound(fen, moveMs, landed)
   const check = useMemo(() => checkSquares(fen), [fen])
   const occupied = useMemo(() => {
     try {
@@ -147,7 +155,10 @@ export function Board({
           allowDragging: playable,
           canDragPiece: ({ piece }) => playable && piece.pieceType[0] === movable,
           onPieceDrag: ({ square }) => onSelect?.(square),
-          onPieceDrop: ({ sourceSquare, targetSquare }) => !!targetSquare && !!onMove?.(sourceSquare, targetSquare),
+          onPieceDrop: ({ sourceSquare, targetSquare }) => {
+            dropped.current = !!targetSquare && !!onMove?.(sourceSquare, targetSquare)
+            return dropped.current
+          },
           onSquareClick: ({ square }) => click(square),
           animationDurationInMs: moveMs,
           lightSquareStyle: { backgroundColor: palette.light },

@@ -1,4 +1,4 @@
-import type { Range } from './api'
+import type { DeckAnswer, Range } from './api'
 
 export const RANGE_LABEL: Record<Range, string> = { '30d': '30 days', '90d': '90 days', all: 'All time' }
 
@@ -53,4 +53,30 @@ export function clock(seconds: number) {
 /** Thinking time: 2.6s under a minute, 1:38 above. */
 export function thinkTime(seconds: number) {
   return seconds >= 60 ? clock(seconds) : `${seconds.toFixed(1)}s`
+}
+
+/**
+ * Color for a change in YOUR win chance, whoever moved: what it means for you, not how good
+ * the move was (the badge says that). +10 or more green, -10 or more red, -5 to -10 amber.
+ */
+export function changeTone(change: number) {
+  if (change >= 10) return { text: 'text-brand-text', chip: 'bg-win/15 text-brand-text' }
+  if (change <= -10) return { text: 'text-danger-text', chip: 'bg-loss/15 text-danger-text' }
+  if (change <= -5) return { text: 'text-gold-text', chip: 'text-gold-text' }
+  return { text: '', chip: 'text-muted-foreground' }
+}
+
+/** "Back in 3 days", "Back tomorrow", or the mastered message. */
+export function nextTime(result: DeckAnswer) {
+  if (result.mastered) return 'Mastered: four times in a row. It won\'t come back.'
+  if (!result.due) return ''
+  const days = Math.round((Date.parse(result.due) - Date.parse(localToday())) / 86_400_000)
+  if (days <= 1) return 'Back tomorrow.'
+  if (days < 14) return `Back in ${days} days.`
+  return `Back in ${Math.round(days / 7)} weeks.`
+}
+
+function localToday() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }

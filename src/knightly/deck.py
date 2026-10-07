@@ -7,7 +7,8 @@ and it's mastered. Get it wrong and it comes back tomorrow.
 
 Each day serves at most DAILY_LIMIT cards, due ones first, then new ones from your newest
 games. A day off never piles up a backlog: the next day is still at most DAILY_LIMIT. Only
-a card's first answer of the day counts, so trying again after a miss is free.
+a card's first answer of the day counts, so trying again after a miss is free. Game review
+asks for the same moves, and an answer there is the card's answer for the day.
 """
 import sqlite3
 from datetime import date, datetime, timedelta, timezone
@@ -33,18 +34,30 @@ def clear_best(color: str, eval_best: int | None, eval_second: int | None) -> bo
     return win_pct(sign * eval_best) - win_pct(sign * eval_second) >= CLEAR_GAP
 
 
+def _qualifying(conn, where: str = "1", params: tuple = ()) -> list[tuple[int, int]]:
+    """(game_id, ply) of every move of yours that makes a card, card or not yet."""
+    rows = conn.execute(
+        f"""SELECT m.game_id, m.ply, m.color, m.eval_before, m.eval_second FROM moves m
+            WHERE m.is_user = 1 AND m.best_uci IS NOT NULL
+              AND m.classification IN ({", ".join("?" for _ in KINDS)}) AND {where}""",
+        (*KINDS, *params),
+    ).fetchall()
+    return [(r["game_id"], r["ply"]) for r in rows
+            if clear_best(r["color"], r["eval_before"], r["eval_second"])]
+
+
+def game_plies(conn, game_id: int) -> list[int]:
+    """The plies of a game that are review-deck positions, or will be at the next sync: game
+    review asks you to find these moves, before Finish review has added them."""
+    have = {r["ply"] for r in conn.execute("SELECT ply FROM cards WHERE game_id = ?", (game_id,))}
+    return sorted(have | {ply for _, ply in _qualifying(conn, "m.game_id = ?", (game_id,))})
+
+
 def sync(conn: sqlite3.Connection) -> int:
     """Add a card for every qualifying move that doesn't have one yet. Cards are never
     removed, so re-analysing a game keeps its review history. Returns how many were added."""
-    rows = conn.execute(
-        f"""SELECT m.game_id, m.ply, m.color, m.eval_before, m.eval_second
-            FROM moves m LEFT JOIN cards c ON c.game_id = m.game_id AND c.ply = m.ply
-            WHERE m.is_user = 1 AND m.best_uci IS NOT NULL AND c.game_id IS NULL
-              AND m.classification IN ({", ".join("?" for _ in KINDS)})""",
-        KINDS,
-    ).fetchall()
-    new = [(r["game_id"], r["ply"]) for r in rows
-           if clear_best(r["color"], r["eval_before"], r["eval_second"])]
+    have = {tuple(r) for r in conn.execute("SELECT game_id, ply FROM cards")}
+    new = [key for key in _qualifying(conn) if key not in have]
     # OR IGNORE: two requests can sync at once (the page loading twice, say).
     return conn.executemany("INSERT OR IGNORE INTO cards (game_id, ply) VALUES (?, ?)", new).rowcount
 
@@ -127,12 +140,20 @@ def answer(conn, game_id: int, ply: int, uci: str, today: date | None = None,
     the schedule; later ones just say whether they were right. Skip sends the null move
     "0000", which counts as a miss."""
     today = today or date.today()
-    card = conn.execute(
-        """SELECT c.step, c.due, m.best_uci, m.best_san FROM cards c
-           JOIN moves m ON m.game_id = c.game_id AND m.ply = c.ply
-           WHERE c.game_id = ? AND c.ply = ?""",
-        (game_id, ply),
-    ).fetchone()
+
+    def load():
+        return conn.execute(
+            """SELECT c.step, c.due, m.best_uci, m.best_san FROM cards c
+               JOIN moves m ON m.game_id = c.game_id AND m.ply = c.ply
+               WHERE c.game_id = ? AND c.ply = ?""",
+            (game_id, ply),
+        ).fetchone()
+
+    card = load()
+    if card is None:
+        # Game review asks before Finish review has added the game's cards: add them now.
+        sync(conn)
+        card = load()
     if card is None:
         raise KeyError((game_id, ply))
     # Promotions: the board always offers a queen, the engine might have wanted a knight.

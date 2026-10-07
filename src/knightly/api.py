@@ -5,7 +5,7 @@ games list filters on the same rows, so a KPI and the games it links to always a
 
 Reads use a read-only connection. The only writes are the Settings page's (accounts, the
 analysis depth, and the daily-update schedule, which goes through launchd), cached engine
-lines, notes, games played against the bot, finished game reviews, and the review deck's
+lines, games played against the bot, finished game reviews, and the review deck's
 cards and answers.
 """
 import functools
@@ -215,20 +215,6 @@ def _game_json(r) -> dict:
     }
 
 
-def _note_json(r, plies: list[int]) -> dict:
-    return {
-        "id": r["id"],
-        "created_at": r["created_at"],
-        "body": r["body"],
-        "tags": json.loads(r["tags"]) if r["tags"] else [],
-        "fen": r["fen"],
-        "plies": plies,
-        # Where the note was written, for linking back: maybe another game.
-        "game": {"id": r["game_id"], "ply": r["ply"], "opponent": r["opponent"],
-                 "played_at": r["played_at"]} if r["game_id"] else None,
-    }
-
-
 SOURCES = ("chesscom", "lichess")
 HANDLE = re.compile(r"^[A-Za-z0-9_-]{2,40}$")
 KEYCHAIN_SERVICE = "knightly-lichess"  # same entry `cli.keychain_token` reads
@@ -266,12 +252,7 @@ class AnalysisIn(BaseModel):
     depth: int = Field(ge=8, le=30)
 
 
-class NoteIn(BaseModel):
-    body: str = Field(min_length=1, max_length=4000)
-    tags: list[str] = []
-    game_id: int | None = None
-    ply: int | None = Field(None, ge=0)
-    fen: str | None = None
+
 
 
 class BotMoveIn(BaseModel):
@@ -286,26 +267,6 @@ class PlayedGameIn(BaseModel):
     bot: str = Field(min_length=1, max_length=60)
     resigned: Literal["white", "black"] | None = None
     started_at: datetime | None = None
-
-
-def position_key(fen: str) -> str:
-    """The parts of a FEN that make two positions the same for a note: pieces, side to move,
-    castling rights. Move counters differ between games, and the en passant square is written
-    differently by python-chess and chess.js, so both are left out."""
-    return " ".join(fen.split()[:3])
-
-
-def game_positions(start_fen: str | None, moves_san: str | None) -> list[str]:
-    """Position key after each ply (index 0 = the start), up to the first unplayable move."""
-    board = chess.Board(start_fen or chess.STARTING_FEN)
-    keys = [position_key(board.fen())]
-    for san in (moves_san or "").split():
-        try:
-            board.push_san(san)
-        except ValueError:
-            break
-        keys.append(position_key(board.fen()))
-    return keys
 
 
 @functools.cache
@@ -342,6 +303,12 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
             return conn.execute(sql, params).fetchall()
         finally:
             conn.close()
+
+    def read():
+        """A read-only connection, for code (deck.py) that takes a connection."""
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        return closing(conn)
 
     def facts(where: str = "1", params=(), order: str = "f.played_at") -> list[sqlite3.Row]:
         return query(f"SELECT * FROM ({GAME_FACTS}) f WHERE {where} ORDER BY {order}", params)
@@ -399,55 +366,6 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
             conn.execute("INSERT OR REPLACE INTO engine_lines (game_id, ply, depth, data) VALUES (?, ?, ?, ?)",
                          (game_id, ply, depth, json.dumps(data)))
         return data
-
-    @app.get("/api/games/{game_id}/notes")
-    def game_notes(game_id: int):
-        """Notes written on this game, plus notes from any game on a position that also comes
-        up in this one. `plies` says where each note's position is in this game."""
-        g = query("SELECT start_fen, moves_san FROM games WHERE id = ?", (game_id,))
-        if not g:
-            raise HTTPException(404, "game not found")
-        plies: dict[str, list[int]] = {}
-        for ply, key in enumerate(game_positions(g[0]["start_fen"], g[0]["moves_san"])):
-            plies.setdefault(key, []).append(ply)
-        rows = query("""SELECT n.id, n.created_at, n.body, n.tags, n.game_id, n.ply, n.fen,
-                               g.opponent, g.played_at
-                        FROM notes n LEFT JOIN games g ON g.id = n.game_id
-                        WHERE n.game_id = ? OR n.fen IS NOT NULL
-                        ORDER BY n.created_at, n.id""", (game_id,))
-        out = []
-        for r in rows:
-            here = plies.get(position_key(r["fen"]), []) if r["fen"] else []
-            if r["game_id"] == game_id or here:
-                out.append(_note_json(r, here))
-        return out
-
-    @app.post("/api/notes", status_code=201)
-    def add_note(body: NoteIn):
-        text = body.body.strip()
-        if not text:
-            raise HTTPException(400, "A note needs some text.")
-        if body.fen:
-            try:
-                chess.Board(body.fen)
-            except ValueError:
-                raise HTTPException(400, "That FEN isn't a valid position.") from None
-        if body.game_id is not None and not query("SELECT 1 FROM games WHERE id = ?", (body.game_id,)):
-            raise HTTPException(400, "No game with that id.")
-        tags = sorted({t.strip().lstrip("#").lower() for t in body.tags if t.strip().lstrip("#")})
-        with write() as conn, conn:
-            cur = conn.execute("INSERT INTO notes (body, tags, game_id, ply, fen) VALUES (?, ?, ?, ?, ?)",
-                               (text, json.dumps(tags) if tags else None, body.game_id, body.ply, body.fen))
-            row = conn.execute("""SELECT n.*, g.opponent, g.played_at FROM notes n
-                                  LEFT JOIN games g ON g.id = n.game_id WHERE n.id = ?""",
-                               (cur.lastrowid,)).fetchone()
-        return _note_json(row, [body.ply] if body.ply is not None else [])
-
-    @app.delete("/api/notes/{note_id}", status_code=204)
-    def delete_note(note_id: int):
-        with write() as conn, conn:
-            if not conn.execute("DELETE FROM notes WHERE id = ?", (note_id,)).rowcount:
-                raise HTTPException(404, "note not found")
 
     @app.post("/api/play/move")
     def bot_move(body: BotMoveIn):
@@ -853,7 +771,8 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
                      FROM games WHERE id = ?""", (game_id,))[0]
         a = query("""SELECT user_accuracy, opponent_accuracy FROM game_analysis WHERE game_id = ?""",
                   (game_id,))
-        cards = query("SELECT ply FROM cards WHERE game_id = ? ORDER BY ply", (game_id,))
+        with read() as conn:
+            deck_plies = deck.game_plies(conn, game_id)
         moves = query("""SELECT ply, color, is_user, san, uci, best_san, best_uci, eval_after,
                                 mate_after, win_pct_before, win_pct_after, classification,
                                 clock_left, time_spent
@@ -869,8 +788,9 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
             "engine_accuracy": a[0]["user_accuracy"] if a else None,
             "opponent_accuracy": a[0]["opponent_accuracy"] if a else None,
             "plies": [dict(m) for m in moves],
-            # Your moves from this game that are in the review deck.
-            "deck_plies": [c["ply"] for c in cards],
+            # Your moves from this game that are review-deck positions (or will be once the
+            # deck next syncs): the review lesson asks you to find these.
+            "deck_plies": deck_plies,
         }
 
     @app.post("/api/games/{game_id}/review")

@@ -13,6 +13,7 @@ import { PracticePage } from '@/pages/practice'
 import { PuzzlesPage } from '@/pages/puzzles'
 import { ReviewPage } from '@/pages/review'
 import { ReviewDonePage } from '@/pages/review-done'
+import { AllMovesPage } from '@/pages/review-moves'
 import { SettingsPage } from '@/pages/settings'
 import { StyleguidePage } from '@/pages/styleguide'
 import './index.css'
@@ -40,16 +41,18 @@ createRoot(document.getElementById('root')!).render(
                 <Route index element={<HomePage />} />
                 <Route path="progress" element={<ProgressPage />} />
                 <Route path="games" element={<GamesPage />} />
-                <Route path="games/:id" element={<ReviewPage />} />
-                <Route path="games/:id/done" element={<ReviewDonePage />} />
                 <Route path="play" element={<PlayPage />} />
                 <Route path="settings" element={<SettingsPage />} />
                 <Route path="styleguide" element={<StyleguidePage />} />
               </Route>
-              {/* A lesson, not a place: full screen, no navigation; ✕ goes back Home. */}
+              {/* Lessons, not places: full screen, no navigation; ✕ goes back where you came from.
+                  A game's review is one too, with All moves and Review complete beside it. */}
               <Route element={<FocusShell />}>
                 <Route path="practice" element={<PracticePage />} />
                 <Route path="puzzles" element={<PuzzlesPage />} />
+                <Route path="games/:id" element={<ReviewPage />} />
+                <Route path="games/:id/moves" element={<AllMovesPage />} />
+                <Route path="games/:id/done" element={<ReviewDonePage />} />
               </Route>
             </Routes>
           </TooltipProvider>

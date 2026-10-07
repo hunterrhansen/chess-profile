@@ -10,17 +10,31 @@ import { Card, CardHeader } from '@/components/ui/card'
 import { CountUp } from '@/components/ui/count-up'
 import { StatLabel, StatValue } from '@/components/ui/stat'
 import { type GameDetail, useApi } from '@/lib/api'
-import { bestMoment, keyMoments } from '@/lib/key-moments'
+import { type StepMark, bestMoment, keyMoments, moveLabel } from '@/lib/key-moments'
 import { timeControl } from '@/lib/format'
+import { cn } from '@/lib/utils'
+
+const MARK: Record<StepMark, { className: string; label: string }> = {
+  found: { className: 'bg-brand', label: 'found' },
+  missed: { className: 'bg-danger', label: 'missed' },
+  praise: { className: 'bg-gold', label: 'a great move' },
+  seen: { className: 'bg-foreground/25', label: 'looked at' },
+}
 
 /**
  * "Review complete!": what the game came down to, once you've walked through it. Your
- * accuracy, your best moment, and the moves to fix, which are in your review deck. Confetti
- * only on arriving from Finish review, never when the page is opened again later.
+ * accuracy, your best moment, and the moves to fix, which are in your review deck. Arriving from
+ * the lesson, also a mark per step (found, missed, a great move) and confetti; never when the
+ * page is opened again later.
  */
 export function ReviewDonePage() {
   const { id } = useParams()
-  const celebrate = !!(useLocation().state as { celebrate?: boolean } | null)?.celebrate
+  const state = useLocation().state as { celebrate?: boolean; marks?: { ply: number; san: string; mark: StepMark }[] } | null
+  const celebrate = !!state?.celebrate
+  // How each lesson step went: only known right after the lesson, not on a later visit.
+  const marks = state?.marks ?? []
+  const asked = marks.filter((m) => m.mark === 'found' || m.mark === 'missed')
+  const missed = asked.filter((m) => m.mark === 'missed')
   const { data: game, error } = useApi<GameDetail>(`/api/games/${id}`)
   const me = game?.color ?? 'white'
   const opponent = (me === 'white' ? game?.black : game?.white) ?? ''
@@ -55,6 +69,36 @@ export function ReviewDonePage() {
           vs {opponent} · {timeControl(game.time_control)} · {result}
         </p>
       </div>
+
+      {marks.length > 0 && (
+        <Card className="w-full animate-rise gap-2.5 px-5 text-left [animation-delay:calc(var(--duration-celebrate)*0.45)]">
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="eyebrow">Key moments, one by one</p>
+            {asked.length > 0 && (
+              <span className="font-heading text-2xl font-bold">
+                {asked.length - missed.length} of {asked.length} found
+              </span>
+            )}
+          </div>
+          <div className="flex gap-1.5">
+            {marks.map((m) => (
+              <span
+                key={m.ply}
+                role="img"
+                aria-label={`${moveLabel(m.ply, m.san)}: ${MARK[m.mark].label}`}
+                className={cn('h-3.5 flex-1 rounded-full', MARK[m.mark].className)}
+              />
+            ))}
+          </div>
+          {asked.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              {missed.length
+                ? `Missed: ${missed.map((m) => moveLabel(m.ply, m.san)).join(', ')}. Back tomorrow; the ones you found, in 3 days.`
+                : 'You found every one. They come back in 3 days.'}
+            </p>
+          )}
+        </Card>
+      )}
 
       <div className="grid w-full gap-4 text-left sm:grid-cols-3">
         <Card size="sm" className="animate-rise" style={rise(0)}>
@@ -101,7 +145,7 @@ export function ReviewDonePage() {
                   ))}
                   .{' '}
                   {inDeck === fix.length
-                    ? 'Added to your review deck.'
+                    ? 'All in your review deck.'
                     : inDeck > 0
                       ? `${inDeck} added to your review deck.`
                       : 'No single move fixes these, so they stay out of your deck.'}

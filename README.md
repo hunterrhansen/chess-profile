@@ -1,7 +1,7 @@
 # Knightly
 
 Turn your own chess games into daily practice. Knightly pulls all of your chess data
-(Chess.com, Lichess, over-the-board PGNs, notes) into a single SQLite file, analyses it with
+(Chess.com, Lichess, over-the-board PGNs) into a single SQLite file, analyses it with
 Stockfish, and turns your mistakes into positions to review.
 
 ## Quick start
@@ -11,7 +11,6 @@ uv sync
 uv run knightly sync chesscom <username>            # all games, every month
 uv run knightly sync lichess  <username> --token lip_xxx   # games + puzzle history
 uv run knightly import-pgn ~/otb-games/ --me "Hansen, Hunter"
-uv run knightly note "I rush in time trouble" --tag time --game 42
 uv run knightly sync                                 # later: incremental re-sync of all accounts
 uv run knightly analyze                              # Stockfish pass over new games
 uv run knightly stats
@@ -58,8 +57,6 @@ SQLite, one file. Tables in [`schema.sql`](src/knightly/schema.sql):
   `speed`, and the full original `pgn` (with clock and eval comments).
 - `puzzle_attempts`: one row per attempt (`success`, `fen`, `solution`, `themes` JSON).
 - `snapshots`: point-in-time copies of profile/stats endpoints (rating history).
-- `notes`: your learnings, optionally linked to a game or FEN. Notes written in game review
-  store the position, so they also show up in any other game that reaches it.
 - `moves`: one row per half-move of every analysed game: position, your move vs. the
   engine's best, evals before/after, centipawn loss, win% before/after, accuracy,
   `classification` (brilliant / great / best / excellent / good / inaccuracy / mistake / blunder / miss), `phase`, clock left and
@@ -204,7 +201,7 @@ of the overview's stats, and analysed straight away (spread over every core, abo
   unless `--depth` is passed).
 - *Data*: database and backup locations and sizes.
 
-These, notes, cached engine lines and games played on Play are the app's only writes to the
+These, cached engine lines, games played on Play, finished reviews and the review deck are the app's only writes to the
 database.
 
 ## Example queries

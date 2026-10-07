@@ -96,3 +96,22 @@ export function bestMoment(moves: MoveRow[], me: Side, moments: KeyMoment[]) {
   const peak = mine.reduce((a, b) => (pct(b.win_pct_after) > pct(a.win_pct_after) ? b : a))
   return { ply: peak.ply, kind: peak.classification ?? 'good', note: `Your high point: ${pct(peak.win_pct_after)}% to win` }
 }
+
+/**
+ * One step of the review lesson, from a key moment:
+ * - `find`: you went wrong and one move was clearly better (it's a review-deck position), so
+ *   you're asked to find it, and your answer counts as the card's answer for the day.
+ * - `look`: you went wrong but no single move fixes it; the lesson shows what happened.
+ * - `praise`: a brilliant or great move, or punishing their blunder; nothing to answer.
+ */
+export interface LessonStep extends KeyMoment {
+  type: 'find' | 'look' | 'praise'
+}
+
+export function lessonSteps(moments: KeyMoment[], deckPlies: Iterable<number>): LessonStep[] {
+  const deck = new Set(deckPlies)
+  return moments.map((k) => ({ ...k, type: isSound(k.kind) ? 'praise' : deck.has(k.ply) ? 'find' : 'look' }))
+}
+
+/** How a lesson step went, for the marks on Review complete. */
+export type StepMark = 'found' | 'missed' | 'praise' | 'seen'

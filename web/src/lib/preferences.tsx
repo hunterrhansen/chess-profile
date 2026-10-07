@@ -9,7 +9,6 @@ export interface Preferences {
   bestArrow: 'auto' | 'request'
   overviewRange: Range
   sidebarCollapsed: boolean
-  showGraph: boolean
   sound: boolean
 }
 
@@ -27,7 +26,6 @@ const DEFAULTS: Preferences = {
   bestArrow: 'auto',
   overviewRange: '90d',
   sidebarCollapsed: false,
-  showGraph: false,
   sound: true,
 }
 const KEY = 'knightly.preferences'
