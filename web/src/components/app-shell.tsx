@@ -1,6 +1,7 @@
-import { Bot, ChartLine, ChessKnight, ListChecks, PanelLeftClose, PanelLeftOpen, Settings, Target } from 'lucide-react'
+import { Bot, ChartLine, ListChecks, PanelLeftClose, PanelLeftOpen, Settings, Target } from 'lucide-react'
 import { useEffect } from 'react'
 import { Link, Outlet, useLocation } from 'react-router'
+import { LogoMark } from '@/components/logo'
 import { useApi } from '@/lib/api'
 import { lastLocation, rememberLocation, type Section, sectionsOf } from '@/lib/last-location'
 import { usePreferences } from '@/lib/preferences'
@@ -65,10 +66,8 @@ export function AppShell() {
         )}
       >
         <div className="flex h-16 items-center gap-2.5 px-4">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-            <ChessKnight className="size-5" strokeWidth={2.25} />
-          </span>
-          <span className={cn('truncate text-lg font-semibold tracking-tight', label)}>Knightly</span>
+          <LogoMark />
+          <span className={cn('truncate font-display text-xl leading-none font-bold tracking-tight', label)}>Knightly</span>
         </div>
 
         <nav className="flex flex-col gap-1 px-2 pt-2">

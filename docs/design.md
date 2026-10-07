@@ -11,6 +11,15 @@ re-synced from this repo; when the two disagree, the code wins.
 - **Guardrail:** `pnpm lint` runs `scripts/check-colors.mjs`, which fails on hex,
   `rgb()`/`oklch()` and Tailwind palette classes (`bg-blue-500`, `text-white`) anywhere else.
 
+## Logo
+
+The mark is a dark knight on a green tile, on its ledge, with a gold moon behind its head:
+*knight* plus *nightly*. Use `LogoMark` (`components/logo.tsx`) for the mark and `Logo` for the
+mark with "Knightly" beside it in Fredoka 700. Under 24px use `LogoMark simple`: the moon can't
+be seen that small, so it's the knight alone (`public/favicon.svg` is that version). The colors
+are the brand fills (`brand`, `brand-lip`, `on-brand`, `gold`); never recolor the mark. The
+design canvas's Brand page has the lockups and the other directions considered.
+
 ## Color
 
 - Use tokens as Tailwind colors (`bg-brand`, `text-on-brand`, `border-line`,
@@ -60,6 +69,7 @@ re-synced from this repo; when the two disagree, the code wins.
 | MoveBadge | `components/move-badge.tsx` | Move classifications; `pop` on the board |
 | EvalBar | `components/eval-bar.tsx` | The engine bar beside the board |
 | CountUp / CountUpText | `components/ui/count-up.tsx` | Numbers that count up to their value |
+| LogoMark / Logo | `components/logo.tsx` | The mark, and the mark with the name |
 | Confetti | `components/confetti.tsx` | The big moments (see Motion); plays the celebrate sound |
 
 ## Voice
