@@ -85,7 +85,12 @@ def stats(conn, today: date | None = None) -> dict:
         (MASTERED, MASTERED),
     ).fetchone()
     done = len(_reviewed_today(conn, today))
+    kinds = conn.execute(
+        """SELECT m.classification AS kind, count(*) AS n FROM cards c
+           JOIN moves m ON m.game_id = c.game_id AND m.ply = c.ply GROUP BY m.classification"""
+    ).fetchall()
     return {
+        "kinds": {k: 0 for k in KINDS} | {r["kind"]: r["n"] for r in kinds if r["kind"] in KINDS},
         "total": totals["total"],
         "mastered": totals["mastered"] or 0,
         "learning": totals["learning"] or 0,
