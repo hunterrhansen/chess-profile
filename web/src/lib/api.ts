@@ -1,3 +1,4 @@
+import type { StepMark } from '@/lib/key-moments'
 import { useCallback, useEffect, useState } from 'react'
 
 export type Range = '30d' | '90d' | 'all'
@@ -259,7 +260,8 @@ export interface GameDetail extends Game {
   engine_accuracy: number | null
   opponent_accuracy: number | null
   plies: MoveRow[] // empty until the game has been analysed
-  deck_plies: number[] // your moves from this game that are in the review deck
+  deck_plies: number[] // your moves from this game that are (or will be) in the review deck
+  review_marks: { ply: number; mark: StepMark }[] // how each lesson step went, last time it was finished
 }
 
 /** A unit on Home's path (units.py): one KPI, its target, and the unit check over your last

@@ -41,7 +41,14 @@ export function ReviewPage() {
     [game, replay, me, opponent],
   )
   const index = Math.max(0, Math.min(steps.length - 1, Number(params.get('step') ?? 1) - 1))
-  const [marks, setMarks] = useState<Record<number, StepMark>>({})
+  // Progress through the lesson, kept in this browser so a reload picks up where you were.
+  const [marks, setMarks] = useState<Record<number, StepMark>>(() => loadProgress(id)?.marks ?? {})
+  useEffect(() => {
+    if (!params.has('step') && (loadProgress(id)?.step ?? 1) > 1) setParams({ step: String(loadProgress(id)!.step) }, { replace: true })
+  }, [id, params, setParams])
+  useEffect(() => {
+    if (steps.length) saveProgress(id, { step: index + 1, marks })
+  }, [id, index, marks, steps.length])
   const [finishing, setFinishing] = useState(false)
 
   if (error) return <p className="text-sm text-destructive">Couldn't load this game. {error}</p>
@@ -52,13 +59,10 @@ export function ReviewPage() {
   const finish = async () => {
     setFinishing(true)
     try {
-      await send('POST', `/api/games/${game.id}/review`)
-      const results = steps.map((s) => ({
-        ply: s.ply,
-        san: replay.moves[s.ply - 1].san,
-        mark: marks[s.ply] ?? (s.type === 'praise' ? 'praise' : 'seen'),
-      }))
-      navigate(`/games/${game.id}/done`, { state: { celebrate: true, marks: results } })
+      const results = steps.map((s) => ({ ply: s.ply, mark: marks[s.ply] ?? (s.type === 'praise' ? 'praise' : 'seen') }))
+      await send('POST', `/api/games/${game.id}/review`, { marks: results })
+      saveProgress(id, null)
+      navigate(`/games/${game.id}/done`, { state: { celebrate: true } })
     } catch {
       setFinishing(false)
     }
@@ -82,7 +86,7 @@ export function ReviewPage() {
         opponent={opponent}
         last={last}
         finishing={finishing}
-        onMark={(mark) => setMarks((m) => ({ ...m, [step.ply]: mark }))}
+        onMark={(mark) => setMarks((m) => (m[step.ply] ? m : { ...m, [step.ply]: mark }))}
         onNext={last ? finish : () => setParams({ step: String(index + 2) }, { replace: true })}
       />
     </div>
@@ -90,6 +94,29 @@ export function ReviewPage() {
 }
 
 const SKIP = '0000'
+
+interface Progress {
+  step: number
+  marks: Record<number, StepMark>
+}
+const progressKey = (id: string | undefined) => `knightly.lesson.${id}`
+
+function loadProgress(id: string | undefined): Progress | null {
+  try {
+    return JSON.parse(localStorage.getItem(progressKey(id)) ?? 'null')
+  } catch {
+    return null // storage blocked or corrupt: start at the beginning
+  }
+}
+
+function saveProgress(id: string | undefined, progress: Progress | null) {
+  try {
+    if (progress) localStorage.setItem(progressKey(id), JSON.stringify(progress))
+    else localStorage.removeItem(progressKey(id))
+  } catch {
+    // storage blocked: the lesson still works, it just won't resume
+  }
+}
 
 function Step({
   game,

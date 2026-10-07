@@ -21,7 +21,8 @@ export function MoveText({
   const white = side ? side === 'white' : ply % 2 === 1
   return (
     <span className="whitespace-nowrap">
-      {number && <span className="mr-1">{Math.ceil(ply / 2)}.</span>}
+      {/* "29. Rxc8" for White, "29…Qxc8" for Black, as chess writes them */}
+      {number && (white ? <span className="mr-1">{Math.ceil(ply / 2)}.</span> : <span>{Math.ceil(ply / 2)}…</span>)}
       {piece && <PieceGlyph kind={piece.toLowerCase() as PieceKind} side={white ? 'w' : 'b'} className="mr-px" />}
       {piece && <span className="sr-only">{piece}</span>}
       {rest}

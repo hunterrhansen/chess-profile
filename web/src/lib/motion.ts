@@ -19,6 +19,18 @@ export function useReducedMotion() {
   )
 }
 
+/** True from the md breakpoint up; below it, screens use their phone layout. */
+export function useWide() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const mq = matchMedia('(min-width: 768px)')
+      mq.addEventListener('change', onChange)
+      return () => mq.removeEventListener('change', onChange)
+    },
+    () => matchMedia('(min-width: 768px)').matches,
+  )
+}
+
 /** A duration token in milliseconds, for libraries that want a number (the board). The
  * production build's CSS minifier rewrites `200ms` as `.2s`, so read the unit. */
 export function durationMs(name: `--duration-${string}`) {
