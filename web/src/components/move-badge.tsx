@@ -1,4 +1,4 @@
-import { Check, Star, ThumbsUp, X } from 'lucide-react'
+import { CheckIcon, StarIcon, ThumbsUpIcon, XIcon } from '@phosphor-icons/react'
 import { useEffect } from 'react'
 import type { Classification } from '@/lib/api'
 import { CLASSIFICATION } from '@/lib/classification'
@@ -6,7 +6,7 @@ import { durationMs } from '@/lib/motion'
 import { playSound } from '@/lib/sound'
 import { cn } from '@/lib/utils'
 
-const ICONS = { best: Star, excellent: ThumbsUp, good: Check, miss: X } as const
+const ICONS = { best: StarIcon, excellent: ThumbsUpIcon, good: CheckIcon, miss: XIcon } as const
 
 /** Round classification badge: an icon for good moves and misses, !! / ! for brilliant and
  * great moves, ?! / ? / ?? for errors. `pop` plays the landing animation once on mount (key
@@ -39,7 +39,7 @@ export function MoveBadge({ kind, pop, className }: { kind: Classification; pop?
         />
       )}
       {Icon ? (
-        <Icon className="relative size-3" strokeWidth={3} fill={kind === 'best' ? 'currentColor' : 'none'} />
+        <Icon className="relative size-3" weight={kind === 'best' || kind === 'excellent' ? 'fill' : 'bold'} />
       ) : (
         <span className="relative">{symbol}</span>
       )}

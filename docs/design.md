@@ -57,8 +57,46 @@ The mark also carries the waits and the gaps:
 - Panels: `Card`, or the `panel` utility for hand-built ones (2px `line` border, 24px
   radius, 2px `lip` ledge). A panel that is a link adds `panel-link` (lifts on hover).
 - No soft drop shadows. Depth is always a solid ledge.
-- Radii: `rounded-sm` 8px (board, swatches), `rounded-md` 12px (pills, rows),
+- Radii: `rounded-sm` 8px (swatches), the board 10px, `rounded-md` 12px (pills, rows),
   `rounded-lg` 16px (buttons), `rounded-xl` 24px (cards).
+
+## Board
+
+Every position is drawn by `Board` (`components/board.tsx`); don't use react-chessboard
+directly. It sits on a 4px `lip` ledge with 10px corners, and uses Knightly's pieces
+(`components/pieces.tsx`): flat shapes on a rounded base, colored by the `--piece-*` tokens,
+which are the same in both themes. Its states, each on `/styleguide`:
+
+- **Last move:** yellow (`board-highlight-*`). In an engine line (`inLine`) the highlights and
+  a frame around the board turn blue (`line-highlight-*`), so a line never looks like the game.
+- **Picking a move:** `selected` gets a sky ring (`--selected`); `targets` show a dot on an empty
+  square and a ring on a capture (`--move-hint`).
+- **Arrows:** `best` green for the better move, `line` blue for a line's next move, `danger` red
+  for the reply that punishes a move.
+- **Check shows the attack:** the king's square goes solid red (`--check`) and the squares from
+  the checking piece to the king are tinted (`--check-path`). A knight has no path: just its own
+  square is tinted. Worked out from the position, so every board does it.
+- **Badge:** the move's classification on the square it landed on (`MoveBadge pop`).
+
+`PlayBoard` (`pages/play.tsx`) wraps it for making moves (Play, Practice).
+
+## Icons
+
+- **KnIcon** (`components/kn-icon.tsx`): Knightly's own two-tone icons on a ledge (home, games,
+  play, progress, settings, goal, drill, review, trophy, notes, engine, lock, check, star,
+  crown). For navigation, the path and the big moments. They use the theme tokens, so they
+  follow light and dark.
+- **Phosphor** (`@phosphor-icons/react`) for everything else: buttons, inline controls,
+  status. `bold` by default (set in `main.tsx`); `weight="fill"` for objects (robot, flag,
+  lightbulb, star, play). Use the `…Icon` names (`CheckIcon`).
+- Figurine notation (`MoveText`) draws the piece shapes in the text color (`PieceGlyph`).
+
+## Navigation
+
+From `md` up, a sidebar: the brand, then the tabs (KnIcon and an uppercase label; the current
+one outlined in sky), collapsible to an icon rail. On a phone: a top bar with the Settings gear
+and a tab bar along the bottom. The design's tabs are Home · Games · Play · Progress ·
+Settings; until Home is built, Practice holds its place and `/` opens Progress.
 
 ## Type
 
@@ -79,6 +117,9 @@ The mark also carries the waits and the gaps:
 | StatLabel / StatValue / StatDelta | `components/ui/stat.tsx` | Stat tiles inside a Card |
 | MoveBadge | `components/move-badge.tsx` | Move classifications; `pop` on the board |
 | EvalBar | `components/eval-bar.tsx` | The engine bar beside the board |
+| Board / PlayBoard | `components/board.tsx`, `pages/play.tsx` | Every chess position; PlayBoard to make moves (see Board) |
+| Piece / PieceGlyph | `components/pieces.tsx` | A piece on its own; a piece in the text color for notation |
+| KnIcon | `components/kn-icon.tsx` | Brand icons: navigation, the path, big moments |
 | CountUp / CountUpText | `components/ui/count-up.tsx` | Numbers that count up to their value |
 | LogoMark / Logo | `components/logo.tsx` | The mark, and the mark with the name |
 | LogoLoader / LoadingBlock / EmptyState | `components/logo.tsx`, `components/empty-state.tsx` | Loading a view; nothing to show yet |

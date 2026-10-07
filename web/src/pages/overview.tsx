@@ -1,4 +1,4 @@
-import { ArrowRight } from 'lucide-react'
+import { ArrowRightIcon } from '@phosphor-icons/react'
 import type { ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts'
@@ -19,20 +19,20 @@ import { cn } from '@/lib/utils'
 
 const ROLLING_WINDOW = 20
 
-export function OverviewPage() {
+export function ProgressPage() {
   const [params, setParams] = useSearchParams()
   const { prefs } = usePreferences()
   const range = (params.get('range') as Range | null) ?? prefs.overviewRange
   const { data, error } = useApi<Overview>(`/api/overview?range=${range}`)
 
-  // KPI links carry the overview's range into the games list.
+  // KPI links carry this page's range into the games list.
   const gamesLink = (extra: Record<string, string> = {}) =>
     `/games?${new URLSearchParams({ ...(range !== 'all' && { range }), ...extra })}`
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-xl font-medium">Overview</h1>
+        <h1 className="text-xl font-medium">Progress</h1>
         <ToggleGroup
           type="single"
           variant="outline"
@@ -47,7 +47,7 @@ export function OverviewPage() {
         </ToggleGroup>
       </div>
 
-      {error && <p className="text-sm text-destructive">Couldn't load the overview. {error}</p>}
+      {error && <p className="text-sm text-destructive">Couldn't load your progress. {error}</p>}
       {!data ? <OverviewSkeleton /> : <OverviewBody data={data} range={range} gamesLink={gamesLink} />}
     </div>
   )
@@ -204,7 +204,7 @@ function StatCard({ label, to, children }: { label: string; to?: string; childre
       <CardHeader>
         <StatLabel>
           {label}
-          {to && <ArrowRight className="size-3.5" />}
+          {to && <ArrowRightIcon className="size-3.5" />}
         </StatLabel>
         <StatValue className="mt-1">{children}</StatValue>
       </CardHeader>
@@ -279,7 +279,7 @@ function KpiCard({
             to={link.to}
             className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
           >
-            {link.text} <ArrowRight className="size-3" />
+            {link.text} <ArrowRightIcon className="size-3" />
           </Link>
         )}
       </CardContent>

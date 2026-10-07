@@ -1,16 +1,15 @@
 import { Chess, type Square } from 'chess.js'
-import { Bot, Flag, Lightbulb, LoaderCircle, Undo2 } from 'lucide-react'
+import { ArrowUUpLeftIcon, CircleNotchIcon, FlagIcon, LightbulbIcon, RobotIcon } from '@phosphor-icons/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { type Arrow, Chessboard } from 'react-chessboard'
 import { Link } from 'react-router'
+import { Board, type Palette } from '@/components/board'
 import { Button } from '@/components/ui/button'
 import { send, useApi } from '@/lib/api'
 import { BOARDS, usePreferences } from '@/lib/preferences'
-import { durationMs, useMoveMs } from '@/lib/motion'
-import { playSound, useMoveSound } from '@/lib/sound'
-import { token } from '@/lib/tokens'
+import { durationMs } from '@/lib/motion'
+import { playSound } from '@/lib/sound'
 import { cn } from '@/lib/utils'
-import { BEST_ARROW, MoveList, NavButton, PlayerStrip } from '@/pages/review'
+import { MoveList, NavButton, PlayerStrip } from '@/pages/review'
 
 type Side = 'white' | 'black'
 
@@ -27,10 +26,7 @@ const LEVELS: { elo: number; label: string }[] = [
   { elo: 3200, label: 'Full strength' },
 ]
 const BOT_DELAY_MS = 500 // the bot never answers faster than this, so its moves can be seen
-const CHECK = 'radial-gradient(circle, var(--check-glow) 0%, var(--check-glow-soft) 45%, transparent 75%)'
 const STORE = 'knightly.play'
-
-const isLightSquare = (square: string) => (square.charCodeAt(0) - 97 + Number(square[1])) % 2 === 0
 
 /** A game in progress (or just finished), kept for the browser session so leaving the page
  * or reloading doesn't lose it. */
@@ -289,7 +285,7 @@ export function PlayPage() {
         <div className="relative min-h-[28rem]">
           <aside className="panel flex flex-col overflow-hidden lg:absolute lg:inset-0">
             <div className="flex items-center justify-center gap-2 border-b px-3 py-3 font-semibold">
-              <Bot className="size-5" /> Play bot
+              <RobotIcon weight="fill" className="size-5" /> Play bot
             </div>
 
             {!state ? (
@@ -338,7 +334,7 @@ export function PlayPage() {
                       {state.savedId &&
                         (analysis === 'running' ? (
                           <Button size="sm" disabled>
-                            <LoaderCircle className="animate-spin" /> Analysing…
+                            <CircleNotchIcon className="animate-spin" /> Analysing…
                           </Button>
                         ) : (
                           <Button size="sm" asChild>
@@ -367,13 +363,13 @@ export function PlayPage() {
                   )}
                 </div>
                 <div className="grid grid-cols-3 gap-2 border-t p-2">
-                  <NavButton label="Resign" onClick={resign} icon={<Flag />} disabled={!playing} />
-                  <NavButton label="Take back" onClick={takeback} icon={<Undo2 />} disabled={!playing || !moves.length} />
+                  <NavButton label="Resign" onClick={resign} icon={<FlagIcon weight="fill" />} disabled={!playing} />
+                  <NavButton label="Take back" onClick={takeback} icon={<ArrowUUpLeftIcon />} disabled={!playing || !moves.length} />
                   <NavButton
                     label="Hint"
                     onClick={askHint}
                     disabled={!playing || !myTurn || hintLoading}
-                    icon={hintLoading ? <LoaderCircle className="animate-spin" /> : <Lightbulb />}
+                    icon={hintLoading ? <CircleNotchIcon className="animate-spin" /> : <LightbulbIcon weight="fill" />}
                   />
                 </div>
               </>
@@ -445,7 +441,7 @@ function Setup({
         Play
       </Button>
       <p className="text-xs text-muted-foreground">
-        Finished games are saved as unrated games, so you can review them. They stay out of the overview's stats.
+        Finished games are saved as unrated games, so you can review them. They stay out of your Progress stats.
       </p>
     </div>
   )
@@ -459,7 +455,7 @@ function BotSays({ elo, text, error }: { elo: number; text: string | null; error
         className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
         title={botName(elo)}
       >
-        <Bot className="size-7" />
+        <RobotIcon weight="fill" className="size-7" />
       </span>
       <div
         className={cn(
@@ -469,7 +465,7 @@ function BotSays({ elo, text, error }: { elo: number; text: string | null; error
       >
         {text ?? (
           <span className="flex items-center gap-1.5 text-muted-foreground">
-            <LoaderCircle className="size-3.5 animate-spin" /> Thinking…
+            <CircleNotchIcon className="size-3.5 animate-spin" /> Thinking…
           </span>
         )}
       </div>
@@ -496,76 +492,28 @@ export function PlayBoard({
   hint: string | null
   selected: string | null
   interactive: boolean
-  palette: (typeof BOARDS)[keyof typeof BOARDS]
+  palette: Palette
   /** Lights a square up once after the piece lands: green for a right answer, red for wrong. */
   flash?: { square: string; tone: 'right' | 'wrong' }
   onMove: (from: string, to: string) => boolean
   onSelect: (square: string | null) => void
 }) {
-  const moveMs = useMoveMs()
-  useMoveSound(chess.fen())
-  const mine = orientation === 'white' ? 'w' : 'b'
-  const targets = new Set(
+  const targets = new Set<string>(
     interactive && selected ? chess.moves({ square: selected as Square, verbose: true }).map((m) => m.to) : [],
   )
-  const highlight = (sq: string) => (isLightSquare(sq) ? palette.lightHl : palette.darkHl)
-  const squareStyles: Record<string, React.CSSProperties> = {}
-  if (lastMove) for (const sq of [lastMove.from, lastMove.to]) squareStyles[sq] = { backgroundColor: highlight(sq) }
-  if (selected) squareStyles[selected] = { backgroundColor: highlight(selected) }
-  if (chess.inCheck()) {
-    const king = chess.findPiece({ type: 'k', color: chess.turn() })[0]
-    if (king) squareStyles[king] = { ...squareStyles[king], backgroundImage: CHECK }
-  }
-  const arrows: Arrow[] = hint ? [{ startSquare: hint.slice(0, 2), endSquare: hint.slice(2, 4), color: token(BEST_ARROW) }] : []
-
-  const click = (square: string) => {
-    if (!interactive) return
-    if (selected && targets.has(square as Square)) {
-      onMove(selected, square)
-      return
-    }
-    const piece = chess.get(square as Square)
-    onSelect(piece && piece.color === mine && square !== selected ? square : null)
-  }
-
   return (
-    <div className="min-w-0 flex-1 overflow-visible rounded-sm">
-      <Chessboard
-        options={{
-          position: chess.fen(),
-          boardOrientation: orientation,
-          allowDragging: interactive,
-          canDragPiece: ({ piece }) => interactive && piece.pieceType[0] === mine,
-          onPieceDrag: ({ square }) => onSelect(square),
-          onPieceDrop: ({ sourceSquare, targetSquare }) => !!targetSquare && onMove(sourceSquare, targetSquare),
-          onSquareClick: ({ square }) => click(square),
-          animationDurationInMs: moveMs,
-          lightSquareStyle: { backgroundColor: palette.light },
-          darkSquareStyle: { backgroundColor: palette.dark },
-          lightSquareNotationStyle: { color: palette.dark },
-          darkSquareNotationStyle: { color: palette.light },
-          arrows,
-          squareRenderer: ({ square, children }) => (
-            <div className="relative size-full" style={squareStyles[square]}>
-              {children}
-              {targets.has(square as Square) &&
-                (chess.get(square as Square) ? (
-                  <span className="pointer-events-none absolute inset-0 rounded-full border-[6px] border-move-hint" />
-                ) : (
-                  <span className="pointer-events-none absolute inset-[36%] rounded-full bg-move-hint" />
-                ))}
-              {flash?.square === square && (
-                <span
-                  className={cn(
-                    'pointer-events-none absolute inset-0 animate-flash [animation-delay:var(--duration-move)]',
-                    flash.tone === 'right' ? 'bg-brand/70' : 'bg-danger/70',
-                  )}
-                />
-              )}
-            </div>
-          ),
-        }}
-      />
-    </div>
+    <Board
+      fen={chess.fen()}
+      orientation={orientation}
+      palette={palette}
+      lastMove={lastMove}
+      selected={selected}
+      targets={targets}
+      arrows={hint ? [{ from: hint.slice(0, 2), to: hint.slice(2, 4), tone: 'best' }] : []}
+      flash={flash}
+      movable={interactive ? (orientation === 'white' ? 'w' : 'b') : undefined}
+      onMove={onMove}
+      onSelect={onSelect}
+    />
   )
 }
