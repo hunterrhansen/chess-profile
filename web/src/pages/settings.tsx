@@ -1,10 +1,10 @@
 import { Check, Circle, LoaderCircle, Play, Plus, X } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import { LoadingBlock } from '@/components/empty-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { type RunProgress, send, type Settings, useApi } from '@/lib/api'
 import { BOARDS, type Preferences, usePreferences } from '@/lib/preferences'
@@ -34,7 +34,7 @@ export function SettingsPage() {
       <AppearanceSection />
       {error && <p className="text-sm text-destructive">Couldn't load settings. {error}</p>}
       {!data ? (
-        <Skeleton className="h-96 rounded-xl" />
+        <LoadingBlock label="Loading your settings…" className="h-96 rounded-xl" />
       ) : (
         <>
           <AccountsSection settings={data} reload={reload} />

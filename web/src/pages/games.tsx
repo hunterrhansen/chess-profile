@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight, ListFilter, Search, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
+import { EmptyState } from '@/components/empty-state'
 import { ColorDot, ResultBadge } from '@/components/game-bits'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -149,11 +150,17 @@ export function GamesPage() {
             ))}
             {data && !data.games.length && (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={7} className="py-12 text-center">
-                  <p className="font-medium">No games match these filters</p>
-                  <Button variant="link" onClick={resetFilters}>
-                    Reset filters
-                  </Button>
+                <TableCell colSpan={7} className="whitespace-normal">
+                  <EmptyState
+                    title="No games match these filters"
+                    action={
+                      <Button variant="outline" onClick={resetFilters}>
+                        Reset filters
+                      </Button>
+                    }
+                  >
+                    Try a wider date range or fewer filters.
+                  </EmptyState>
                 </TableCell>
               </TableRow>
             )}

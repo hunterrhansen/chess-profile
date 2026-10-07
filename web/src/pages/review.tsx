@@ -5,6 +5,7 @@ import { type Arrow, Chessboard } from 'react-chessboard'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { ResultBadge } from '@/components/game-bits'
 import { EvalBar as EvalBarView } from '@/components/eval-bar'
+import { LoadingBlock } from '@/components/empty-state'
 import { MoveBadge } from '@/components/move-badge'
 import { MarkedText, MoveText } from '@/components/move-text'
 import { Badge } from '@/components/ui/badge'
@@ -1173,7 +1174,7 @@ export function NavButton({
 function ReviewSkeleton() {
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <Skeleton className="mx-auto aspect-square w-full max-w-[calc(100svh-170px)]" />
+      <LoadingBlock label="Setting up the board…" className="mx-auto aspect-square w-full max-w-[calc(100svh-170px)] rounded-sm" />
       <Skeleton className="h-[28rem] rounded-xl" />
     </div>
   )

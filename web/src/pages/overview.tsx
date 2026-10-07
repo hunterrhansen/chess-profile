@@ -2,6 +2,7 @@ import { ArrowRight } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts'
+import { EmptyState, LoadingBlock } from '@/components/empty-state'
 import { ColorDot, ResultBadge } from '@/components/game-bits'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -166,7 +167,11 @@ function OverviewBody({
                 <span className="w-14 text-right text-muted-foreground">{shortDate(g.played_at)}</span>
               </Link>
             ))}
-            {!data.recent_games.length && <p className="text-sm text-muted-foreground">No games in this period.</p>}
+            {!data.recent_games.length && (
+              <EmptyState compact title="No games in this period">
+                {range === 'all' ? 'Sync an account in Settings to bring your games in.' : 'Try a longer range above.'}
+              </EmptyState>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -429,7 +434,7 @@ function OverviewSkeleton() {
           <Skeleton key={i} className="h-28 rounded-xl" />
         ))}
       </div>
-      <Skeleton className="h-80 rounded-xl" />
+      <LoadingBlock label="Counting up your games…" className="h-80 rounded-xl" />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (
           <Skeleton key={i} className="h-44 rounded-xl" />

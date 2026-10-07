@@ -20,6 +20,17 @@ be seen that small, so it's the knight alone (`public/favicon.svg` is that versi
 are the brand fills (`brand`, `brand-lip`, `on-brand`, `gold`); never recolor the mark. The
 design canvas's Brand page has the lockups and the other directions considered.
 
+The mark also carries the waits and the gaps:
+
+- **Loading a whole view:** `LogoLoader` (the mark hopping in place, with a short line like
+  "Picking today's positions…"). Over a block whose size is known (the board, a chart), use
+  `LoadingBlock`: a skeleton of that size with the loader on top, so nothing jumps when the
+  content arrives. Small waits inside a panel keep their spinner; table rows keep plain
+  skeletons. Before the app's code loads, `index.html` shows the mark too.
+- **Nothing to show:** `EmptyState` (`components/empty-state.tsx`): the mark, a heading saying
+  what's missing, one line on how to get it, and the action that does ("Reset filters", "Go to
+  Settings"). `compact` for a gap inside a card.
+
 ## Color
 
 - Use tokens as Tailwind colors (`bg-brand`, `text-on-brand`, `border-line`,
@@ -70,6 +81,7 @@ design canvas's Brand page has the lockups and the other directions considered.
 | EvalBar | `components/eval-bar.tsx` | The engine bar beside the board |
 | CountUp / CountUpText | `components/ui/count-up.tsx` | Numbers that count up to their value |
 | LogoMark / Logo | `components/logo.tsx` | The mark, and the mark with the name |
+| LogoLoader / LoadingBlock / EmptyState | `components/logo.tsx`, `components/empty-state.tsx` | Loading a view; nothing to show yet |
 | Confetti | `components/confetti.tsx` | The big moments (see Motion); plays the celebrate sound |
 
 ## Voice
@@ -110,7 +122,8 @@ for pieces, `--ease-bounce` for rewards and unlocks, `ease-in` for leaving. Use 
 | `animate-rise` | Items arriving in order: stagger with `animation-delay`, about 80ms apart |
 | `animate-bump` | A count that just changed ("4 of 10"): key it by the value |
 | `animate-float-up` | A change floating off a number ("+12") |
-| `animate-beacon` | The current step only. The one loop allowed |
+| `animate-beacon` | The current step only |
+| `animate-hop` | The logo while a view loads (`LogoLoader`) |
 | `CountUp` / `CountUpText` | Stats and scores counting up when shown or changed |
 | `Confetti` | The big moments only |
 
@@ -124,7 +137,8 @@ Rules:
   personal best or a Brilliant you found: one per view, never on a loop. Ordinary moves stay quiet.
 - **Wrong is firm, not harsh.** Red, a single small shake on the ✕, the right move shown. The
   progress bar still moves forward.
-- **Loops mean "act now".** Only `animate-beacon`, and only on the one thing to do next.
+- **Loops mean "act now" or "wait".** Only `animate-beacon`, on the one thing to do next, and
+  `animate-hop`, on the loader.
 - **Nothing waits on an animation.** Buttons work mid-animation, and nothing animates longer
   than `--duration-celebrate`.
 - **Reduced motion.** `prefers-reduced-motion` makes every animation jump to its last frame

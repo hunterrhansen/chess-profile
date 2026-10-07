@@ -46,3 +46,15 @@ export function Logo({ className, markClassName }: { className?: string; markCla
     </span>
   )
 }
+
+/** The app is fetching something: the mark hops in place, like a knight about to move, with
+ * a short line under it ("Picking today's positions…"). Use it where a whole view waits; a
+ * small wait inside a panel keeps its spinner. Reduced motion holds it still. */
+export function LogoLoader({ label, className }: { label?: string; className?: string }) {
+  return (
+    <div role="status" className={cn('flex flex-col items-center gap-3 text-center', className)}>
+      <LogoMark className="size-14 animate-hop" />
+      <span className={cn('text-sm text-muted-foreground', !label && 'sr-only')}>{label ?? 'Loading'}</span>
+    </div>
+  )
+}

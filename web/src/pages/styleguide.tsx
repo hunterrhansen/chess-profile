@@ -1,6 +1,7 @@
 import { ArrowRight, Check, Play, RotateCcw, Star, Volume2, X } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { Confetti } from '@/components/confetti'
+import { EmptyState, LoadingBlock } from '@/components/empty-state'
 import { EvalBar } from '@/components/eval-bar'
 import { Logo, LogoMark } from '@/components/logo'
 import { ResultBadge } from '@/components/game-bits'
@@ -32,7 +33,7 @@ export function StyleguidePage() {
         </p>
       </header>
 
-      <Block title="Logo" note="LogoMark and Logo in components/logo.tsx. The knight alone (simple) under 24px; the favicon is that version.">
+      <Block title="Logo" note="LogoMark and Logo in components/logo.tsx; the knight alone (simple) under 24px. The mark also carries the loading and empty states.">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="panel flex flex-wrap items-end gap-6 p-6">
             <LogoMark title="Knightly" className="size-28" />
@@ -43,6 +44,23 @@ export function StyleguidePage() {
           <div className="panel flex flex-col justify-center gap-5 p-6">
             <Logo />
             <Logo className="gap-4 [&>span:last-child]:text-4xl" markClassName="size-14" />
+          </div>
+          <div className="panel flex flex-col gap-4 p-6">
+            <h3 className="eyebrow">Loading: LogoLoader, LoadingBlock</h3>
+            <LoadingBlock label="Picking today's positions…" className="h-48 rounded-lg" />
+          </div>
+          <div className="panel flex flex-col gap-2 p-6">
+            <h3 className="eyebrow">Empty: EmptyState</h3>
+            <EmptyState
+              title="No positions yet"
+              className="py-4"
+              action={<Button variant="outline">Go to Settings</Button>}
+            >
+              Positions come from your analysed games.
+            </EmptyState>
+            <EmptyState compact title="No games in this period">
+              Try a longer range above.
+            </EmptyState>
           </div>
         </div>
       </Block>
