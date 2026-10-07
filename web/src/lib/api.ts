@@ -88,6 +88,7 @@ export interface DeckToday {
 export interface DeckCard {
   game_id: number
   ply: number
+  pattern: string | null // the tactic behind it (patterns.py); shown only after you answer
   step: number // right answers in a row so far
   reviews: number // 0: you haven't seen this position yet
   fen_before: string
@@ -292,4 +293,11 @@ export interface Home {
     positions: { done: number; total: number }
     deck_total: number
   }
+}
+
+/** What your mistakes come down to (GET /api/patterns): most common tactic first, "other" last. */
+export interface PatternCounts {
+  range: Range
+  patterns: { pattern: string; total: number; blunder: number; mistake: number; miss: number }[]
+  pending: number // tagged once the daily update has looked deeper
 }

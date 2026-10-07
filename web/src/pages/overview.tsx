@@ -14,9 +14,10 @@ import { CountUpText } from '@/components/ui/count-up'
 import { type ChartConfig, ChartContainer, ChartTooltip } from '@/components/ui/chart'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { type DeckToday, type Home, type Kpis, type Overview, type Range, type Unit, useApi } from '@/lib/api'
+import { type DeckToday, type Home, type Kpis, type Overview, type PatternCounts, type Range, type Unit, useApi } from '@/lib/api'
 import { longDate, num, openingLabel, pct, shortDate, signed } from '@/lib/format'
 import { usePreferences } from '@/lib/preferences'
+import { patternOf } from '@/lib/patterns'
 import { unitCopy } from '@/lib/units'
 import { cn } from '@/lib/utils'
 
@@ -29,6 +30,7 @@ export function ProgressPage() {
   const { data, error } = useApi<Overview>(`/api/overview?range=${range}`)
   const { data: home } = useApi<Home>('/api/home')
   const { data: deck } = useApi<DeckToday>('/api/deck')
+  const { data: blunders } = useApi<PatternCounts>(`/api/patterns?range=${range}`)
 
   // KPI links carry this page's range into the games list.
   const gamesLink = (extra: Record<string, string> = {}) =>
@@ -52,7 +54,7 @@ export function ProgressPage() {
       </div>
 
       {error && <p className="text-sm text-destructive">Couldn't load your progress. {error}</p>}
-      {!data ? <OverviewSkeleton /> : <OverviewBody data={data} range={range} units={home?.units} deck={deck} gamesLink={gamesLink} />}
+      {!data ? <OverviewSkeleton /> : <OverviewBody data={data} range={range} units={home?.units} deck={deck} blunders={blunders} gamesLink={gamesLink} />}
     </div>
   )
 }
@@ -106,12 +108,14 @@ function OverviewBody({
   range,
   units,
   deck,
+  blunders,
   gamesLink,
 }: {
   data: Overview
   range: Range
   units?: Unit[]
   deck: DeckToday | null
+  blunders: PatternCounts | null
   gamesLink: (extra?: Record<string, string>) => string
 }) {
   const { kpis, previous_kpis: prev } = data
@@ -143,6 +147,7 @@ function OverviewBody({
         <RatingChart data={data} />
       </Card>
 
+      <div className="grid items-start gap-5 md:grid-cols-2">
       {deck && deck.total > 0 && (
         <Card className="gap-4 px-6">
           <div className="flex items-center gap-3">
@@ -183,6 +188,8 @@ function OverviewBody({
           </p>
         </Card>
       )}
+      {blunders && <WhatYouBlunder data={blunders} />}
+      </div>
 
       <section aria-labelledby="units-h" className="flex flex-col gap-4">
         <div>
@@ -294,6 +301,52 @@ function OverviewBody({
         </Card>
       </div>
     </>
+  )
+}
+
+/** The tactic behind your mistakes, most common first, with a tip for the top one. */
+function WhatYouBlunder({ data }: { data: PatternCounts }) {
+  const tactics = data.patterns.filter((p) => p.pattern !== 'other' && patternOf(p.pattern))
+  const other = data.patterns.find((p) => p.pattern === 'other')
+  const all = data.patterns.reduce((n, p) => n + p.total, 0) + data.pending
+  const max = Math.max(1, ...tactics.map((p) => p.total))
+  const top = tactics[0] && patternOf(tactics[0].pattern)
+  return (
+    <Card className="gap-3 px-6">
+      <h2 className="font-heading text-xl font-semibold">What you blunder</h2>
+      {!all ? (
+        <p className="text-sm text-muted-foreground">No mistakes in this period to look at.</p>
+      ) : (
+        <>
+          <p className="text-sm text-muted-foreground">
+            The tactic behind each of your {all} blunders, mistakes and misses in this period.
+          </p>
+          <ul className="flex flex-col gap-2.5">
+            {tactics.slice(0, 6).map((p, i) => (
+              <li key={p.pattern} className="grid grid-cols-[8.5rem_minmax(0,1fr)_2.5rem] items-center gap-3 text-sm">
+                <span className={cn('truncate', i === 0 && 'font-extrabold')}>{patternOf(p.pattern)!.label}</span>
+                <span className="h-3 overflow-hidden rounded-full bg-surface-muted">
+                  <span
+                    className={cn('block h-full rounded-full', i === 0 ? 'bg-danger' : 'bg-sky')}
+                    style={{ width: `${(p.total / max) * 100}%` }}
+                  />
+                </span>
+                <span className="text-right font-extrabold tabular-nums">{p.total}</span>
+              </li>
+            ))}
+          </ul>
+          {top && (
+            <p className="rounded-md bg-danger/12 px-3 py-2 text-sm">
+              <b>{top.label} first.</b> {top.tip}
+            </p>
+          )}
+          <p className="text-[13px] text-muted-foreground">
+            {other ? `${other.total} more had no clear tactic: slower, positional slips.` : ''}
+            {data.pending ? ` ${data.pending} are waiting for the daily update to look deeper.` : ''}
+          </p>
+        </>
+      )}
+    </Card>
   )
 }
 

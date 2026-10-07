@@ -334,3 +334,15 @@ def test_games_quick_filters(client):
     # Counts follow search and the popover filters, not the quick filter itself.
     assert client.get("/api/games?result=win").json()["counts"]["all"] == 5
     assert client.get("/api/games?color=white").json()["counts"]["all"] == 5
+
+
+def test_patterns_endpoint(client, tmp_path):
+    # Game 1's blunder (ply 3) is tagged on the first request; with no stored position
+    # details to go on in this fixture it waits for the engine pass.
+    p = client.get("/api/patterns?range=30d").json()
+    assert p["range"] == "30d"
+    assert p["pending"] + sum(x["total"] for x in p["patterns"]) >= 1
+    with db.connect(tmp_path / "chess.db") as conn:
+        conn.execute("UPDATE moves SET pattern = 'fork' WHERE game_id = 1 AND ply = 3")
+    forks = next(x for x in client.get("/api/patterns?range=30d").json()["patterns"] if x["pattern"] == "fork")
+    assert forks["blunder"] == 1 and forks["total"] >= 1

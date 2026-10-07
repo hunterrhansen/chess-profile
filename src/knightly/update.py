@@ -13,7 +13,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from . import analyze
+from . import analyze, patterns
 from .sources import chesscom, lichess
 
 KEEP_BACKUPS = 7
@@ -173,7 +173,7 @@ def _run_locked(conn, db_path, token, workers, depth, engine_path, backup_dir, k
                               (trigger,)).lastrowid
     errors, counts = [], {}
     targets = known_accounts(conn)
-    progress = Progress(conn, run_id, [f"sync:{s}:{u}" for s, u in targets] + ["analyze", "backup"])
+    progress = Progress(conn, run_id, [f"sync:{s}:{u}" for s, u in targets] + ["analyze", "patterns", "backup"])
     try:
         games, puzzles, sync_errors = sync_accounts(conn, targets, token, log=log, progress=progress)
         counts.update(new_games=games, new_puzzles=puzzles)
@@ -190,6 +190,17 @@ def _run_locked(conn, db_path, token, workers, depth, engine_path, backup_dir, k
         except (Exception, SystemExit) as e:  # SystemExit: Stockfish not installed
             log(f"Analysis failed: {e}")
             errors.append(f"analyze: {e}")
+            progress.finish(None, error=str(e))
+
+        progress.start("patterns", "Naming the tactic behind each mistake")
+        try:
+            with conn:
+                patterns.tag_all(conn)
+            n = patterns.deepen(conn, engine_path, workers=workers, log=log)
+            progress.finish(_plural(n, "mistake") + " tagged" if n else "Nothing new to tag")
+        except (Exception, SystemExit) as e:
+            log(f"Pattern tagging failed: {e}")
+            errors.append(f"patterns: {e}")
             progress.finish(None, error=str(e))
 
         progress.start("backup", "Copying the database")

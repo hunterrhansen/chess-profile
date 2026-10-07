@@ -482,6 +482,7 @@ const SOURCE_NAMES: Record<string, string> = { chesscom: 'Chess.com', lichess: '
 
 function stepLabel(key: string) {
   if (key === 'analyze') return 'Analyse new games'
+  if (key === 'patterns') return 'Name the tactic behind each mistake'
   if (key === 'backup') return 'Back up the database'
   const [, source, handle] = key.split(':')
   return `Sync ${SOURCE_NAMES[source] ?? source} · ${handle}`

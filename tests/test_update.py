@@ -126,7 +126,7 @@ def test_progress_records_each_step(setup, monkeypatch):
     monkeypatch.setattr(analyze, "run", analysing)
     assert update.run(conn, db_path, token="t", log=quiet) == "ok"
     mid = seen[0]
-    assert mid["plan"] == ["sync:chesscom:me", "sync:lichess:me", "analyze", "backup"]
+    assert mid["plan"] == ["sync:chesscom:me", "sync:lichess:me", "analyze", "patterns", "backup"]
     assert (mid["current"], mid["detail"]) == ("analyze", "1 of 2 games")
     done = progress(conn)
     assert done["current"] is None
@@ -134,6 +134,7 @@ def test_progress_records_each_step(setup, monkeypatch):
         ("sync:chesscom:me", "3 new games", None),
         ("sync:lichess:me", "1 new game, 5 puzzle attempts", None),
         ("analyze", "2 games analysed", None),
+        ("patterns", "Nothing new to tag", None),
         ("backup", f"Saved {update.Path(last_run(conn)['backup_path']).name}", None),
     ]
 
