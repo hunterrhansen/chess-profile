@@ -41,6 +41,7 @@ RANGES = {"30d": 30, "90d": 90, "all": None}
 MIN_SAMPLE = 10  # fewer games than this and a KPI is too noisy to show or compare
 PAGE_SIZE = 50
 NEW_GAME_DAYS = 3  # a game you haven't reviewed counts as new on Home for this long
+TO_REVIEW_DAYS = 7  # the Games list's "To review": analysed, not reviewed, this recent
 
 # One row per game with everything the overview and filters need. Engine columns are NULL
 # for games that haven't been analysed yet.
@@ -694,8 +695,12 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
         analysed: bool = False,
         unrated: bool = False,
         kpi: str | None = None,
+        to_review: bool = False,
         page: int = Query(1, ge=1),
     ):
+        """The games list. Search and the Filters popover narrow the whole list; the quick
+        filters on top (result, kpi, to_review) pick within it, and `counts` gives each quick
+        filter's number for the list as narrowed."""
         where, params = ["1"], []
         if q:
             where.append("(f.opponent LIKE ? OR f.opening LIKE ? OR f.eco LIKE ?)")
@@ -706,9 +711,6 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
         if color:
             where.append("f.user_color = ?")
             params.append(color)
-        if result:
-            where.append("f.user_outcome = ?")
-            params.append(result)
         start, _, _ = period_bounds(range)
         if start:
             where.append("f.played_at >= ?")
@@ -717,17 +719,37 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
             where.append("f.analysed")
         if not unrated:
             where.append("f.rated = 1")
-        if kpi:
-            if kpi not in KPI_FILTERS:
-                raise HTTPException(400, f"unknown kpi {kpi!r}")
-            where.append(KPI_FILTERS[kpi])
+        if kpi and kpi not in KPI_FILTERS:
+            raise HTTPException(400, f"unknown kpi {kpi!r}")
 
-        rows = facts(" AND ".join(where), params, order="f.played_at DESC")
+        base = facts(" AND ".join(where), params, order="f.played_at DESC")
+        recent = _iso(_now() - timedelta(days=TO_REVIEW_DAYS))
+
+        def needs_review(r):
+            return r["analysed"] and not r["reviewed_at"] and r["played_at"] >= recent
+
+        counts = {
+            "all": len(base),
+            "to_review": sum(1 for r in base if needs_review(r)),
+            "wins": sum(1 for r in base if r["user_outcome"] == "win"),
+            "losses": sum(1 for r in base if r["user_outcome"] == "loss"),
+            "blunders": sum(1 for r in base if (r["blunders"] or 0) > 0),
+            "thrown": sum(1 for r in base if r["was_winning"] and r["user_outcome"] == "loss"),
+        }
+        if kpi:
+            where.append(KPI_FILTERS[kpi])
+        if result:
+            where.append("f.user_outcome = ?")
+            params.append(result)
+        rows = facts(" AND ".join(where), params, order="f.played_at DESC") if kpi or result else base
+        if to_review:
+            rows = [r for r in rows if needs_review(r)]
         page_rows = rows[(page - 1) * PAGE_SIZE: page * PAGE_SIZE]
         return {
             "total": len(rows),
             "page": page,
             "page_size": PAGE_SIZE,
+            "counts": counts,
             "games": [_game_json(r) for r in page_rows],
         }
 
