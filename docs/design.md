@@ -60,7 +60,7 @@ re-synced from this repo; when the two disagree, the code wins.
 | MoveBadge | `components/move-badge.tsx` | Move classifications; `pop` on the board |
 | EvalBar | `components/eval-bar.tsx` | The engine bar beside the board |
 | CountUp / CountUpText | `components/ui/count-up.tsx` | Numbers that count up to their value |
-| Confetti | `components/confetti.tsx` | The big moments (see Motion) |
+| Confetti | `components/confetti.tsx` | The big moments (see Motion); plays the celebrate sound |
 
 ## Voice
 
@@ -72,7 +72,7 @@ headings, no emoji in UI copy.
 ## Motion
 
 Modeled on Chess.com and Duolingo: the board moves like a hand, answers get an instant verdict,
-and the big moments throw confetti. Quick for small things, bouncy for rewards, never in the way.
+and the big moments throw confetti (and make a sound: see Sound). Quick for small things, bouncy for rewards, never in the way.
 Timings are tokens in `tokens.css` (`--duration-*`, `--ease-*`); every animation is on
 `/styleguide` with a replay button.
 
@@ -120,3 +120,28 @@ Rules:
 - **Reduced motion.** `prefers-reduced-motion` makes every animation jump to its last frame
   (`index.css`). Things that only exist to move (`Confetti`) check `useReducedMotion()` and
   render nothing; `CountUp` shows the final number; the board's pieces jump.
+
+## Sound
+
+Sounds pair with the motion: a wooden knock when a piece lands, a chime when you're right, a
+fanfare with the confetti. They're made in the browser with the Web Audio API
+(`lib/sound.ts`), with no audio files, and Settings has an on/off switch (on by default).
+
+| Sound | Plays when | Wired in |
+| --- | --- | --- |
+| `move`, `capture`, `check`, `castle`, `promote` | A board's position changes by one move (one back plays `move`; a jump is silent) | `useMoveSound(fen)` in `PlayBoard` and review's `Board` |
+| `right` / `wrong` | A practice answer is checked, with the square's flash | `practice.tsx` |
+| `brilliant` | A Brilliant or Great badge lands with its ring | `MoveBadge pop` |
+| `win` / `gameOver` | A game against the bot ends (won / lost or drawn) | `play.tsx` |
+| `celebrate` | Confetti fires | `Confetti` (pass `silent` to skip) |
+
+Rules:
+
+- **A sound lands with its animation.** Use `playSound(name, delayMs)` with the same delay as
+  the animation (`durationMs('--duration-move')`), and return its cancel from the effect.
+- **Same rarity as the motion.** Ordinary moves get a knock, never a chime; the fanfare is only
+  for confetti moments. Don't add sounds to buttons, hovers or counters.
+- **Wrong is firm, not harsh:** a soft falling tone, quieter than the right-answer chime.
+- **Never surprising.** Nothing plays on page load (a finished game you come back to is
+  quiet), in a background tab, or with sounds off. Reduced motion doesn't mute sound.
+- New sound? Add it to `SOUNDS` in `lib/sound.ts` and to the Sounds demo on `/styleguide`.

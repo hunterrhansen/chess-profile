@@ -1,26 +1,32 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useReducedMotion } from '@/lib/motion'
+import { playSound } from '@/lib/sound'
 import { cn } from '@/lib/utils'
 
 const COLORS = ['--brand', '--gold', '--sky', '--danger', '--move-brilliant', '--gold']
 
 /** A one-shot burst of confetti from the middle of its parent (give the parent `relative`).
  * Only for the big moments: finishing the day's positions, a personal best, a Brilliant you
- * found yourself. One per view, never on a loop. Key it to fire again. Renders nothing when
- * reduced motion is on. */
+ * found yourself. One per view, never on a loop. Key it to fire again. Plays the celebrate
+ * sound (unless `silent`), even when reduced motion is on and it renders nothing. */
 export function Confetti({
   pieces = 36,
   spread = 1,
   seed = 1,
+  silent,
   className,
 }: {
   pieces?: number
   spread?: number
   /** Change it for a different-looking burst. */
   seed?: number
+  silent?: boolean
   className?: string
 }) {
   const reduced = useReducedMotion()
+  useEffect(() => {
+    if (!silent) return playSound('celebrate')
+  }, [silent])
   const bits = useMemo(() => {
     const random = mulberry32(seed)
     return Array.from({ length: pieces }, (_, i) => {

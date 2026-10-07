@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { type RunProgress, send, type Settings, useApi } from '@/lib/api'
 import { BOARDS, type Preferences, usePreferences } from '@/lib/preferences'
+import { playSound, setSoundEnabled } from '@/lib/sound'
 import { cn } from '@/lib/utils'
 
 const SOURCE_LABEL: Record<string, string> = { chesscom: 'Chess.com', lichess: 'Lichess' }
@@ -110,7 +111,7 @@ function ErrorText({ children }: { children: ReactNode }) {
 function AppearanceSection() {
   const { prefs, set } = usePreferences()
   return (
-    <Section title="Appearance" description="Saved in this browser.">
+    <Section title="Appearance and sound" description="Saved in this browser.">
       <Row label="Theme">
         <Segmented<Preferences['theme']>
           label="Theme"
@@ -163,6 +164,23 @@ function AppearanceSection() {
           options={[
             { value: 'off', label: 'Hidden' },
             { value: 'on', label: 'Shown' },
+          ]}
+        />
+      </Row>
+      <Row label="Sounds" hint="Moves on the board, right and wrong answers, and the big moments.">
+        <Segmented
+          label="Sounds"
+          value={prefs.sound ? 'on' : 'off'}
+          onChange={(v) => {
+            set({ sound: v === 'on' })
+            if (v === 'on') {
+              setSoundEnabled(true) // before the preference applies, so this sample plays
+              playSound('right')
+            }
+          }}
+          options={[
+            { value: 'on', label: 'On' },
+            { value: 'off', label: 'Off' },
           ]}
         />
       </Row>

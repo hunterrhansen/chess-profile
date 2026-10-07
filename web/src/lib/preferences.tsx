@@ -1,5 +1,6 @@
 import { createContext, type ReactNode, useContext, useEffect, useState } from 'react'
 import type { Range } from './api'
+import { setSoundEnabled } from './sound'
 
 /** Per-browser display preferences, kept in localStorage (the server never sees them). */
 export interface Preferences {
@@ -9,6 +10,7 @@ export interface Preferences {
   overviewRange: Range
   sidebarCollapsed: boolean
   showGraph: boolean
+  sound: boolean
 }
 
 export const BOARDS = {
@@ -26,6 +28,7 @@ const DEFAULTS: Preferences = {
   overviewRange: '90d',
   sidebarCollapsed: false,
   showGraph: false,
+  sound: true,
 }
 const KEY = 'knightly.preferences'
 
@@ -67,6 +70,8 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     media.addEventListener('change', apply)
     return () => media.removeEventListener('change', apply)
   }, [prefs.theme])
+
+  useEffect(() => setSoundEnabled(prefs.sound), [prefs.sound])
 
   return <Context.Provider value={{ prefs, set }}>{children}</Context.Provider>
 }
