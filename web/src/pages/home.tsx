@@ -10,6 +10,7 @@ import { Progress } from '@/components/ui/progress'
 import { StatDelta, StatLabel, StatValue } from '@/components/ui/stat'
 import { type Home, type Overview, useApi } from '@/lib/api'
 import { timeControl } from '@/lib/format'
+import { patternOf } from '@/lib/patterns'
 import { unitCopy } from '@/lib/units'
 import { cn } from '@/lib/utils'
 
@@ -105,6 +106,25 @@ export function HomePage() {
         body: `${left} position${left === 1 ? '' : 's'} from your own games ${left === 1 ? 'is' : 'are'} due. Right answers come back later and later; misses come back tomorrow.`,
         cta: 'Start',
         to: '/practice',
+      },
+    })
+  }
+  const pz = data.today.puzzles
+  const pzPattern = patternOf(pz.theme)
+  if (pz.available && pz.theme && pzPattern) {
+    const pzLeft = Math.max(0, pz.session - pz.done)
+    steps.push({
+      key: 'puzzles',
+      glyph: 'goal',
+      label: `Puzzles: ${pzPattern.label.toLowerCase()}`,
+      tag: pzLeft ? `${pzLeft} to go` : undefined,
+      done: pzLeft === 0,
+      card: {
+        eyebrow: `Your most common tactic · ${pz.session} puzzles`,
+        title: `Puzzles: ${pzPattern.label.toLowerCase()}`,
+        body: `${pzPattern.label} are behind ${pz.share != null ? `${Math.round(pz.share * 100)}% of` : 'most of'} your mistakes. These Lichess puzzles train spotting them, near your level.`,
+        cta: 'Start puzzles',
+        to: `/puzzles?theme=${pz.theme}`,
       },
     })
   }

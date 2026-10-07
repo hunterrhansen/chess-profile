@@ -10,6 +10,7 @@ import { PreferencesProvider } from '@/lib/preferences'
 import { ProgressPage } from '@/pages/overview'
 import { PlayPage } from '@/pages/play'
 import { PracticePage } from '@/pages/practice'
+import { PuzzlesPage } from '@/pages/puzzles'
 import { ReviewPage } from '@/pages/review'
 import { ReviewDonePage } from '@/pages/review-done'
 import { SettingsPage } from '@/pages/settings'
@@ -48,6 +49,7 @@ createRoot(document.getElementById('root')!).render(
               {/* A lesson, not a place: full screen, no navigation; ✕ goes back Home. */}
               <Route element={<FocusShell />}>
                 <Route path="practice" element={<PracticePage />} />
+                <Route path="puzzles" element={<PuzzlesPage />} />
               </Route>
             </Routes>
           </TooltipProvider>

@@ -340,6 +340,11 @@ function WhatYouBlunder({ data }: { data: PatternCounts }) {
               <b>{top.label} first.</b> {top.tip}
             </p>
           )}
+          {top && (
+            <Button asChild variant="outline" className="self-start">
+              <Link to={`/puzzles?theme=${tactics[0].pattern}`}>Puzzles: {top.label.toLowerCase()}</Link>
+            </Button>
+          )}
           <p className="text-[13px] text-muted-foreground">
             {other ? `${other.total} more had no clear tactic: slower, positional slips.` : ''}
             {data.pending ? ` ${data.pending} are waiting for the daily update to look deeper.` : ''}
