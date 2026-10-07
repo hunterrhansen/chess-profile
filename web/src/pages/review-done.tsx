@@ -23,18 +23,13 @@ const MARK: Record<StepMark, { className: string; label: string }> = {
 
 /**
  * "Review complete!": what the game came down to, once you've walked through it. Your
- * accuracy, your best moment, and the moves to fix, which are in your review deck. Arriving from
- * the lesson, also a mark per step (found, missed, a great move) and confetti; never when the
- * page is opened again later.
+ * accuracy, a mark per lesson step (found, missed, a great move), your best moment, and the
+ * moves to fix, which are in your review deck. Confetti only on arriving from Finish review,
+ * never when the page is opened again later.
  */
 export function ReviewDonePage() {
   const { id } = useParams()
-  const state = useLocation().state as { celebrate?: boolean; marks?: { ply: number; san: string; mark: StepMark }[] } | null
-  const celebrate = !!state?.celebrate
-  // How each lesson step went: only known right after the lesson, not on a later visit.
-  const marks = state?.marks ?? []
-  const asked = marks.filter((m) => m.mark === 'found' || m.mark === 'missed')
-  const missed = asked.filter((m) => m.mark === 'missed')
+  const celebrate = !!(useLocation().state as { celebrate?: boolean } | null)?.celebrate
   const { data: game, error } = useApi<GameDetail>(`/api/games/${id}`)
   const me = game?.color ?? 'white'
   const opponent = (me === 'white' ? game?.black : game?.white) ?? ''
@@ -43,14 +38,18 @@ export function ReviewDonePage() {
     const moments = keyMoments(game.plies, me, opponent)
     const fix = game.plies.filter((m) => m.color === me && (m.classification === 'blunder' || m.classification === 'miss' || m.classification === 'mistake'))
     const inDeck = new Set(game.deck_plies)
-    return { best: bestMoment(game.plies, me, moments), fix, inDeck: fix.filter((m) => inDeck.has(m.ply)).length }
+    // How each lesson step went, saved with the review.
+    const marks = game.review_marks.map((m) => ({ ...m, san: game.san[m.ply - 1] ?? '' }))
+    return { best: bestMoment(game.plies, me, moments), fix, inDeck: fix.filter((m) => inDeck.has(m.ply)).length, marks }
   }, [game, me, opponent])
 
   if (error) return <p className="text-sm text-destructive">Couldn't load this game. {error}</p>
   if (!game || !summary) return <LogoLoader label="Adding it up…" />
 
   const result = game.outcome === 'win' ? 'won' : game.outcome === 'loss' ? 'lost' : 'drawn'
-  const { best, fix, inDeck } = summary
+  const { best, fix, inDeck, marks } = summary
+  const asked = marks.filter((m) => m.mark === 'found' || m.mark === 'missed')
+  const missed = asked.filter((m) => m.mark === 'missed')
   const rise = (order: number) => ({ animationDelay: `calc(var(--duration-celebrate) * 0.5 + ${order} * 80ms)` })
 
   return (
@@ -75,7 +74,7 @@ export function ReviewDonePage() {
           <div className="flex items-baseline justify-between gap-3">
             <p className="eyebrow">Key moments, one by one</p>
             {asked.length > 0 && (
-              <span className="font-heading text-2xl font-bold">
+              <span className="shrink-0 font-heading text-2xl font-bold whitespace-nowrap">
                 {asked.length - missed.length} of {asked.length} found
               </span>
             )}
@@ -93,8 +92,8 @@ export function ReviewDonePage() {
           {asked.length > 0 && (
             <p className="text-sm text-muted-foreground">
               {missed.length
-                ? `Missed: ${missed.map((m) => moveLabel(m.ply, m.san)).join(', ')}. Back tomorrow; the ones you found, in 3 days.`
-                : 'You found every one. They come back in 3 days.'}
+                ? `Missed: ${missed.map((m) => moveLabel(m.ply, m.san)).join(', ')}. Practice brings these back sooner.`
+                : 'You found every one.'}
             </p>
           )}
         </Card>

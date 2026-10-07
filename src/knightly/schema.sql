@@ -211,7 +211,8 @@ CREATE TABLE IF NOT EXISTS cards (
 -- from `games` so re-importing a game never forgets it was reviewed.
 CREATE TABLE IF NOT EXISTS game_reviews (
     game_id      INTEGER PRIMARY KEY REFERENCES games(id) ON DELETE CASCADE,
-    reviewed_at  TEXT NOT NULL              -- ISO-8601 UTC, the latest time it was finished
+    reviewed_at  TEXT NOT NULL,             -- ISO-8601 UTC, the latest time it was finished
+    marks        TEXT                       -- JSON [{ply, mark}]: how each lesson step went
 );
 
 -- Every graded answer (a card's first of the day), for history and the daily count.

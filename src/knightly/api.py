@@ -248,6 +248,15 @@ class AnswerIn(BaseModel):
     uci: str = Field(pattern=r"^([a-h][1-8][a-h][1-8][qrbn]?|0000)$")  # 0000: skipped
 
 
+class StepMarkIn(BaseModel):
+    ply: int = Field(ge=1)
+    mark: Literal["found", "missed", "praise", "seen"]
+
+
+class ReviewIn(BaseModel):
+    marks: list[StepMarkIn] = Field(default=[], max_length=200)
+
+
 class AnalysisIn(BaseModel):
     depth: int = Field(ge=8, le=30)
 
@@ -773,6 +782,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
                   (game_id,))
         with read() as conn:
             deck_plies = deck.game_plies(conn, game_id)
+        review = query("SELECT marks FROM game_reviews WHERE game_id = ?", (game_id,))
         moves = query("""SELECT ply, color, is_user, san, uci, best_san, best_uci, eval_after,
                                 mate_after, win_pct_before, win_pct_after, classification,
                                 clock_left, time_spent
@@ -791,22 +801,25 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
             # Your moves from this game that are review-deck positions (or will be once the
             # deck next syncs): the review lesson asks you to find these.
             "deck_plies": deck_plies,
+            # How each step of the last finished review lesson went, if it was saved.
+            "review_marks": json.loads(review[0]["marks"]) if review and review[0]["marks"] else [],
         }
 
     @app.post("/api/games/{game_id}/review")
-    def finish_review(game_id: int):
-        """Marks a game reviewed ("Finish review"). Finishing again moves the time forward.
-        Also makes sure the game's positions are in the review deck, so the summary that
-        follows can say so."""
+    def finish_review(game_id: int, body: ReviewIn | None = None):
+        """Marks a game reviewed ("Finish review"), with how each lesson step went for the
+        summary's marks. Finishing again moves the time forward and replaces the marks. Also
+        makes sure the game's positions are in the review deck, so the summary can say so."""
         with write() as conn, conn:
             if not conn.execute("SELECT 1 FROM games WHERE id = ?", (game_id,)).fetchone():
                 raise HTTPException(404, "game not found")
             deck.sync(conn)
             now = _iso(_now())
             conn.execute(
-                """INSERT INTO game_reviews (game_id, reviewed_at) VALUES (?, ?)
-                   ON CONFLICT (game_id) DO UPDATE SET reviewed_at = excluded.reviewed_at""",
-                (game_id, now),
+                """INSERT INTO game_reviews (game_id, reviewed_at, marks) VALUES (?, ?, ?)
+                   ON CONFLICT (game_id) DO UPDATE SET reviewed_at = excluded.reviewed_at,
+                                                       marks = excluded.marks""",
+                (game_id, now, json.dumps([m.model_dump() for m in body.marks]) if body and body.marks else None),
             )
         return {"reviewed_at": now}
 

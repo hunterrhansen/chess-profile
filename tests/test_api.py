@@ -260,6 +260,11 @@ def test_finish_review(client):
     g = client.get("/api/games/1").json()
     assert g["reviewed_at"] == reviewed
     assert [x["reviewed_at"] for x in client.get("/api/games").json()["games"] if x["id"] == 1] == [reviewed]
+    assert g["review_marks"] == []
+    marks = [{"ply": 2, "mark": "found"}, {"ply": 6, "mark": "praise"}]
+    assert client.post("/api/games/1/review", json={"marks": marks}).status_code == 200
+    assert client.get("/api/games/1").json()["review_marks"] == marks
+    assert client.post("/api/games/1/review", json={"marks": [{"ply": 2, "mark": "nope"}]}).status_code == 422
     assert client.post("/api/games/1/review").status_code == 200  # finishing again is fine
     assert client.post("/api/games/999/review").status_code == 404
 

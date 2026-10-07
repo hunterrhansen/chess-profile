@@ -1,5 +1,5 @@
 import { ArrowLeftIcon, ArrowSquareOutIcon, CaretLeftIcon, CaretLineLeftIcon, CaretLineRightIcon, CaretRightIcon, PlayIcon } from '@phosphor-icons/react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { ResultBadge } from '@/components/game-bits'
 import { LoadingBlock } from '@/components/empty-state'
@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { type GameDetail, type LineKind, type MoveRow, useApi } from '@/lib/api'
 import { CLASSIFICATION, isSound } from '@/lib/classification'
 import { type KeyMoment, keyMoments } from '@/lib/key-moments'
-import { changeTone, longDate, thinkTime, timeControl } from '@/lib/format'
+import { changeTone, longDate, shortDate, thinkTime, timeControl } from '@/lib/format'
 import { lastLocation } from '@/lib/last-location'
 import { BOARDS, usePreferences } from '@/lib/preferences'
 import { type Replay, type Side, clockAt, resultPhrase, useLineView, useReplay } from '@/lib/replay'
@@ -34,6 +34,7 @@ export function AllMovesPage() {
   const opponent = (me === 'white' ? game?.black : game?.white) ?? 'They'
   const moments = useMemo(() => (replay ? keyMoments(replay.moves, me, opponent) : []), [replay, me, opponent])
   const { prefs } = usePreferences()
+  const wide = useWide()
   // With the "on request" preference, the best move stays hidden until asked for, per move.
   const [revealedPly, setRevealedPly] = useState<number | null>(null)
   const showBest = prefs.bestArrow === 'auto' || revealedPly === ply
@@ -99,6 +100,159 @@ export function AllMovesPage() {
     lineView?.data.win_pct != null ? (moverWhite ? lineView.data.win_pct : 100 - lineView.data.win_pct) : null
   const hasLesson = moments.length > 0
   const stepAt = moments.findIndex((k) => k.ply === ply)
+  const wrong = !!move && !isSound(move.classification) && !!move.best_san
+  const linePanel = line && move && san && (
+    <LinePanel
+      kind={line.kind}
+      view={lineView}
+      error={lineError}
+      step={step}
+      onStep={setStep}
+      ply={ply}
+      san={san}
+      classification={move.classification}
+      yourBefore={yours(move.win_pct_before)}
+      yourEnd={yours(lineView?.data.win_pct)}
+      onBack={() => setLine(null)}
+      onSwitch={() => setLine({ kind: line.kind === 'why' ? 'best' : 'why', step: 1 })}
+    />
+  )
+  const board = lineView ? (
+    <ReviewBoard
+      fen={lineView.fens[step]}
+      orientation={me}
+      lastMove={lineView.squares[step - 1]}
+      nextMove={lineView.squares[step]}
+      showBest={false}
+      palette={BOARDS[prefs.board]}
+      inLine
+    />
+  ) : (
+    <ReviewBoard
+      fen={replay.fens[ply]}
+      orientation={me}
+      lastMove={replay.squares[ply - 1]}
+      move={move}
+      showBest={showBest}
+      palette={BOARDS[prefs.board]}
+    />
+  )
+  const theirStrip = (inset: boolean) => (
+    <PlayerStrip
+      name={opponent}
+      rating={me === 'white' ? game.black_elo : game.white_elo}
+      seconds={clockAt(replay.moves, them, ply, replay.baseClock)}
+      dim={inLine}
+      tag={inLine ? 'Engine line · not played' : undefined}
+      inset={inset}
+    />
+  )
+  const yourStrip = (inset: boolean) => (
+    <PlayerStrip
+      name={me === 'white' ? game.white : game.black}
+      rating={me === 'white' ? game.white_elo : game.black_elo}
+      seconds={clockAt(replay.moves, me, ply, replay.baseClock)}
+      dim={inLine}
+      you
+      inset={inset}
+    />
+  )
+
+  // On a phone: the board on top, the move you're on, a strip of moves to scroll sideways,
+  // and the step buttons with Show the line along the bottom, in reach of a thumb.
+  if (!wide) {
+    return (
+      <div className="-mx-4 -my-6 flex min-h-svh flex-col">
+        <header className="flex items-center gap-2 border-b-2 bg-card px-2 py-2">
+          <Button asChild variant="ghost" size="icon" aria-label={hasLesson ? 'Back to the lesson' : 'Back to games'}>
+            <Link to={hasLesson ? `/games/${game.id}` : lastLocation('games-list', '/games')}>
+              <ArrowLeftIcon />
+            </Link>
+          </Button>
+          <ResultBadge outcome={game.outcome} />
+          <div className="min-w-0">
+            <h1 className="text-lg leading-tight font-bold">vs {opponent}</h1>
+            <p className="truncate text-xs text-muted-foreground">
+              {['All moves', shortDate(game.played_at), timeControl(game.time_control)].filter(Boolean).join(' · ')}
+            </p>
+          </div>
+        </header>
+
+        <section aria-label="Board" className="flex flex-col px-4 pt-1.5">
+          {theirStrip(false)}
+          <div className="flex">{board}</div>
+          {yourStrip(false)}
+        </section>
+
+        {linePanel ? (
+          <div className="panel mx-4 mt-1 overflow-hidden">{linePanel}</div>
+        ) : (
+          <div className="px-4 pt-1">
+            {ply && san ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <span className="font-heading text-xl font-bold">
+                    <MoveText ply={ply} san={san} number />
+                  </span>
+                  {move?.classification && (
+                    <span className="flex items-center gap-1.5 text-sm font-bold" style={{ color: CLASSIFICATION[move.classification].color }}>
+                      <MoveBadge kind={move.classification} />
+                      {CLASSIFICATION[move.classification].label}
+                    </span>
+                  )}
+                  {move && (
+                    <span className={cn('ml-auto font-heading text-xl font-bold tabular-nums', changeTone(yours(move.win_pct_after)! - yours(move.win_pct_before)!).text)}>
+                      {yours(move.win_pct_after)}%
+                    </span>
+                  )}
+                </div>
+                {move && (
+                  <p className="text-sm text-muted-foreground">
+                    {mine ? 'Your' : `${opponent}'s`} move: your chance went from {yours(move.win_pct_before)}% to {yours(move.win_pct_after)}%.
+                    {wrong && (showBest ? ` ${mine ? 'Best was' : 'They had'} ${move.best_san}.` : '')}
+                    {wrong && !showBest && (
+                      <button onClick={() => setRevealedPly(ply)} className="ml-1 font-bold text-foreground underline underline-offset-2">
+                        Show best move
+                      </button>
+                    )}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">The start. Step through with the arrows, or tap a move.</p>
+            )}
+          </div>
+        )}
+
+        <MoveStrip san={game.san} moves={replay.moves} ply={ply} me={me} dim={inLine} onSelect={setPly} />
+
+        <div className="flex-1" />
+        <footer className="sticky bottom-0 flex gap-2 border-t-2 bg-card px-4 pt-2.5 pb-[max(14px,env(safe-area-inset-bottom))]">
+          <NavButton
+            label="Previous move"
+            onClick={() => (line ? setStep(step - 1) : setPly(Math.max(0, ply - 1)))}
+            icon={<CaretLeftIcon />}
+          />
+          <NavButton
+            label="Next move"
+            onClick={() => (line ? setStep(step + 1) : setPly(Math.min(last, ply + 1)))}
+            icon={<CaretRightIcon />}
+          />
+          {line ? (
+            <Button className="flex-1" onClick={() => setLine(null)}>
+              Back to the game
+            </Button>
+          ) : wrong ? (
+            <Button variant="sky" className="flex-1" onClick={() => setLine({ kind: mine ? 'why' : 'best', step: 1 })}>
+              Show the line
+            </Button>
+          ) : (
+            <span className="flex-1" />
+          )}
+        </footer>
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4">
@@ -142,13 +296,7 @@ export function AllMovesPage() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
         <section aria-label="Board" className="mx-auto flex w-full max-w-[calc(100svh-150px)] min-w-72 flex-col gap-1.5">
-          <PlayerStrip
-            name={opponent}
-            rating={me === 'white' ? game.black_elo : game.white_elo}
-            seconds={clockAt(replay.moves, them, ply, replay.baseClock)}
-            dim={inLine}
-            tag={inLine ? 'Engine line · not played' : undefined}
-          />
+          {theirStrip(true)}
           <div className="flex gap-2">
             {lineView ? (
               <EvalBar
@@ -159,34 +307,9 @@ export function AllMovesPage() {
             ) : (
               <EvalBar whiteWin={replay.whiteWin[ply]} move={move} orientation={me} />
             )}
-            {lineView ? (
-              <ReviewBoard
-                fen={lineView.fens[step]}
-                orientation={me}
-                lastMove={lineView.squares[step - 1]}
-                nextMove={lineView.squares[step]}
-                showBest={false}
-                palette={BOARDS[prefs.board]}
-                inLine
-              />
-            ) : (
-              <ReviewBoard
-                fen={replay.fens[ply]}
-                orientation={me}
-                lastMove={replay.squares[ply - 1]}
-                move={move}
-                showBest={showBest}
-                palette={BOARDS[prefs.board]}
-              />
-            )}
+            {board}
           </div>
-          <PlayerStrip
-            name={me === 'white' ? game.white : game.black}
-            rating={me === 'white' ? game.white_elo : game.black_elo}
-            seconds={clockAt(replay.moves, me, ply, replay.baseClock)}
-            dim={inLine}
-            you
-          />
+          {yourStrip(true)}
           {/* While a line is open these step through the line instead of the game. */}
           <div className="mt-1 grid grid-cols-4 gap-2 pl-6">
             <NavButton label="Start of the game" onClick={() => (line ? setStep(1) : setPly(0))} icon={<CaretLineLeftIcon />} />
@@ -209,21 +332,8 @@ export function AllMovesPage() {
             <WinGraph replay={replay} me={me} ply={ply} moments={moments} onSelect={setPly} />
           )}
           <div className="panel overflow-hidden">
-            {line && move && san ? (
-              <LinePanel
-                kind={line.kind}
-                view={lineView}
-                error={lineError}
-                step={step}
-                onStep={setStep}
-                ply={ply}
-                san={san}
-                classification={move.classification}
-                yourBefore={yours(move.win_pct_before)}
-                yourEnd={yours(lineView?.data.win_pct)}
-                onBack={() => setLine(null)}
-                onSwitch={() => setLine({ kind: line.kind === 'why' ? 'best' : 'why', step: 1 })}
-              />
+            {linePanel ? (
+              linePanel
             ) : (
               <CurrentMove
                 gameId={game.id}
@@ -428,6 +538,76 @@ function CurrentMove({
         </>
       )}
     </div>
+  )
+}
+
+/** True from the md breakpoint up: the two-column layout. Below it, the phone layout. */
+function useWide() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const mq = matchMedia('(min-width: 768px)')
+      mq.addEventListener('change', onChange)
+      return () => mq.removeEventListener('change', onChange)
+    },
+    () => matchMedia('(min-width: 768px)').matches,
+  )
+}
+
+/** The phone's move list: every move in one row to scroll sideways, the current one kept in
+ * view. Your bad moves in red with their badge, the opponent's greyed. */
+function MoveStrip({
+  san,
+  moves,
+  ply,
+  me,
+  dim,
+  onSelect,
+}: {
+  san: string[]
+  moves: MoveRow[]
+  ply: number
+  me: Side
+  dim: boolean
+  onSelect: (ply: number) => void
+}) {
+  const listRef = useRef<HTMLOListElement>(null)
+  useLayoutEffect(() => {
+    const list = listRef.current
+    const sel = list?.querySelector<HTMLElement>('[aria-current="step"]')
+    if (list) list.scrollLeft = sel ? sel.offsetLeft - list.clientWidth / 2 + sel.offsetWidth / 2 : 0
+  }, [ply])
+  return (
+    <ol
+      ref={listRef}
+      aria-label="All moves"
+      className={cn('relative mt-2.5 flex gap-1 overflow-x-auto px-4 pb-1 whitespace-nowrap tabular-nums transition-opacity', dim && 'opacity-40')}
+    >
+      {san.map((s, i) => {
+        const p = i + 1
+        const m = moves[i] as MoveRow | undefined
+        const yours = (p % 2 === 1) === (me === 'white')
+        const bad = yours && (m?.classification === 'mistake' || m?.classification === 'blunder' || m?.classification === 'miss')
+        const marked = m?.classification && ['brilliant', 'great', 'miss', 'mistake', 'blunder'].includes(m.classification)
+        return (
+          <li key={p}>
+            <button
+              onClick={() => onSelect(p)}
+              aria-current={p === ply ? 'step' : undefined}
+              className={cn(
+                'flex h-9 items-center gap-1 rounded-lg px-2 text-sm',
+                !yours && 'text-muted-foreground',
+                bad && 'font-extrabold text-danger-text',
+                p === ply && 'bg-sky/15 shadow-[inset_0_0_0_2px_var(--sky)]',
+              )}
+            >
+              {p % 2 === 1 && <span className="text-muted-foreground">{Math.ceil(p / 2)}.</span>}
+              <MoveText ply={p} san={s} />
+              {marked && <MoveBadge kind={m!.classification!} />}
+            </button>
+          </li>
+        )
+      })}
+    </ol>
   )
 }
 
