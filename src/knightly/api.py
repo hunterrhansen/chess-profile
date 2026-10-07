@@ -5,7 +5,8 @@ games list filters on the same rows, so a KPI and the games it links to always a
 
 Reads use a read-only connection. The only writes are the Settings page's (accounts, the
 analysis depth, and the daily-update schedule, which goes through launchd), cached engine
-lines, notes, games played against the bot, and the review deck's cards and answers.
+lines, notes, games played against the bot, finished game reviews, and the review deck's
+cards and answers.
 """
 import functools
 import json
@@ -79,12 +80,14 @@ SELECT g.id, g.played_at, g.speed, g.rated, g.time_control, g.url, g.user_color,
        p.trough <= {LOST_PCT} AS was_lost,
        coalesce(pu.opp_blunders, CASE WHEN a.game_id IS NOT NULL THEN 0 END) AS opp_blunders,
        coalesce(pu.punished, CASE WHEN a.game_id IS NOT NULL THEN 0 END) AS punished,
-       m10.eval10
+       m10.eval10,
+       r.reviewed_at
 FROM games g
 LEFT JOIN game_analysis a ON a.game_id = g.id
 LEFT JOIN peaks p ON p.game_id = g.id
 LEFT JOIN punish pu ON pu.game_id = g.id
 LEFT JOIN move10 m10 ON m10.game_id = g.id
+LEFT JOIN game_reviews r ON r.game_id = g.id
 """
 
 # Overview KPI -> the games behind it, used by the games list's `kpi` filter.
@@ -206,6 +209,7 @@ def _game_json(r) -> dict:
         "blunders": r["blunders"],
         "mistakes": r["mistakes"],
         "inaccuracies": r["inaccuracies"],
+        "reviewed_at": r["reviewed_at"],
     }
 
 
@@ -699,6 +703,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
                      FROM games WHERE id = ?""", (game_id,))[0]
         a = query("""SELECT user_accuracy, opponent_accuracy FROM game_analysis WHERE game_id = ?""",
                   (game_id,))
+        cards = query("SELECT ply FROM cards WHERE game_id = ? ORDER BY ply", (game_id,))
         moves = query("""SELECT ply, color, is_user, san, uci, best_san, best_uci, eval_after,
                                 mate_after, win_pct_before, win_pct_after, classification,
                                 clock_left, time_spent
@@ -714,7 +719,26 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
             "engine_accuracy": a[0]["user_accuracy"] if a else None,
             "opponent_accuracy": a[0]["opponent_accuracy"] if a else None,
             "plies": [dict(m) for m in moves],
+            # Your moves from this game that are in the review deck.
+            "deck_plies": [c["ply"] for c in cards],
         }
+
+    @app.post("/api/games/{game_id}/review")
+    def finish_review(game_id: int):
+        """Marks a game reviewed ("Finish review"). Finishing again moves the time forward.
+        Also makes sure the game's positions are in the review deck, so the summary that
+        follows can say so."""
+        with write() as conn, conn:
+            if not conn.execute("SELECT 1 FROM games WHERE id = ?", (game_id,)).fetchone():
+                raise HTTPException(404, "game not found")
+            deck.sync(conn)
+            now = _iso(_now())
+            conn.execute(
+                """INSERT INTO game_reviews (game_id, reviewed_at) VALUES (?, ?)
+                   ON CONFLICT (game_id) DO UPDATE SET reviewed_at = excluded.reviewed_at""",
+                (game_id, now),
+            )
+        return {"reviewed_at": now}
 
     if static_dir and static_dir.is_dir():
         app.mount("/assets", StaticFiles(directory=static_dir / "assets"), name="assets")

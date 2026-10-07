@@ -24,6 +24,7 @@ export interface Game {
   blunders: number | null
   mistakes: number | null
   inaccuracies: number | null
+  reviewed_at: string | null // when "Finish review" was last pressed
 }
 
 export interface Kpis {
@@ -250,6 +251,7 @@ export interface GameDetail extends Game {
   engine_accuracy: number | null
   opponent_accuracy: number | null
   plies: MoveRow[] // empty until the game has been analysed
+  deck_plies: number[] // your moves from this game that are in the review deck
 }
 
 /** A note from game review or `knightly note`. */

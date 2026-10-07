@@ -290,3 +290,15 @@ def test_notes(client, tmp_path):
     assert client.delete(f"/api/notes/{note['id']}").status_code == 204
     assert client.delete(f"/api/notes/{note['id']}").status_code == 404
     assert client.get("/api/games/2/notes").json() == []
+
+
+def test_finish_review(client):
+    assert client.get("/api/games/1").json()["reviewed_at"] is None
+    r = client.post("/api/games/1/review")
+    assert r.status_code == 200
+    reviewed = r.json()["reviewed_at"]
+    g = client.get("/api/games/1").json()
+    assert g["reviewed_at"] == reviewed
+    assert [x["reviewed_at"] for x in client.get("/api/games").json()["games"] if x["id"] == 1] == [reviewed]
+    assert client.post("/api/games/1/review").status_code == 200  # finishing again is fine
+    assert client.post("/api/games/999/review").status_code == 404
