@@ -302,3 +302,22 @@ def test_finish_review(client):
     assert [x["reviewed_at"] for x in client.get("/api/games").json()["games"] if x["id"] == 1] == [reviewed]
     assert client.post("/api/games/1/review").status_code == 200  # finishing again is fine
     assert client.post("/api/games/999/review").status_code == 404
+
+
+def test_home(client):
+    h = client.get("/api/home").json()
+    ids = [u["id"] for u in h["units"]]
+    assert sorted(ids) == ["blunders", "comebacks", "conversion", "punish"]
+    blunders = next(u for u in h["units"] if u["id"] == "blunders")
+    # Games 1-3 and 6 are analysed: 1, 0, 2 and 0 blunders; 3 of 4 are under 1.5.
+    assert blunders["check"] == {"size": 10, "games": 4, "hits": 3, "value": 0.75}
+    assert blunders["done"] is False  # needs a full unit check of 10 games
+    # Today's game: unreviewed, analysed, in the last 3 days, and with a blunder (Unit 1's kind)
+    # if Unit 1 is blunders; newest first otherwise.
+    assert h["today"]["game"]["id"] in (1, 2, 3)
+    assert h["today"]["reviewed_today"] == 0
+    # Reviewing game 1, the newest, leaves nothing newer to review.
+    client.post("/api/games/1/review")
+    after = client.get("/api/home").json()["today"]
+    assert after["reviewed_today"] == 1
+    assert after["game"] is None and after["new_games"] == 0

@@ -114,7 +114,7 @@ export function ReviewDonePage() {
 
       <div className="flex w-full flex-wrap justify-between gap-3 border-t-2 pt-5">
         <Button asChild variant="outline" size="lg">
-          <Link to="/games">Back to games</Link>
+          <Link to="/">Back home</Link>
         </Button>
         <Button asChild size="lg">
           <Link to="/practice">Review today's positions</Link>

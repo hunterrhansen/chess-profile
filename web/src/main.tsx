@@ -1,10 +1,11 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { IconContext } from '@phosphor-icons/react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
-import { AppShell } from '@/components/app-shell'
+import { BrowserRouter, Route, Routes } from 'react-router'
+import { AppShell, FocusShell } from '@/components/app-shell'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { GamesPage } from '@/pages/games'
+import { HomePage } from '@/pages/home'
 import { PreferencesProvider } from '@/lib/preferences'
 import { ProgressPage } from '@/pages/overview'
 import { PlayPage } from '@/pages/play'
@@ -35,16 +36,18 @@ createRoot(document.getElementById('root')!).render(
           <TooltipProvider>
             <Routes>
               <Route element={<AppShell />}>
-                {/* Home (today's goal and the path) will live here; until then, Progress. */}
-                <Route index element={<Navigate to="/progress" replace />} />
+                <Route index element={<HomePage />} />
                 <Route path="progress" element={<ProgressPage />} />
                 <Route path="games" element={<GamesPage />} />
                 <Route path="games/:id" element={<ReviewPage />} />
                 <Route path="games/:id/done" element={<ReviewDonePage />} />
                 <Route path="play" element={<PlayPage />} />
-                <Route path="practice" element={<PracticePage />} />
                 <Route path="settings" element={<SettingsPage />} />
                 <Route path="styleguide" element={<StyleguidePage />} />
+              </Route>
+              {/* A lesson, not a place: full screen, no navigation; ✕ goes back Home. */}
+              <Route element={<FocusShell />}>
+                <Route path="practice" element={<PracticePage />} />
               </Route>
             </Routes>
           </TooltipProvider>
