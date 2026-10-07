@@ -6,6 +6,7 @@ import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { send, useApi } from '@/lib/api'
 import { BOARDS, usePreferences } from '@/lib/preferences'
+import { useMoveMs } from '@/lib/motion'
 import { token } from '@/lib/tokens'
 import { cn } from '@/lib/utils'
 import { BEST_ARROW, MoveList, NavButton, PlayerStrip } from '@/pages/review'
@@ -471,6 +472,7 @@ export function PlayBoard({
   selected,
   interactive,
   palette,
+  flash,
   onMove,
   onSelect,
 }: {
@@ -481,9 +483,12 @@ export function PlayBoard({
   selected: string | null
   interactive: boolean
   palette: (typeof BOARDS)[keyof typeof BOARDS]
+  /** Lights a square up once after the piece lands: green for a right answer, red for wrong. */
+  flash?: { square: string; tone: 'right' | 'wrong' }
   onMove: (from: string, to: string) => boolean
   onSelect: (square: string | null) => void
 }) {
+  const moveMs = useMoveMs()
   const mine = orientation === 'white' ? 'w' : 'b'
   const targets = new Set(
     interactive && selected ? chess.moves({ square: selected as Square, verbose: true }).map((m) => m.to) : [],
@@ -519,7 +524,7 @@ export function PlayBoard({
           onPieceDrag: ({ square }) => onSelect(square),
           onPieceDrop: ({ sourceSquare, targetSquare }) => !!targetSquare && onMove(sourceSquare, targetSquare),
           onSquareClick: ({ square }) => click(square),
-          animationDurationInMs: 150,
+          animationDurationInMs: moveMs,
           lightSquareStyle: { backgroundColor: palette.light },
           darkSquareStyle: { backgroundColor: palette.dark },
           lightSquareNotationStyle: { color: palette.dark },
@@ -534,6 +539,14 @@ export function PlayBoard({
                 ) : (
                   <span className="pointer-events-none absolute inset-[36%] rounded-full bg-move-hint" />
                 ))}
+              {flash?.square === square && (
+                <span
+                  className={cn(
+                    'pointer-events-none absolute inset-0 animate-flash [animation-delay:var(--duration-move)]',
+                    flash.tone === 'right' ? 'bg-brand/70' : 'bg-danger/70',
+                  )}
+                />
+              )}
             </div>
           ),
         }}

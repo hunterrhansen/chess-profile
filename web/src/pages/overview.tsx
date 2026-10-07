@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { StatDelta, StatLabel, StatValue } from '@/components/ui/stat'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { CountUpText } from '@/components/ui/count-up'
 import { type ChartConfig, ChartContainer, ChartTooltip } from '@/components/ui/chart'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -255,7 +256,7 @@ function KpiCard({
         {focus && <Badge variant="destructive" className="mb-1">Main focus</Badge>}
         <StatLabel>{label}</StatLabel>
         <StatValue className="mt-1 text-3xl">
-          {value}
+          <CountUpText text={value} />
           {delta === 'none' ? (
             <span className="ml-2 text-xs font-normal text-muted-foreground">no earlier data</span>
           ) : delta?.value === 0 ? (

@@ -53,11 +53,86 @@
     --color-on-move: var(--on-move);
     --color-sheen: var(--sheen);
     --color-focus: var(--focus);
-    --animate-pop: pop 240ms ease-out both;
+    /* Motion (timings in styles/tokens.css, rules in docs/design.md). `both` keeps the first
+       frame until a delay runs out, so staggered items don't flash in early. */
+    --animate-pop: pop var(--duration-pop) var(--ease-out) both;
+    --animate-bounce-in: bounce-in var(--duration-celebrate) var(--ease-out) both;
+    --animate-shake: shake 360ms var(--ease-out) both;
+    --animate-sheet: sheet var(--duration-sheet) var(--ease-out) both;
+    --animate-rise: rise var(--duration-pop) var(--ease-out) both;
+    --animate-flash: flash 600ms var(--ease-out) both;
+    --animate-ring: ring 700ms var(--ease-out) both;
+    --animate-float-up: float-up 1100ms var(--ease-out) both;
+    --animate-bump: bump var(--duration-pop) var(--ease-out) both;
+    --animate-beacon: beacon 2s var(--ease-out) infinite;
+    --animate-confetti: confetti var(--duration-celebrate) var(--ease-out) both;
+    /* a badge lands: grows past its size, settles */
     @keyframes pop {
-        0% { transform: scale(0.6); }
-        70% { transform: scale(1.08); }
+        0% { transform: scale(0); opacity: 0; }
+        55% { transform: scale(1.18); opacity: 1; }
+        80% { transform: scale(0.94); }
         100% { transform: scale(1); }
+    }
+    /* a big icon or medal arrives: a pop with two settles */
+    @keyframes bounce-in {
+        0% { transform: scale(0.3); opacity: 0; }
+        35% { transform: scale(1.12); opacity: 1; }
+        55% { transform: scale(0.92); }
+        75% { transform: scale(1.04); }
+        100% { transform: scale(1); }
+    }
+    /* "not that one": one and a half small shakes. Firm, not harsh; only on the mark itself */
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        20% { transform: translateX(-5px); }
+        45% { transform: translateX(4px); }
+        70% { transform: translateX(-2px); }
+    }
+    /* a verdict slides up into place */
+    @keyframes sheet {
+        from { transform: translateY(40px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+    }
+    /* list items and stats come in one after another (set animation-delay per item) */
+    @keyframes rise {
+        from { transform: translateY(10px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+    }
+    /* a square or panel lights up once and fades */
+    @keyframes flash {
+        0% { opacity: 0; }
+        25% { opacity: 1; }
+        100% { opacity: 0; }
+    }
+    /* a ring spreads out from a badge that matters (Brilliant, Great) */
+    @keyframes ring {
+        from { transform: scale(0.8); opacity: 0.9; }
+        to { transform: scale(2.2); opacity: 0; }
+    }
+    /* "+12": a change floats up off a number and fades */
+    @keyframes float-up {
+        0% { transform: translateY(6px); opacity: 0; }
+        20% { transform: translateY(0); opacity: 1; }
+        70% { opacity: 1; }
+        100% { transform: translateY(-18px); opacity: 0; }
+    }
+    /* a number that just changed swells for a moment ("3 of 10" → "4 of 10") */
+    @keyframes bump {
+        0%, 100% { transform: scale(1); }
+        40% { transform: scale(1.2); }
+    }
+    /* "start here": a soft ring that keeps spreading from the current step */
+    @keyframes beacon {
+        0% { box-shadow: 0 0 0 0 var(--beacon, var(--brand)); }
+        70%, 100% { box-shadow: 0 0 0 14px transparent; }
+    }
+    /* one piece of confetti: thrown up and out to (--dx, --up), then falls to --fall,
+       spinning and fading */
+    @keyframes confetti {
+        0% { transform: translate(0, 0) rotate(0) scale(0.3); opacity: 1; }
+        35% { transform: translate(calc(var(--dx) * 0.75), var(--up)) rotate(calc(var(--spin) * 0.4)) scale(1); }
+        75% { opacity: 1; }
+        100% { transform: translate(var(--dx), var(--fall)) rotate(var(--spin)) scale(0.9); opacity: 0; }
     }
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
@@ -148,12 +223,12 @@
   box-shadow: 0 2px 0 var(--lip);
 }
 
-/* A panel that is a link: lifts on hover, sinks when pressed. */
+/* A panel that is a link: lifts on hover, sinks the instant it's pressed, eases back. */
 @utility panel-link {
   cursor: pointer;
-  transition: transform 80ms ease-out, box-shadow 80ms ease-out;
+  transition: transform var(--duration-quick) var(--ease-out), box-shadow var(--duration-quick) var(--ease-out);
   &:hover { transform: translateY(-2px); box-shadow: 0 4px 0 var(--lip); }
-  &:active { transform: translateY(2px); box-shadow: none; }
+  &:active { transform: translateY(2px); box-shadow: none; transition-duration: 0ms; }
   &:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 }
 
@@ -182,10 +257,24 @@
     }
 }
 
-/* The brand's motion is decoration: keep the colors, drop the movement. */
+/* style guide demos: a bar filling, a dot crossing */
+@keyframes grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes slide {
+  from { left: 0; }
+  to { left: calc(100% - 0.75rem); }
+}
+
+/* The brand's motion is decoration: keep the colors, drop the movement. Animations jump to
+   their last frame, so anything that animates in still ends up shown. Things that only exist
+   to move (confetti, a beacon) also check useReducedMotion() and don't render. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }

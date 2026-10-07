@@ -59,6 +59,8 @@ re-synced from this repo; when the two disagree, the code wins.
 | StatLabel / StatValue / StatDelta | `components/ui/stat.tsx` | Stat tiles inside a Card |
 | MoveBadge | `components/move-badge.tsx` | Move classifications; `pop` on the board |
 | EvalBar | `components/eval-bar.tsx` | The engine bar beside the board |
+| CountUp / CountUpText | `components/ui/count-up.tsx` | Numbers that count up to their value |
+| Confetti | `components/confetti.tsx` | The big moments (see Motion) |
 
 ## Voice
 
@@ -69,5 +71,52 @@ headings, no emoji in UI copy.
 
 ## Motion
 
-Press 80ms, pop 240ms (`animate-pop`), fills 400ms. `prefers-reduced-motion` turns movement
-off globally in `index.css`.
+Modeled on Chess.com and Duolingo: the board moves like a hand, answers get an instant verdict,
+and the big moments throw confetti. Quick for small things, bouncy for rewards, never in the way.
+Timings are tokens in `tokens.css` (`--duration-*`, `--ease-*`); every animation is on
+`/styleguide` with a replay button.
+
+| Token | ms | For |
+| --- | --- | --- |
+| `--duration-press` | 80 | sinking onto a ledge |
+| `--duration-quick` | 150 | hovers, color changes, a button easing back up |
+| `--duration-move` | 200 | a piece sliding (`useMoveMs()` for the board) |
+| `--duration-pop` | 300 | a badge or icon landing |
+| `--duration-sheet` | 320 | a verdict sliding up |
+| `--duration-fill` | 400 | progress, the eval bar, numbers counting up |
+| `--duration-celebrate` | 900 | confetti, a medal |
+
+Easings: `ease-out` (the default, also what Tailwind's `ease-out` class gives), `--ease-move`
+for pieces, `--ease-bounce` for rewards and unlocks, `ease-in` for leaving. Use them as
+`ease-out` or `ease-(--ease-bounce)`, and durations as `duration-(--duration-fill)`.
+
+| Animation | Use |
+| --- | --- |
+| `animate-pop` | A badge landing. `MoveBadge pop` waits for the piece, and Brilliant/Great send out an `animate-ring` |
+| `animate-flash` | A square or fill lighting up once: green for right, red for wrong (`PlayBoard flash`) |
+| `animate-sheet` | A verdict panel arriving |
+| `animate-bounce-in` | A right answer's check, a medal |
+| `animate-shake` | A wrong answer's ✕, only the mark, never the panel or the board |
+| `animate-rise` | Items arriving in order: stagger with `animation-delay`, about 80ms apart |
+| `animate-bump` | A count that just changed ("4 of 10"): key it by the value |
+| `animate-float-up` | A change floating off a number ("+12") |
+| `animate-beacon` | The current step only. The one loop allowed |
+| `CountUp` / `CountUpText` | Stats and scores counting up when shown or changed |
+| `Confetti` | The big moments only |
+
+Rules:
+
+- **Order, not speed.** The move lands, then the badge pops, then the words arrive. Wait for
+  what came before with `animation-delay` (`var(--duration-move)`) instead of slowing things.
+- **Press is instant, release is eased.** Ledges drop on `:active` with no transition and ease
+  back over `--duration-quick` (`Button`, `panel-link`).
+- **Celebrate rarely.** Confetti and `bounce-in` medals are for finishing the day's positions, a
+  personal best or a Brilliant you found: one per view, never on a loop. Ordinary moves stay quiet.
+- **Wrong is firm, not harsh.** Red, a single small shake on the ✕, the right move shown. The
+  progress bar still moves forward.
+- **Loops mean "act now".** Only `animate-beacon`, and only on the one thing to do next.
+- **Nothing waits on an animation.** Buttons work mid-animation, and nothing animates longer
+  than `--duration-celebrate`.
+- **Reduced motion.** `prefers-reduced-motion` makes every animation jump to its last frame
+  (`index.css`). Things that only exist to move (`Confetti`) check `useReducedMotion()` and
+  render nothing; `CountUp` shows the final number; the board's pieces jump.

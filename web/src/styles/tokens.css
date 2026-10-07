@@ -1,5 +1,5 @@
 /*
- * Design tokens: the one place the brand's colors live. Mirrors the design system's
+ * Design tokens: the one place the brand's colors (and its motion timings) live. Mirrors the design system's
  * tokens.json; change a value here and it changes everywhere. Components use them
  * through Tailwind (bg-brand, text-on-brand, border-line…) or the shadcn names that
  * index.css points at them, never as raw hex.
@@ -72,6 +72,20 @@
   --draw: oklch(0.6 0 0);
 
   --focus: #1f6fd1;
+
+  /* motion: the same in both themes. Small things are quick, rewards bounce, nothing
+     important waits on an animation. docs/design.md has the rules. */
+  --duration-press: 80ms;     /* a button sinking onto its ledge */
+  --duration-quick: 150ms;    /* hovers, color changes, a flash on a square */
+  --duration-move: 200ms;     /* a piece sliding to its square */
+  --duration-pop: 300ms;      /* a badge or icon landing */
+  --duration-sheet: 320ms;    /* a verdict sliding up */
+  --duration-fill: 400ms;     /* progress, the eval bar, a number counting */
+  --duration-celebrate: 900ms; /* confetti, a medal */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);    /* arriving: fast, then settles */
+  --ease-in: cubic-bezier(0.55, 0, 1, 0.45);     /* leaving */
+  --ease-move: cubic-bezier(0.65, 0, 0.35, 1);   /* a piece: eases in and out, like a hand */
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1); /* overshoots once: rewards, unlocks */
 }
 
 .dark {

@@ -15,6 +15,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { type Classification, type EngineLine, type EngineLines, type GameDetail, type LineKind, type MoveRow, type Note, send, useApi } from '@/lib/api'
 import { CLASSIFICATION, isSound } from '@/lib/classification'
 import { clock, longDate, shortDate, thinkTime, timeControl } from '@/lib/format'
+import { useMoveMs } from '@/lib/motion'
 import { lastLocation } from '@/lib/last-location'
 import { BOARDS, usePreferences } from '@/lib/preferences'
 import { token } from '@/lib/tokens'
@@ -456,6 +457,7 @@ function Board({
   palette: (typeof BOARDS)[keyof typeof BOARDS]
   inLine?: boolean
 }) {
+  const moveMs = useMoveMs()
   const squareStyles = lastMove
     ? Object.fromEntries(
         [lastMove.from, lastMove.to].map((sq) => [
@@ -488,7 +490,7 @@ function Board({
           position: fen,
           boardOrientation: orientation,
           allowDragging: false,
-          animationDurationInMs: 150,
+          animationDurationInMs: moveMs,
           lightSquareStyle: { backgroundColor: palette.light },
           darkSquareStyle: { backgroundColor: palette.dark },
           lightSquareNotationStyle: { color: palette.dark },
