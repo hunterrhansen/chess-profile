@@ -21,7 +21,44 @@ push to main ──► GitHub Actions: build arm64 image ──► ghcr.io/hunte
 Actions › Deploy › Run workflow (production, sha-abc1234) ──► production pulls the same image
 ```
 
-The first deploy takes about an hour of clicking. Everything below is free.
+The first deploy takes about an hour of clicking. Everything below is free, except the domain.
+
+## Where we are
+
+The first deploy, step by step. Tick a line off when it's done, so whoever picks this up next
+(you or an AI session) starts at the first open box. Secrets are never written here. They're in
+the owner's password manager, under "Knightly deploy".
+
+- [x] **Domain:** `knightlychess.app`, bought through Cloudflare Registrar (2026-10-08).
+      Production is at `knightlychess.app`, staging at `staging.knightlychess.app`.
+- [x] **Supabase** (§3): `knightly-staging` and `knightly` are in West US (North California),
+      with the Data API off. Staging is migrated, and `SET ROLE knightly_app` works there.
+      Production is empty: it waits for the restore in §3.
+- [x] **Oracle machine** (§2): made with OpenTofu (`infra/oracle`, PHX-AD-1), bootstrapped,
+      and the `knightly` deploy user logs in with `~/.ssh/knightly-deploy`. The IP:
+      `tofu output public_ip` in `infra/oracle`, with state in `~/.knightly/oracle.tfstate` on
+      the owner's Mac.
+- [ ] **Cloudflare** (§5, §7): turn on Zero Trust (Free plan) and R2. Then make two tunnels
+      with public hostnames pointing to `http://web:8000`, plus the `knightly-backups` bucket and
+      an R2 token. The plan is to do these with OpenTofu (`infra/cloudflare`, not written yet),
+      using a Cloudflare API token limited to Tunnel edit, DNS edit on `knightlychess.app`, and
+      R2 edit. The dashboard is the fallback.
+- [ ] **Clerk** (§4): set up a production instance for `knightlychess.app` (its DNS records go
+      in Cloudflare). Add a `user.deleted` webhook on both instances, and allow users to delete
+      their own accounts.
+- [ ] **Fill in `.env` on the machine** (§6, §7): `/opt/knightly/{staging,production}/.env`
+      and `/opt/knightly/backup.env`. The owner pastes the secrets over SSH.
+- [ ] **GitHub** (§8), last, because setting `DEPLOY_HOST` starts deploying on every push to
+      `main`. Set the `DEPLOY_SSH_KEY` secret, the `DEPLOY_HOST` variable, and the `staging` and
+      `production` environments. Make the GHCR package public.
+- [ ] **Staging:** push to `main`, then check `https://staging.knightlychess.app` and
+      `/api/health`, and sign up with a test account.
+- [ ] **Production:** move the Mac data in (§3: migrate, then a data-only restore), deploy the
+      staging tag (§9), and sign in as the owner. Run the backup by hand once (§7).
+- [ ] **Done when** (architecture doc, Phases 4 and 5): a push to `main` reaches staging with
+      no manual steps, and a friend can sign up, use Knightly and delete their account. Test
+      the deletion in Safari with a throwaway account, since Clerk's captcha blocks automated
+      browsers.
 
 ## 1. Accounts and values
 
@@ -41,23 +78,24 @@ Collect these first. The **Where it goes** column says which file or setting get
 
 ## 2. The machine
 
-1. In Oracle Cloud, go to **Compute › Instances › Create instance**:
-   - Image: **Ubuntu 24.04**, shape **VM.Standard.A1.Flex** (Ampere ARM), 4 OCPUs and 24 GB, which is the whole Always Free allowance.
-   - Add your own SSH public key for logging in yourself.
-   - Leave the default security list alone: it opens only SSH (22). The app never needs an open port.
-   - "Out of capacity" is common. Try another availability domain, or try again later. Upgrading the account to Pay As You Go makes capacity much easier to get, and Always Free resources are still free.
-2. Make a key for GitHub Actions to deploy with. It is used only for that:
+1. Make an Oracle Cloud account with **US West (Phoenix)** as its home region. The home
+   region can't change later, and Always Free ARM machines only run there.
+2. Make your own SSH key (`~/.ssh/id_ed25519`), if you don't have one, and a key for GitHub
+   Actions to deploy with. The deploy key is used only for that:
 
    ```bash
-   ssh-keygen -t ed25519 -N "" -C github-actions -f knightly-deploy
+   ssh-keygen -t ed25519 -N "" -C github-actions -f ~/.ssh/knightly-deploy
    ```
 
-3. Log in (`ssh ubuntu@<public ip>`) and run the bootstrap, pasting in the **public** half
-   (`cat knightly-deploy.pub` on your Mac):
+3. Make the machine with OpenTofu ([`infra/oracle/README.md`](../infra/oracle/README.md)). It
+   creates a `knightly` compartment, a network whose only way in is SSH (22), and the Always
+   Free ARM VM (Ubuntu 24.04, 4 OCPUs, 24 GB, 100 GB). Its `apply.sh` retries across
+   availability domains while Oracle is out of ARM capacity. Running it again changes nothing.
+4. Run the bootstrap with the deploy key's **public** half:
 
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/hunterrhansen/knightly/main/deploy/bootstrap.sh \
-     | sudo DEPLOY_KEY="ssh-ed25519 AAAA... github-actions" bash
+   ssh ubuntu@$(cd infra/oracle && tofu output -raw public_ip) \
+     "curl -fsSL https://raw.githubusercontent.com/hunterrhansen/knightly/main/deploy/bootstrap.sh | sudo DEPLOY_KEY='$(cat ~/.ssh/knightly-deploy.pub)' bash"
    ```
 
    The bootstrap is safe to run again. It sets up:
@@ -70,12 +108,18 @@ Collect these first. The **Where it goes** column says which file or setting get
 
 Do this once per environment.
 
-1. Create the project. Pick the region nearest the VM, and keep the database password.
-2. Go to **Connect › Session pooler** and copy that URI, with the password filled in. That's
+1. Create the project. Pick the region nearest the VM (West US (North California) for
+   Phoenix), and keep the database password.
+2. Turn off **Project Settings › Data API**. Only the server talks to the database, and the
+   Data API would expose tables that have no row-level security (`users`, `jobs`) to anyone with
+   the project's anon key.
+3. Go to **Connect › Session pooler** and copy that URI, with the password filled in. That's
    `KNIGHTLY_DATABASE_URL`. Use port **5432**, not the transaction pooler on 6543: each
    connection sets which user it acts for, and that has to stay with the connection. The
    direct connection (`db.<ref>.supabase.co`) is IPv6-only, and the Oracle VM's network is IPv4.
-3. Nothing else is needed. The app creates its tables on its first start, as migrations.
+4. Nothing else is needed. The app creates its tables on its first start, as migrations. To
+   check a new project from your Mac: `KNIGHTLY_DATABASE_URL=... uv run knightly migrate`,
+   then `psql "$URL" -c "set role knightly_app"`.
 
 To bring your existing Mac data into production, run this once, before anyone signs up. Run
 the migrations first, so the tables, the `knightly_app` role and its grants exist. A dump can't
