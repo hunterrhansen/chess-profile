@@ -5,7 +5,7 @@ import sys
 from contextlib import closing
 from pathlib import Path
 
-from . import analyze, bench, config, db, deck, patterns, puzzles, schedule, sqlite_import, update, users
+from . import analyze, bench, config, db, deck, jobs, patterns, puzzles, schedule, sqlite_import, update, users
 from .sources import pgn_file
 
 
@@ -210,7 +210,18 @@ def cmd_serve(conn, args) -> None:
     dist = Path(__file__).resolve().parents[2] / "web" / "dist"
     if not dist.is_dir():
         log(f"No built frontend at {dist}; serving the API only. Build it with: cd web && pnpm build")
-    uvicorn.run(create_app(args.db, dist), host=args.host, port=args.port)
+    app = create_app(args.db, dist)  # applies migrations before the worker starts
+    if args.worker:
+        jobs.start_inline(args.db, workers=schedule.SCHEDULED_WORKERS, log=log)
+    uvicorn.run(app, host=args.host, port=args.port)
+
+
+def cmd_worker(conn, args) -> None:
+    log("Worker started; Ctrl-C to stop.")
+    try:
+        jobs.work(args.db, workers=args.workers, log=log, once=args.once)
+    except KeyboardInterrupt:
+        pass
 
 
 def main(argv=None) -> None:
@@ -315,7 +326,16 @@ def main(argv=None) -> None:
     s = sub.add_parser("serve", help="Run the web app at http://127.0.0.1:8000")
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8000)
+    s.add_argument("--worker", action=argparse.BooleanOptionalAction, default=config.on_mac(),
+                   help="Also run a worker for queued jobs, in this process (default: on a Mac; "
+                        "a server runs `knightly worker` beside it)")
     s.set_defaults(func=cmd_serve, admin=True)  # the app signs people in itself
+
+    s = sub.add_parser("worker", help="Run queued jobs (syncing, analysing) for everyone; on a "
+                                      "server, also queue each user's daily update")
+    s.add_argument("--workers", type=int, help="Engine threads per job (default: CPU cores - 1)")
+    s.add_argument("--once", action="store_true", help="Stop when the queue is empty")
+    s.set_defaults(func=cmd_worker, admin=True)
 
     args = p.parse_args(argv)
     # Admin commands work on the whole database; the rest act for one user and see only theirs.

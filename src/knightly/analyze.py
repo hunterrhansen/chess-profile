@@ -277,6 +277,12 @@ def find_engine(path: str | None) -> str:
     return found
 
 
+def unanalysed(conn) -> int:
+    """How many games `run` would still analyse."""
+    return conn.execute("""SELECT count(*) FROM games WHERE variant = 'standard'
+                           AND id NOT IN (SELECT game_id FROM game_analysis)""").fetchone()[0]
+
+
 def run(conn, depth: int = 18, workers: int | None = None, engine_path: str | None = None,
         force: bool = False, limit: int | None = None, log=print, on_progress=None) -> int:
     """Analyse games that haven't been analysed yet (or all with force). Returns games analysed.

@@ -191,16 +191,16 @@ def test_analysis_depth(db_url, client, system, tmp_path):
 
 
 def test_schedule_and_run_now(client, system):
-    # Not installed: "run now" starts a detached `knightly update`.
-    assert client.post("/api/update/run").status_code == 202
-    assert system["spawned"][-3:] == ["update", "--workers", "3"] and system["run_now"] == 0
+    # Run now queues an update for a worker; asking again while it waits changes nothing.
+    assert client.post("/api/update/run").json() == {"started": True, "queued": True}
+    assert client.post("/api/update/run").json() == {"started": True, "queued": False}
+    assert client.get("/api/status").json()["queued"] == ["update"]
+    assert client.get("/api/settings").json()["running"] is True
+    assert system["spawned"] is None and system["run_now"] == 0
 
     assert client.put("/api/settings/schedule", json={"enabled": True, "hour": 7, "minute": 30}).json() == {
         "hour": 7, "minute": 30, "loaded": True, "user": "local"}
     assert system["install"] == (7, 30)
-    # Installed: "run now" goes through launchd instead.
-    client.post("/api/update/run")
-    assert system["run_now"] == 1
 
     assert client.put("/api/settings/schedule", json={"enabled": False}).json() is None
     assert system["uninstall"] == 1

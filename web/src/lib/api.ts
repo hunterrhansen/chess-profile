@@ -212,6 +212,8 @@ export interface RunProgress {
  * daily update, running or last finished. */
 export interface AccountStatus {
   accounts: { source: string; handle: string; rating: number | null; rating_kind: string | null }[]
+  /** Jobs waiting for a worker (update, backfill), when nothing is running yet. */
+  queued: string[]
   current_run: { started_at: string; progress: RunProgress | null } | null
   last_run: {
     started_at: string

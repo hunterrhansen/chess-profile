@@ -171,27 +171,30 @@ def _finish(conn, run_id: int, **fields) -> None:
 
 def run(conn, token: str | None, workers: int | None = None, depth: int = 18,
         engine_path: str | None = None, backup_dir: Path | None = None, keep: int = KEEP_BACKUPS,
-        trigger: str = "manual", notify_on_failure: bool = False, log=print) -> str:
-    """Run the pipeline once. Returns the run's status: ok | partial | failed | skipped."""
+        trigger: str = "manual", notify_on_failure: bool = False, log=print,
+        analyse_limit: int | None = None, sync: bool = True) -> str:
+    """Run the pipeline once. Returns the run's status: ok | partial | failed | skipped.
+    `analyse_limit` analyses at most that many games (the newest first), and `sync=False`
+    leaves the accounts alone: a backfill batch (jobs.py) is both."""
     try:
         with Lock(conn):
             return _run_locked(conn, token, workers, depth, engine_path, backup_dir,
-                               keep, trigger, notify_on_failure, log)
+                               keep, trigger, notify_on_failure, log, analyse_limit, sync)
     except AlreadyRunning as e:
         log(f"Skipping: {e}")
         return "skipped"
 
 
 def _run_locked(conn, token, workers, depth, engine_path, backup_dir, keep, trigger,
-                notify_on_failure, log) -> str:
+                notify_on_failure, log, analyse_limit, sync) -> str:
     with conn:
         run_id = conn.execute("INSERT INTO runs (status, trigger) VALUES ('running', ?) RETURNING id",
                               (trigger,)).fetchone()[0]
     errors, counts = [], {}
-    targets = known_accounts(conn)
+    targets = known_accounts(conn) if sync else []
     # The backup copies the whole database, so it's a step only on your own Mac; a server
     # backs up on its own schedule, not whenever one person updates.
-    backs_up = config.on_mac()
+    backs_up = config.on_mac() and sync
     steps = ["analyze", "patterns"] + (["backup"] if backs_up else [])
     progress = Progress(conn, run_id, [f"sync:{s}:{u}" for s, u in targets] + steps)
     try:
@@ -202,7 +205,7 @@ def _run_locked(conn, token, workers, depth, engine_path, backup_dir, keep, trig
         progress.start("analyze", "Looking for new games")
         try:  # analysis still covers games from earlier runs even if today's sync failed
             counts["games_analysed"] = analyze.run(
-                conn, depth=depth, workers=workers, engine_path=engine_path, log=log,
+                conn, depth=depth, workers=workers, engine_path=engine_path, log=log, limit=analyse_limit,
                 on_progress=lambda done, total: progress.detail(
                     f"{done} of {_plural(total, 'game')}" if total else "No new games"))
             n = counts["games_analysed"]

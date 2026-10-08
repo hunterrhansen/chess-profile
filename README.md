@@ -91,6 +91,27 @@ Principles:
 4. **Normalise once, analyse anywhere.** Every source goes through `pgn.py`, so the
    analysis layer never needs to know where a game came from.
 
+## Jobs and the worker
+
+Anything that takes minutes (syncing an account, analysing games) runs as a job
+([`jobs.py`](src/knightly/jobs.py)), not inside a web request. The web app queues one when you
+add an account or press Run now, and a worker runs it as you:
+
+- **update**: sync your accounts, analyse your 50 newest new games, tag the patterns. A new
+  account's whole history comes in, but only its newest games are analysed at first, so the
+  app is useful within minutes.
+- **backfill**: analyse the next 50 older games, at a lower priority than anyone's update, and
+  queue another while any are left. A long history trickles in without making anyone wait.
+
+A failed job is retried (5, then 10 minutes later) up to three times; a job whose worker died
+goes back in the queue after two hours. Workers claim jobs with `FOR UPDATE SKIP LOCKED`, so
+any number can run, on any machine.
+
+On your Mac, `knightly serve` runs a worker in the same process (`--no-worker` to turn it
+off), and launchd still runs the daily update. A server runs `knightly worker` beside the web
+app (it's the `worker` service in `docker-compose.yml`); it also queues each user's daily
+update, about a day after their last.
+
 ## Daily updates
 
 `knightly update` runs the whole pipeline: sync every known account, analyse new

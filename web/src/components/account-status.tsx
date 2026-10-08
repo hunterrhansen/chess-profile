@@ -47,6 +47,9 @@ function summary(s: Status): { tone: Tone; line: string; short: string; detail: 
     const what = step.startsWith('sync:') ? `syncing ${SITE[step.split(':')[1]]?.name ?? 'accounts'}` : (STEP[step] ?? 'starting')
     return { tone: 'running', line: `Updating: ${run.progress?.detail ?? what}`, short: 'Updating…', detail: `Started ${when(run.started_at)}` }
   }
+  if (s.queued.length) {
+    return { tone: 'running', line: 'Waiting to start…', short: 'Waiting to start…', detail: 'Your update is next in line.' }
+  }
   const last = s.last_run
   if (!last) return { tone: 'idle', line: 'Not synced yet', short: 'Not synced yet', detail: 'Run an update to bring your games in.' }
   const at = when(last.finished_at ?? last.started_at)
@@ -69,7 +72,7 @@ export function AccountStatus({ collapsed }: { collapsed: boolean }) {
   const { data, reload } = useApi<Status>('/api/status')
   const [open, setOpen] = useState(false)
   const [starting, setStarting] = useState(false)
-  const running = !!data?.current_run
+  const running = !!data?.current_run || !!data?.queued.length
 
   useEffect(() => {
     const t = setInterval(reload, running ? 4000 : 300_000)
