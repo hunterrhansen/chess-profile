@@ -242,8 +242,8 @@ def test_a_quick_clean_find_is_easy(conn):
     deck.sync(conn)
     quick = deck.answer(conn, 1, 2, "e7e5", seconds=6, today=DAY, now=NOON)
     assert quick["rating"] == "easy"
-    # FSRS: Easy on a new card is about 8 days (fuzzed a little, as in Anki)
-    assert 6 <= (date.fromisoformat(quick["due"]) - DAY).days <= 10
+    # FSRS: Easy on a new card is about 8 days, fuzzed as in Anki (6 to 11 over 3,000 draws)
+    assert 6 <= (date.fromisoformat(quick["due"]) - DAY).days <= 11
     slow = deck.answer(conn, 1, 4, "e7e5", seconds=40, today=DAY, now=NOON)
     assert slow["rating"] == "good"
     hinted = deck.answer(conn, 1, 6, "e7e5", seconds=3, hinted=True, today=DAY, now=NOON)
