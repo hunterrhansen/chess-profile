@@ -14,11 +14,14 @@ import { playSound, setSoundEnabled } from '@/lib/sound'
 import { cn } from '@/lib/utils'
 
 const SOURCE_LABEL: Record<string, string> = { chesscom: 'Chess.com', lichess: 'Lichess' }
-const DEPTHS = [
-  { value: 14, label: 'Fast' },
-  { value: 18, label: 'Standard' },
-  { value: 22, label: 'Deep' },
+/** Positions Stockfish searches per move: Standard is 500k (`knightly bench`: ~0.65 CPU-minutes
+ * a game); Deep doubles the work, Fast is under half. */
+const BUDGETS = [
+  { value: 200_000, label: 'Fast' },
+  { value: 500_000, label: 'Standard' },
+  { value: 1_000_000, label: 'Deep' },
 ]
+const thousands = (n: number) => (n >= 1_000_000 ? `${n / 1_000_000}M` : `${Math.round(n / 1000)}k`)
 
 export function SettingsPage() {
   const { data, error, reload } = useApi<Settings>('/api/settings')
@@ -584,29 +587,29 @@ function RunStatus({ status }: { status: 'ok' | 'partial' | 'failed' }) {
 
 function AnalysisSection({ settings, reload }: { settings: Settings; reload: () => void }) {
   const [error, setError] = useState<string | null>(null)
-  const options = DEPTHS.some((d) => d.value === settings.depth)
-    ? DEPTHS
-    : [...DEPTHS, { value: settings.depth, label: 'Custom' }].sort((a, b) => a.value - b.value)
+  const options = BUDGETS.some((b) => b.value === settings.nodes)
+    ? BUDGETS
+    : [...BUDGETS, { value: settings.nodes, label: 'Custom' }].sort((a, b) => a.value - b.value)
 
   return (
     <Section title="Analysis" glyph="engine" description="How your games are analysed.">
       <Row label="Engine" hint={settings.engine ? undefined : 'Install it with: brew install stockfish'}>
         <span className="font-extrabold">{settings.engine ?? 'Not found'}</span>
       </Row>
-      <Row label="Depth" hint="Deeper finds more but takes longer. Applies to games analysed from now on.">
+      <Row label="Depth" hint="How many positions Stockfish looks at for each move. Deeper finds more but takes longer. Applies to games analysed from now on.">
         <Segmented
           label="Analysis depth"
-          value={String(settings.depth)}
+          value={String(settings.nodes)}
           onChange={async (v) => {
             setError(null)
             try {
-              await send('PUT', '/api/settings/analysis', { depth: Number(v) })
+              await send('PUT', '/api/settings/analysis', { nodes: Number(v) })
               reload()
             } catch (e) {
               setError((e as Error).message)
             }
           }}
-          options={options.map((d) => ({ value: String(d.value), label: d.label, title: `Depth ${d.value}` }))}
+          options={options.map((b) => ({ value: String(b.value), label: b.label, title: `${thousands(b.value)} positions a move` }))}
         />
       </Row>
       <Row label="Move classification" hint="Chess.com's bands. A move losing 20+ points of win chance is a blunder; Great is the only move that held, Brilliant a sound sacrifice.">

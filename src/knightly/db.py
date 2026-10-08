@@ -190,7 +190,10 @@ def add_snapshot(conn, source: str, account: str, kind: str, data) -> None:
     )
 
 
-DEFAULT_DEPTH = 18  # Stockfish depth per position unless changed in settings
+DEFAULT_DEPTH = 18  # Why / Best line, and analysis on the command line with --depth
+# Positions Stockfish searches per move when analysing games, unless changed in Settings.
+# `knightly bench`: about 0.65 CPU-minutes a game, against 0.9 at depth 18, for much the same labels.
+DEFAULT_NODES = 500_000
 
 
 def get_setting(conn, key: str, default=None):
@@ -207,8 +210,10 @@ def set_setting(conn, key: str, value) -> None:
     )
 
 
-def analysis_depth(conn) -> int:
-    return int(get_setting(conn, "analysis_depth", DEFAULT_DEPTH))
+def analysis_nodes(conn) -> int:
+    """How many positions Stockfish searches per move when analysing games (Settings ›
+    Analysis: Fast, Standard, Deep)."""
+    return int(get_setting(conn, "analysis_nodes", DEFAULT_NODES))
 
 
 def get_cursor(conn, source: str, account: str, kind: str) -> str | None:

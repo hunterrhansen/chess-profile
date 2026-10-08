@@ -84,3 +84,15 @@ def test_analyze_game_end_to_end(db_url, tmp_path):
     assert summary["engine"].startswith("Stockfish")
     assert summary["user_blunders"] == 0 and summary["opponent_blunders"] >= 1
     assert summary["user_accuracy"] > summary["opponent_accuracy"]
+
+
+@pytest.mark.skipif(not shutil.which("stockfish"), reason="stockfish not installed")
+def test_games_are_analysed_with_a_node_budget(db_url):
+    conn = db.connect(db_url)
+    conn.execute("INSERT INTO games (source, source_id, pgn, user_color, time_control, variant) "
+                 "VALUES ('otb', 'x', ?, 'white', '180+2', 'standard')", (SCHOLARS_MATE,))
+    assert analyze.run(conn, nodes=20_000, workers=1, log=lambda _: None) == 1
+    row = conn.execute("SELECT depth, nodes FROM game_analysis").fetchone()
+    assert (row["depth"], row["nodes"]) == (None, 20_000)  # which budget analysed it
+    assert analyze.describe(analyze.budget(nodes=500_000)) == "500k nodes a move"
+    assert analyze.budget().nodes == db.DEFAULT_NODES and analyze.budget(depth=12).depth == 12

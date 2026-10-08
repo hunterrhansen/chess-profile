@@ -114,12 +114,12 @@ def run(url: str, job, workers: int | None = None, log=print) -> list[tuple[str,
     marked done, as (kind, priority): a backfill while games are left to analyse."""
     payload = json.loads(job["payload"] or "{}")
     with closing(db.connect(url, migrate=False, user_id=job["user_id"])) as conn:
-        depth = db.analysis_depth(conn)
+        nodes = db.analysis_nodes(conn)
         if job["kind"] == "update":
-            update.run(conn, _token(), workers=workers, depth=depth, log=log,
+            update.run(conn, _token(), workers=workers, nodes=nodes, log=log,
                        trigger=payload.get("trigger", "manual"), analyse_limit=FIRST_BATCH)
         elif job["kind"] == "backfill":
-            update.run(conn, None, workers=workers, depth=depth, log=log,
+            update.run(conn, None, workers=workers, nodes=nodes, log=log,
                        trigger="backfill", analyse_limit=BATCH, sync=False)
         else:
             raise ValueError(f"unknown job kind {job['kind']!r}")

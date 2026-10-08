@@ -49,7 +49,7 @@ def cmd_sync(conn, args) -> None:
 
 def cmd_update(conn, args) -> None:
     status = update.run(conn, lichess_token(), workers=args.workers,
-                        depth=db.analysis_depth(conn),
+                        nodes=db.analysis_nodes(conn),
                         trigger="schedule" if args.scheduled else "manual",
                         notify_on_failure=args.scheduled, log=log)
     if status == "partial":
@@ -83,7 +83,7 @@ def cmd_analyze(conn, args) -> None:
         analyze.reclassify(conn, log=log)
         return
     try:
-        n = analyze.run(conn, depth=args.depth or db.analysis_depth(conn), workers=args.workers,
+        n = analyze.run(conn, depth=args.depth, nodes=args.nodes or db.analysis_nodes(conn), workers=args.workers,
                         engine_path=args.engine, force=args.force, limit=args.limit, log=log)
     except KeyboardInterrupt:
         sys.exit(130)
@@ -253,8 +253,9 @@ def main(argv=None) -> None:
 
     s = sub.add_parser("analyze", help="Run Stockfish over games that haven't been analysed yet "
                                        "(per-move evals, blunders, time use). Safe to interrupt.")
-    s.add_argument("--depth", type=int,
-                   help="Search depth per position (default: the Settings value, else 18)")
+    s.add_argument("--nodes", type=int,
+                   help="Positions searched per move (default: the Settings value, else 500000)")
+    s.add_argument("--depth", type=int, help="A fixed search depth per position instead of --nodes")
     s.add_argument("--workers", type=int, help="Parallel engine processes (default: CPU cores - 1)")
     s.add_argument("--engine", help="Path to Stockfish (default: $STOCKFISH or `stockfish` on PATH)")
     s.add_argument("--limit", type=int, help="Only analyse this many games (most recent first)")

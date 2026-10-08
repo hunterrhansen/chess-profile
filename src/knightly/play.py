@@ -17,7 +17,7 @@ import chess
 import chess.engine
 import chess.pgn
 
-from . import analyze, db
+from . import analyze
 from .pgn import apply_owner_perspective, parse_game
 
 MIN_UCI_ELO = 1320   # Stockfish's lowest UCI_Elo
@@ -146,11 +146,12 @@ def game_row(moves: list[str], user_color: str, user_name: str, bot_name: str, e
     return apply_owner_perspective(row, [user_name])
 
 
-def analyse_saved(conn, game_id: int, depth: int, engine_path: str | None = None) -> None:
+def analyse_saved(conn, game_id: int, nodes: int, engine_path: str | None = None) -> None:
     """Engine analysis of one just-played game, so it can be reviewed straight away: its
     positions are spread over one single-threaded engine per core, as `analyze` spreads games."""
     g = conn.execute("SELECT pgn, user_color, time_control FROM games WHERE id = ?", (game_id,)).fetchone()
     path = analyze.find_engine(engine_path)
+    search = analyze.budget(nodes=nodes)
     local, engines, lock = threading.local(), [], threading.Lock()
 
     def evaluate(board):
@@ -159,19 +160,15 @@ def analyse_saved(conn, game_id: int, depth: int, engine_path: str | None = None
             local.engine.configure({"Threads": 1, "Hash": 64})
             with lock:
                 engines.append(local.engine)
-        return analyze._evaluate(local.engine, board, depth)
+        return analyze._evaluate(local.engine, board, search)
 
     workers = max(1, (os.cpu_count() or 2) - 1)
     try:
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            rows = analyze.analyze_game(None, game_id, g[0], g[1], g[2], depth,
+            rows = analyze.analyze_game(None, game_id, g[0], g[1], g[2], search,
                                         evaluate_all=lambda boards: list(pool.map(evaluate, boards)))
         name = engines[0].id.get("name", "unknown") if engines else "unknown"
     finally:
         for engine in engines:
             engine.quit()
-    analyze.save(conn, game_id, rows, analyze.summarize(game_id, rows, name, depth))
-
-
-def default_depth(conn) -> int:
-    return int(db.get_setting(conn, "analysis_depth", db.DEFAULT_DEPTH))
+    analyze.save(conn, game_id, rows, analyze.summarize(game_id, rows, name, search))

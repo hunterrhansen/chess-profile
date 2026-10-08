@@ -169,24 +169,25 @@ def _finish(conn, run_id: int, **fields) -> None:
                      [*fields.values(), run_id])
 
 
-def run(conn, token: str | None, workers: int | None = None, depth: int = 18,
+def run(conn, token: str | None, workers: int | None = None, depth: int | None = None,
         engine_path: str | None = None, backup_dir: Path | None = None, keep: int = KEEP_BACKUPS,
         trigger: str = "manual", notify_on_failure: bool = False, log=print,
-        analyse_limit: int | None = None, sync: bool = True) -> str:
+        analyse_limit: int | None = None, sync: bool = True, nodes: int | None = None) -> str:
     """Run the pipeline once. Returns the run's status: ok | partial | failed | skipped.
     `analyse_limit` analyses at most that many games (the newest first), and `sync=False`
-    leaves the accounts alone: a backfill batch (jobs.py) is both."""
+    leaves the accounts alone: a backfill batch (jobs.py) is both. Games get `nodes` per move
+    (analyze.budget), or a fixed `depth` when that's given."""
     try:
         with Lock(conn):
             return _run_locked(conn, token, workers, depth, engine_path, backup_dir,
-                               keep, trigger, notify_on_failure, log, analyse_limit, sync)
+                               keep, trigger, notify_on_failure, log, analyse_limit, sync, nodes)
     except AlreadyRunning as e:
         log(f"Skipping: {e}")
         return "skipped"
 
 
 def _run_locked(conn, token, workers, depth, engine_path, backup_dir, keep, trigger,
-                notify_on_failure, log, analyse_limit, sync) -> str:
+                notify_on_failure, log, analyse_limit, sync, nodes) -> str:
     with conn:
         run_id = conn.execute("INSERT INTO runs (status, trigger) VALUES ('running', ?) RETURNING id",
                               (trigger,)).fetchone()[0]
@@ -205,7 +206,7 @@ def _run_locked(conn, token, workers, depth, engine_path, backup_dir, keep, trig
         progress.start("analyze", "Looking for new games")
         try:  # analysis still covers games from earlier runs even if today's sync failed
             counts["games_analysed"] = analyze.run(
-                conn, depth=depth, workers=workers, engine_path=engine_path, log=log, limit=analyse_limit,
+                conn, depth=depth, nodes=nodes, workers=workers, engine_path=engine_path, log=log, limit=analyse_limit,
                 on_progress=lambda done, total: progress.detail(
                     f"{done} of {_plural(total, 'game')}" if total else "No new games"))
             n = counts["games_analysed"]

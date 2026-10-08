@@ -247,7 +247,8 @@ export interface Settings {
   current_run: { id: number; started_at: string; trigger: string | null; progress: RunProgress | null } | null
   running: boolean
   engine: string | null
-  depth: number
+  /** Positions Stockfish searches per move when analysing games. */
+  nodes: number
   /** The review deck's FSRS scheduler: default parameters, or tuned to your answers. */
   fsrs: { personal: boolean; reviews: number; needed: number; tuned_at: string | null; tuned_reviews: number | null }
   database: { path: string; bytes: number; games: number; analysed: number }

@@ -167,7 +167,7 @@ def system(monkeypatch):
 
 def test_settings_snapshot(client, system):
     s = client.get("/api/settings").json()
-    assert s["depth"] == 18 and s["engine"] == "Stockfish 19" and s["lichess_token"] is True
+    assert s["nodes"] == 500_000 and s["engine"] == "Stockfish 19" and s["lichess_token"] is True
     assert s["schedule"] is None and s["running"] is False and s["last_run"] is None
     assert s["database"]["games"] == 6 and s["database"]["analysed"] == 4
 
@@ -182,12 +182,12 @@ def test_add_and_remove_account(client, system):
     assert client.get("/api/accounts").json() == []
 
 
-def test_analysis_depth(db_url, client, system, tmp_path):
-    assert client.put("/api/settings/analysis", json={"depth": 22}).json() == {"depth": 22}
-    assert client.get("/api/settings").json()["depth"] == 22
+def test_analysis_budget(db_url, client, system, tmp_path):
+    assert client.put("/api/settings/analysis", json={"nodes": 1_000_000}).json() == {"nodes": 1_000_000}
+    assert client.get("/api/settings").json()["nodes"] == 1_000_000
     with db.connect(db_url) as conn:
-        assert db.analysis_depth(conn) == 22  # what `analyze` and `update` will use
-    assert client.put("/api/settings/analysis", json={"depth": 99}).status_code == 422
+        assert db.analysis_nodes(conn) == 1_000_000  # what `analyze`, `update` and the worker use
+    assert client.put("/api/settings/analysis", json={"nodes": 10}).status_code == 422
 
 
 def test_schedule_and_run_now(client, system):
