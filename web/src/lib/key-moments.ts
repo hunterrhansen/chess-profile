@@ -114,4 +114,4 @@ export function lessonSteps(moments: KeyMoment[], deckPlies: Iterable<number>): 
 }
 
 /** How a lesson step went, for the marks on Review complete. */
-export type StepMark = 'found' | 'missed' | 'praise' | 'seen'
+export type StepMark = 'found' | 'good' | 'helped' | 'missed' | 'praise' | 'seen'

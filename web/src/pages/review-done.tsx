@@ -24,6 +24,8 @@ const TILE = {
 
 const MARK: Record<StepMark, { className: string; label: string }> = {
   found: { className: 'bg-brand', label: 'found' },
+  good: { className: 'bg-[color-mix(in_srgb,var(--brand)_50%,var(--card))]', label: 'a good move' },
+  helped: { className: 'bg-sky', label: 'found with help' },
   missed: { className: 'bg-danger', label: 'missed' },
   praise: { className: 'bg-gold', label: 'a great move' },
   seen: { className: 'bg-foreground/25', label: 'looked at' },
@@ -57,8 +59,8 @@ export function ReviewDonePage() {
 
   const result = game.outcome === 'win' ? 'won' : game.outcome === 'loss' ? 'lost' : 'drawn'
   const { best, fix, inDeck, marks } = summary
-  const asked = marks.filter((m) => m.mark === 'found' || m.mark === 'missed')
-  const missed = asked.filter((m) => m.mark === 'missed')
+  const asked = marks.filter((m) => m.mark !== 'praise' && m.mark !== 'seen')
+  const missed = asked.filter((m) => m.mark === 'missed' || m.mark === 'helped')
   const rise = (order: number) => ({ animationDelay: `calc(var(--duration-celebrate) * 0.5 + ${order} * 80ms)` })
 
   // On a phone, one screen with no scrolling, like the end of a Duolingo lesson: the trophy,
@@ -102,7 +104,7 @@ export function ReviewDonePage() {
                 <span className="eyebrow">Key moments</span>
                 {missed.length > 0 && (
                   <span className="truncate text-sm text-muted-foreground">
-                    Missed: {missed.map((m) => moveLabel(m.ply, m.san)).join(', ')}
+                    Go over again: {missed.map((m) => moveLabel(m.ply, m.san)).join(', ')}
                   </span>
                 )}
               </div>
@@ -171,7 +173,7 @@ export function ReviewDonePage() {
           {asked.length > 0 && (
             <p className="text-sm text-muted-foreground">
               {missed.length
-                ? `Missed: ${missed.map((m) => moveLabel(m.ply, m.san)).join(', ')}. Practice brings these back sooner.`
+                ? `To go over again: ${missed.map((m) => moveLabel(m.ply, m.san)).join(', ')}. Practice brings these back soon.`
                 : 'You found every one.'}
             </p>
           )}

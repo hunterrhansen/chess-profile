@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js'
-import { ArrowSquareOutIcon, CheckIcon, XIcon } from '@phosphor-icons/react'
+import { ArrowSquareOutIcon, CheckIcon, LightbulbIcon, XIcon } from '@phosphor-icons/react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { Confetti } from '@/components/confetti'
@@ -18,14 +18,18 @@ import { cn } from '@/lib/utils'
 import { PlayBoard } from '@/pages/play'
 
 const REPLY_MS = 600 // the opponent's moves in a puzzle, after yours
+const PIECE: Record<string, string> = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' }
+
+/** How a puzzle went: solved on the first try, solved after a miss or a hint, or shown. */
+type PuzzleOutcome = 'solved' | 'helped' | 'missed'
 
 const toMove = (uci: string) => ({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] })
 
 /**
  * Puzzles for the tactic behind most of your mistakes (?theme=hangingPiece), from the
  * Lichess puzzle database. A lesson like Practice: full screen, a set of SESSION puzzles,
- * then a summary. A wrong move, or Show me, ends the puzzle (it counts as a miss) and shows the
- * answer.
+ * then a summary. A wrong move slides back so you can try again (Hint helps); Show me ends the
+ * puzzle as a miss and shows the answer. Only a clean first try counts as solved.
  */
 export function PuzzlesPage() {
   const [params] = useSearchParams()
@@ -33,7 +37,7 @@ export function PuzzlesPage() {
   const pattern = patternOf(theme)
   const [next, setNext] = useState<PuzzleNext | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [results, setResults] = useState<boolean[]>([])
+  const [results, setResults] = useState<PuzzleOutcome[]>([])
 
   const load = useCallback(() => {
     setNext(null)
@@ -87,7 +91,7 @@ export function PuzzlesPage() {
           key={next.puzzle.id}
           puzzle={next.puzzle}
           label={pattern?.one ?? theme}
-          onDone={(solved) => setResults((r) => [...r, solved])}
+          onDone={(outcome) => setResults((r) => [...r, outcome])}
           onNext={load}
           last={results.length + 1 >= session}
         />
@@ -109,14 +113,24 @@ function PuzzleBoard({
 }: {
   puzzle: Puzzle
   label: string
-  onDone: (solved: boolean) => void
+  onDone: (outcome: PuzzleOutcome) => void
   onNext: () => void
   last: boolean
 }) {
   const { prefs } = usePreferences()
   const [played, setPlayed] = useState(0) // how many of puzzle.moves are on the board
   const [selected, setSelected] = useState<string | null>(null)
-  const [result, setResult] = useState<'solved' | 'missed' | null>(null)
+  const [result, setResult] = useState<PuzzleOutcome | null>(null)
+  // Like Practice: a wrong move slides back and you try again; Hint lights up the piece, then
+  // shows the move. Only a clean first try counts as solved (Lichess's rule for its ratings).
+  const [helped, setHelped] = useState(false)
+  const [notQuite, setNotQuite] = useState<string | null>(null) // the square of a wrong try
+  const [hints, setHints] = useState(0)
+  const [hintReady, setHintReady] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setHintReady(true), 2000)
+    return () => clearTimeout(t)
+  }, [])
 
   const chess = useMemo(() => {
     const c = new Chess(puzzle.fen)
@@ -134,13 +148,13 @@ function PuzzleBoard({
     return () => clearTimeout(t)
   }, [played, result, puzzle.moves.length])
 
-  const finish = (solved: boolean) => {
-    setResult(solved ? 'solved' : 'missed')
-    onDone(solved)
-    send('POST', '/api/puzzles/answer', { id: puzzle.id, correct: solved }).catch(() => {})
+  const finish = (outcome: PuzzleOutcome) => {
+    setResult(outcome)
+    onDone(outcome)
+    send('POST', '/api/puzzles/answer', { id: puzzle.id, correct: outcome === 'solved' }).catch(() => {})
   }
   useEffect(() => {
-    if (result) return playSound(result === 'solved' ? 'right' : 'wrong', durationMs('--duration-move'))
+    if (result) return playSound(result === 'missed' ? 'wrong' : 'right', durationMs('--duration-move'))
   }, [result])
 
   const tryMove = (from: string, to: string) => {
@@ -159,11 +173,15 @@ function PuzzleBoard({
     const right = uci === expected || (expected.length === 5 && uci.slice(0, 4) === expected.slice(0, 4)) || (isLast && probe.isCheckmate())
     setSelected(null)
     if (!right) {
-      finish(false)
+      setHelped(true)
+      setNotQuite(to)
+      playSound('wrong')
       return false
     }
+    setNotQuite(null)
+    setHints(0)
     setPlayed((p) => p + 1)
-    if (isLast) finish(true)
+    if (isLast) finish(helped ? 'helped' : 'solved')
     return true
   }
 
@@ -185,29 +203,40 @@ function PuzzleBoard({
           chess={chess}
           orientation={me}
           lastMove={lastUci ? toMove(lastUci) : undefined}
-          hint={result === 'missed' ? puzzle.moves[played] : null}
+          hint={result === 'missed' || (hints >= 2 && yourTurn) ? puzzle.moves[played] : null}
+          glow={hints === 1 && yourTurn ? puzzle.moves[played].slice(0, 2) : null}
           selected={selected}
           interactive={yourTurn}
           palette={BOARDS[prefs.board]}
-          flash={result === 'solved' && lastUci ? { square: lastUci.slice(2, 4), tone: 'right' } : undefined}
+          flash={
+            result && result !== 'missed' && lastUci
+              ? { square: lastUci.slice(2, 4), tone: 'right' }
+              : notQuite && yourTurn
+                ? { square: notQuite, tone: 'wrong' }
+                : undefined
+          }
           onMove={tryMove}
           onSelect={setSelected}
         />
       </LessonBoard>
 
       {result ? (
-        <LessonBar tone={result === 'solved' ? 'right' : 'wrong'}>
+        <LessonBar tone={result === 'missed' ? 'wrong' : 'right'}>
           <LessonVerdict
-            tone={result === 'solved' ? 'right' : 'wrong'}
-            icon={result === 'solved' ? <CheckIcon /> : <XIcon />}
-            title={result === 'solved' ? 'Solved!' : 'Not this time'}
+            tone={result === 'missed' ? 'wrong' : 'right'}
+            icon={result === 'missed' ? <XIcon /> : <CheckIcon />}
+            title={result === 'solved' ? 'Solved!' : result === 'helped' ? 'Solved, with help' : 'Not this time'}
             actions={
-              <Button size="lg" variant={result === 'solved' ? 'default' : 'danger'} onClick={onNext}>
+              <Button size="lg" variant={result === 'missed' ? 'danger' : 'default'} onClick={onNext}>
                 {last ? 'See how it went' : 'Next puzzle'}
               </Button>
             }
           >
-            <p>{result === 'solved' ? `You found ${label.toLowerCase()}.` : 'The green arrow shows the move. Spotting it gets easier with every one.'}</p>
+            <p>
+              {result === 'missed'
+                ? 'The green arrow shows the move. Spotting it gets easier with every one.'
+                : `You found ${label.toLowerCase()}.${result === 'helped' ? ' Next time, try it without the help.' : ''}`}
+            </p>
             {puzzle.url && (
               <a href={puzzle.url} target="_blank" rel="noreferrer" className="mt-0.5 inline-flex items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground">
                 The game it comes from <ArrowSquareOutIcon className="size-3.5" />
@@ -216,12 +245,38 @@ function PuzzleBoard({
           </LessonVerdict>
         </LessonBar>
       ) : (
-        <LessonBar tone="idle">
-          <Button variant="outline" onClick={() => finish(false)} disabled={!yourTurn} className="self-start md:self-auto">
-            Show me
-          </Button>
-          <p className="text-sm text-muted-foreground">
-            {played === 0 ? 'Their move first.' : selected ? 'Now pick where it goes.' : 'Tap a piece, then where it goes. Or drag it.'}
+        <LessonBar tone={notQuite && !selected && !hints ? 'retry' : 'idle'}>
+          <div className="flex shrink-0 gap-2">
+            {hints < 2 && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setHelped(true)
+                  setHints((h) => h + 1)
+                  setNotQuite(null)
+                }}
+                disabled={!yourTurn || !hintReady}
+              >
+                <LightbulbIcon weight="fill" className="text-gold" />
+                {hints === 0 ? 'Hint' : 'Show the move'}
+              </Button>
+            )}
+            <Button variant="ghost" onClick={() => finish('missed')} disabled={!yourTurn}>
+              Show me
+            </Button>
+          </div>
+          <p className={notQuite && !selected && !hints ? 'text-sm font-extrabold text-danger-text' : hints ? 'text-sm font-extrabold text-gold-text' : 'text-sm text-muted-foreground'}>
+            {played === 0
+              ? 'Their move first.'
+              : selected
+                ? 'Now pick where it goes.'
+                : hints === 1
+                  ? `Hint: move the ${PIECE[chess.get(puzzle.moves[played].slice(0, 2) as never)?.type ?? 'p']} on ${puzzle.moves[played].slice(0, 2)}.`
+                  : hints >= 2
+                    ? 'The arrow shows the move. Play it.'
+                    : notQuite
+                      ? 'Not quite. Try again, or use a hint.'
+                      : 'Tap a piece, then where it goes. Or drag it.'}
           </p>
         </LessonBar>
       )}
@@ -229,8 +284,9 @@ function PuzzleBoard({
   )
 }
 
-function Done({ results, label }: { results: boolean[]; label: string }) {
-  const solved = results.filter(Boolean).length
+function Done({ results, label }: { results: PuzzleOutcome[]; label: string }) {
+  const solved = results.filter((r) => r === 'solved').length
+  const helped = results.filter((r) => r === 'helped').length
   return (
     <div className="flex flex-col items-center gap-6 py-6 text-center">
       <div className="relative">
@@ -242,7 +298,7 @@ function Done({ results, label }: { results: boolean[]; label: string }) {
       <div className="animate-rise [animation-delay:calc(var(--duration-celebrate)*0.4)]">
         <h1 className="text-4xl font-bold">Puzzles done</h1>
         <p className="mt-2 text-muted-foreground">
-          {label}: {solved} of {results.length} solved.
+          {label}: {solved} of {results.length} solved first try{helped ? `, ${helped} with help` : ''}.
         </p>
       </div>
       <div className="flex w-full gap-1.5">
@@ -250,8 +306,8 @@ function Done({ results, label }: { results: boolean[]; label: string }) {
           <span
             key={i}
             role="img"
-            aria-label={`Puzzle ${i + 1}: ${r ? 'solved' : 'missed'}`}
-            className={cn('h-3.5 flex-1 rounded-full', r ? 'bg-brand' : 'bg-danger')}
+            aria-label={`Puzzle ${i + 1}: ${r === 'helped' ? 'solved with help' : r}`}
+            className={cn('h-3.5 flex-1 rounded-full', r === 'solved' ? 'bg-brand' : r === 'helped' ? 'bg-sky' : 'bg-danger')}
           />
         ))}
       </div>

@@ -74,6 +74,7 @@ export function Board({
   arrows = [],
   badge,
   flash,
+  glow,
   movable,
   onMove,
   onSelect,
@@ -92,6 +93,8 @@ export function Board({
   badge?: { square: string; kind: Classification } | null
   /** Lights a square up once after the piece lands: green for a right answer, red for wrong. */
   flash?: { square: string; tone: 'right' | 'wrong' }
+  /** Hint: a gold glow on the piece to move. */
+  glow?: string | null
   /** Which side's pieces can be picked up ('w' or 'b'); omit to allow none. */
   movable?: 'w' | 'b'
   onMove?: (from: string, to: string) => boolean
@@ -181,6 +184,7 @@ export function Board({
                 ) : (
                   <span className="pointer-events-none absolute inset-[35%] rounded-full bg-move-hint" />
                 ))}
+              {glow === square && <span className="pointer-events-none absolute inset-0 z-[1] animate-hint" />}
               {flash?.square === square && (
                 <span
                   className={cn(

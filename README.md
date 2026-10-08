@@ -164,12 +164,26 @@ previous period has fewer than 10 games behind it.
 unrated). Filters live in the URL, e.g. `/games?kpi=thrown&range=30d`. Click a game to
 review it.
 
-**Game review** (`/games/<id>?ply=<n>`) replays a game from your side: eval bar, both
-clocks as they stood at that move, the last move in yellow with its classification badge,
-and the engine's better move as a green arrow when you (or they) went wrong. The sidebar
-shows the selected move (your win chance before and after, and the mover's clock), and
-Moves / Key moments tabs; a win-chance graph can be turned on in Settings. ← → step through
-the game, Home / End jump to the ends.
+**Game review** (`/games/<id>`) is a lesson, one step per key moment: where one move was
+clearly better you find it on the board (see Practice below: the same try again and Hint,
+and your answer is that position's answer for the day); where no single move fixes it the
+step shows what happened; a great move gets a gold sheet. **All moves**
+(`/games/<id>/moves?ply=<n>`) is the whole game: eval bar, both clocks, your win chance over
+the game with the key moments on it, the move you're on, and the move list. ← → step
+through the game, Home / End jump to the ends. Finish review saves a mark per step for
+**Review complete**.
+
+**Practice** (`/practice`) is spaced repetition over positions from your own games
+([`deck.py`](src/knightly/deck.py)), inspired by Anki (decided Oct 2026): it schedules
+with FSRS, the scheduler Anki uses by default, and grades your *first* try of the day
+with Anki's buttons. The best move, or one within 2 points of win chance of it (judged by
+Stockfish), or any mate, is Good; within 5 points ("Good move! Best was …") is Hard;
+anything else, a hint first, or Show me is Again. A wrong move slides back so you can try
+again; **Hint** lights up the piece to move, then shows the move as an arrow. Positions
+you didn't get first time come back once more at the end of the session (Duolingo's redo,
+standing in for Anki's relearning steps), and that go doesn't change the grade. At most 10
+positions a day. Puzzles (`/puzzles`, Lichess puzzles for your most common tactic) work
+the same way, without the scheduling.
 
 For any move worse than Good, **Why** and **Best line** play an engine line on the board
 (drawn in blue, so it never looks like the real game): how the move gets punished, or what
@@ -180,8 +194,8 @@ chance ([`lines.py`](src/knightly/lines.py)). ← → step through the line, Esc
 
 **Play** (`/play`) is a game against Stockfish in the same layout as game review: pick a
 strength from 250 to full strength and a color, then move by dragging or clicking (legal
-moves show as dots; promotions make a queen). Resign, take back, and hint (the engine's best
-move as a green arrow) sit under the move list. Stockfish only plays as weak as about 1320
+moves show as dots; promotions make a queen). Resign, take back, and hint (first the piece to
+move, then the engine's best move as a green arrow) sit under the move list. Stockfish only plays as weak as about 1320
 Elo, so below that the bot picks among its top moves at random, more loosely the lower the
 rating ([`play.py`](src/knightly/play.py)). A game in progress survives leaving the page
 or reloading. A finished game is saved as an unrated game with source `bot`, so it stays out
