@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { type GameDetail, type LineKind, type MoveRow, useApi } from '@/lib/api'
-import { CLASSIFICATION, isSound } from '@/lib/classification'
+import { CLASSIFICATION, isSound, moveLook } from '@/lib/classification'
 import { type KeyMoment, keyMoments } from '@/lib/key-moments'
 import { changeTone, longDate, shortDate, thinkTime, timeControl } from '@/lib/format'
 import { lastLocation } from '@/lib/last-location'
@@ -364,7 +364,7 @@ export function AllMovesPage() {
             )}
           </div>
           <div className={cn('panel flex max-h-80 min-h-48 flex-col overflow-hidden transition-opacity lg:max-h-none lg:min-h-0 lg:flex-1', inLine && 'opacity-40')}>
-            <MoveList san={game.san} moves={replay.moves} ply={ply} onSelect={setPly} />
+            <MoveList san={game.san} moves={replay.moves} ply={ply} me={me} onSelect={setPly} />
           </div>
         </aside>
       </div>
@@ -585,10 +585,7 @@ function MoveStrip({
     >
       {san.map((s, i) => {
         const p = i + 1
-        const m = moves[i] as MoveRow | undefined
-        const yours = (p % 2 === 1) === (me === 'white')
-        const bad = yours && (m?.classification === 'mistake' || m?.classification === 'blunder' || m?.classification === 'miss')
-        const marked = m?.classification && ['brilliant', 'great', 'miss', 'mistake', 'blunder'].includes(m.classification)
+        const look = moveLook(p, moves[i] as MoveRow | undefined, me)
         return (
           <li key={p}>
             <button
@@ -596,14 +593,13 @@ function MoveStrip({
               aria-current={p === ply ? 'step' : undefined}
               className={cn(
                 'flex h-9 items-center gap-1 rounded-lg px-2 text-sm',
-                !yours && 'text-muted-foreground',
-                bad && 'font-extrabold text-danger-text',
+                look.className,
                 p === ply && 'bg-sky/15 shadow-[inset_0_0_0_2px_var(--sky)]',
               )}
             >
               {p % 2 === 1 && <span className="text-muted-foreground">{Math.ceil(p / 2)}.</span>}
               <MoveText ply={p} san={s} />
-              {marked && <MoveBadge kind={m!.classification!} />}
+              {look.badge && <MoveBadge kind={look.badge} />}
             </button>
           </li>
         )

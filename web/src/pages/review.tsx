@@ -1,5 +1,5 @@
 import { CircleNotchIcon, ListIcon, XIcon } from '@phosphor-icons/react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router'
 import { LoadingBlock } from '@/components/empty-state'
 import { FindBar } from '@/components/find-bar'
@@ -148,6 +148,23 @@ function Step({
   const { view: lineView, error: lineError } = useLineView(game.id, ply, line)
   const lineLength = lineView?.squares.length ?? 0
   const lineStep = line ? Math.min(Math.max(line.step, 1), Math.max(lineLength, 1)) : 0
+  const setLineStep = useCallback(
+    (s: number) => setLine((l) => (l ? { ...l, step: Math.max(1, Math.min(lineLength, s)) } : l)),
+    [lineLength],
+  )
+  // While a line is open the arrow keys step through it, as in All moves; Escape goes back.
+  useEffect(() => {
+    if (!line) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.key === 'Escape') setLine(null)
+      const to = { ArrowLeft: lineStep - 1, ArrowRight: lineStep + 1, Home: 1, End: lineLength }[e.key]
+      if (to !== undefined) setLineStep(to)
+      if (to !== undefined || e.key === 'Escape') e.preventDefault()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [line, lineStep, lineLength, setLineStep])
 
   const find = step.type === 'find'
   // Find steps work like Practice: try again after a miss, Hint, Show me; the first try is
@@ -274,7 +291,7 @@ function Step({
             view={lineView}
             error={lineError}
             step={lineStep}
-            onStep={(s) => setLine((l) => (l ? { ...l, step: Math.max(1, Math.min(lineLength, s)) } : l))}
+            onStep={setLineStep}
             ply={ply}
             san={san}
             classification={move.classification}
@@ -283,6 +300,7 @@ function Step({
             onBack={() => setLine(null)}
             backLabel="Back to the lesson"
             onSwitch={() => setLine({ kind: line.kind === 'why' ? 'best' : 'why', step: 1 })}
+            stepButtons
           />
         </div>
       ) : find ? (

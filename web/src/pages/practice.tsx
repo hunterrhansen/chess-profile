@@ -205,7 +205,7 @@ function Position({
         />
       </LessonBoard>
 
-      <FindBar find={find} when={when} onNext={() => onNext(find.outcome!)}>
+      <FindBar find={find} when={when} redo={redo} onNext={() => onNext(find.outcome!)}>
         <p>
           {why === undefined ? (
             <span className="flex items-center gap-2 text-muted-foreground">
