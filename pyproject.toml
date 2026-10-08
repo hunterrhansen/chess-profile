@@ -12,6 +12,7 @@ dependencies = [
     "fsrs>=6.3,<7",
     "psycopg[binary]>=3.2",
     "pyjwt[crypto]>=2.9",
+    "sentry-sdk[fastapi]>=2.20",
     "uvicorn>=0.30",
 ]
 

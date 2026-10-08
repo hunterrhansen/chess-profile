@@ -20,7 +20,7 @@ import threading
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 
-from . import analyze, config, db, update
+from . import analyze, config, db, monitoring, update
 
 FIRST_BATCH = 50   # games an update analyses: the newest first
 BATCH = 50         # games a backfill job analyses
@@ -133,6 +133,7 @@ def work(url: str, stop: threading.Event | None = None, workers: int | None = No
     update. Returns how many jobs ran."""
     stop = stop or threading.Event()
     scheduler = (not config.on_mac()) if scheduler is None else scheduler
+    monitoring.init("worker")
     name = f"{socket.gethostname()}:{os.getpid()}:{threading.get_ident()}"
     ran, next_check = 0, 0.0
     with closing(db.connect(url)) as owner:
@@ -140,6 +141,7 @@ def work(url: str, stop: threading.Event | None = None, workers: int | None = No
             now = datetime.now(timezone.utc)
             if now.timestamp() >= next_check:
                 reclaim(owner, now)
+                monitoring.heartbeat()  # "still here", every SCHEDULE_EVERY
                 if scheduler and (n := schedule_due(owner, now)):
                     log(f"Queued {n} daily update{'s' if n != 1 else ''}")
                 next_check = now.timestamp() + SCHEDULE_EVERY
@@ -156,6 +158,7 @@ def work(url: str, stop: threading.Event | None = None, workers: int | None = No
                 finish(owner, job)
             except Exception as e:  # recorded on the job and retried; the worker carries on
                 log(f"Job {job['id']} failed: {e}")
+                monitoring.capture(e)
                 finish(owner, job, e)
             for kind, priority in follow:
                 enqueue(owner, kind, priority=priority, user_id=job["user_id"])

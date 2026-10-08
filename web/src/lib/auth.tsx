@@ -6,13 +6,20 @@ import { Button } from '@/components/ui/button'
 import { setTokenSource } from '@/lib/api'
 
 /**
- * Sign-in, with Clerk. With VITE_CLERK_PUBLISHABLE_KEY set (web/.env.local), the app shows the
- * sign-in screen until you're signed in, then sends your session token with every API call.
- * Without it (Knightly on your own Mac, before Clerk), there's no sign-in: the server serves
- * its one local user. The key is public: it ships in the app.
+ * Sign-in, with Clerk. The server says whether to use it: `/api/config` gives its
+ * CLERK_PUBLISHABLE_KEY, read once before the app renders (main.tsx), so one build serves
+ * staging and production. With a key, the app shows the sign-in screen until you're signed in,
+ * then sends your session token with every API call. Without one (Knightly on your own Mac,
+ * before Clerk), there's no sign-in: the server serves its one local user.
  */
-const KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined
-export const signInEnabled = !!KEY
+let KEY: string | null = null
+
+/** The publishable key from the server's config, or null for no sign-in. Set before rendering. */
+export function setClerkKey(key: string | null | undefined) {
+  KEY = key || null
+}
+
+export const signInEnabled = () => !!KEY
 
 /** Clerk's components in Knightly's tokens, so they follow the light and dark themes. */
 const appearance = {
@@ -94,7 +101,7 @@ export function SignInHeader() {
 
 /** Who you're signed in as, and Sign out (Settings). Nothing without sign-in. */
 export function SignedInAs() {
-  return signInEnabled ? <SignedInAsRow /> : null
+  return signInEnabled() ? <SignedInAsRow /> : null
 }
 
 function SignedInAsRow() {

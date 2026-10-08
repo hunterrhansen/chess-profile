@@ -6,7 +6,7 @@ import { AppShell, FocusShell } from '@/components/app-shell'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { GamesPage } from '@/pages/games'
 import { HomePage } from '@/pages/home'
-import { AuthProvider } from '@/lib/auth'
+import { AuthProvider, setClerkKey } from '@/lib/auth'
 import { PreferencesProvider } from '@/lib/preferences'
 import { ProgressPage } from '@/pages/overview'
 import { PlayPage } from '@/pages/play'
@@ -32,7 +32,7 @@ try {
   // storage blocked: nothing to move
 }
 
-createRoot(document.getElementById('root')!).render(
+const render = () => createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <PreferencesProvider>
@@ -66,3 +66,13 @@ createRoot(document.getElementById('root')!).render(
     </BrowserRouter>
   </StrictMode>,
 )
+
+// The server's settings for this app (whether to sign in with Clerk), before the first render.
+// If they can't be read, the app starts without sign-in and the API says what's wrong.
+fetch('/api/config')
+  .then((res) => (res.ok ? res.json() : {}))
+  .catch(() => ({}))
+  .then((config: { clerk_publishable_key?: string | null }) => {
+    setClerkKey(config.clerk_publishable_key)
+    render()
+  })
