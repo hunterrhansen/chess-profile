@@ -23,10 +23,22 @@ jobs:
       KNIGHTLY_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v4
-      - name: Install Stockfish
+      # The official Stockfish build, downloaded once and then restored from the Actions cache
+      # (about a second, where apt took eleven), and pinned: bump the version in both places.
+      - name: Restore Stockfish
+        id: stockfish
+        uses: actions/cache@v4
+        with:
+          path: ~/stockfish
+          key: stockfish-17.1-ubuntu-x86-64-avx2
+      - name: Download Stockfish
+        if: steps.stockfish.outputs.cache-hit != 'true'
         run: |
-          sudo apt-get update -q && sudo apt-get install -yq stockfish
-          echo /usr/games >> "$GITHUB_PATH"
+          mkdir -p ~/stockfish
+          curl -sSfL https://github.com/official-stockfish/Stockfish/releases/download/sf_17.1/stockfish-ubuntu-x86-64-avx2.tar \
+            | tar -xO stockfish/stockfish-ubuntu-x86-64-avx2 > ~/stockfish/stockfish
+          chmod +x ~/stockfish/stockfish
+      - run: echo "$HOME/stockfish" >> "$GITHUB_PATH"
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --locked
       - run: uv run pytest -q
