@@ -38,11 +38,17 @@ the owner's password manager, under "Knightly deploy".
       and the `knightly` deploy user logs in with `~/.ssh/knightly-deploy`. The IP:
       `tofu output public_ip` in `infra/oracle`, with state in `~/.knightly/oracle.tfstate` on
       the owner's Mac.
-- [ ] **Cloudflare** (§5, §7): turn on Zero Trust (Free plan) and R2. Then make two tunnels
-      with public hostnames pointing to `http://web:8000`, plus the `knightly-backups` bucket and
-      an R2 token. The plan is to do these with OpenTofu (`infra/cloudflare`, not written yet),
-      using a Cloudflare API token limited to Tunnel edit, DNS edit on `knightlychess.app`, and
-      R2 edit. The dashboard is the fallback.
+- [x] **Cloudflare** (§5, §7): Zero Trust (Free) and R2 are on. OpenTofu (`infra/cloudflare`,
+      state in `~/.knightly/cloudflare.tfstate`, its API token in the owner's Keychain as
+      `knightly-cloudflare`) made the tunnels `knightly` and `knightly-staging`, their proxied
+      DNS records, and the `knightly-backups` bucket (2026-10-08). `push-tokens.sh` put each
+      tunnel's `TUNNEL_TOKEN` in its `.env`, and both tunnels connected healthy from the
+      machine. The sites answer 502 until the app runs.
+- [x] **Backup key** (§7): an R2 token with *Object Read & Write* on `knightly-backups`
+      only. Its Access Key ID (32 characters) and Secret Access Key (64) are in
+      `/opt/knightly/backup.env`. The token value isn't used. Tested from the machine: upload,
+      `rclone check`, delete. Ubuntu's rclone needs `RCLONE_S3_NO_HEAD` for R2, which
+      backup.sh sets. The nightly run itself waits for production's database URL.
 - [ ] **Clerk** (§4): set up a production instance for `knightlychess.app` (its DNS records go
       in Cloudflare). Add a `user.deleted` webhook on both instances, and allow users to delete
       their own accounts.
@@ -154,6 +160,10 @@ The web app reads the publishable key from the server (`/api/config`), so one im
 both environments. Nothing about Clerk is baked into the build.
 
 ## 5. The tunnels (Cloudflare)
+
+These are OpenTofu ([`infra/cloudflare/README.md`](../infra/cloudflare/README.md)): the
+tunnels, their DNS records and the backup bucket, with `push-tokens.sh` to put each tunnel's
+token on the machine. By hand in the dashboard, it's this:
 
 Do this once per environment.
 

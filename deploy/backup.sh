@@ -18,6 +18,9 @@ if [[ -z "${RCLONE_CONFIG_OFFSITE_ACCESS_KEY_ID:-}" ]]; then
   echo "backup.env has no bucket credentials: the dump stays on this machine only." >&2
   exit 1
 fi
+# R2 has no object versions, and Ubuntu's rclone (1.60) checks each upload by its version id;
+# skipping that check, it trusts the upload's own response (an MD5) instead.
+export RCLONE_S3_NO_HEAD=true
 rclone copy "$dir/data/backups" "offsite:${BACKUP_BUCKET:?}/$env" --include "knightly-*.dump"
 rclone delete "offsite:${BACKUP_BUCKET}/$env" --min-age 30d --include "knightly-*.dump"
 echo "Backed up $env to ${BACKUP_BUCKET}/$env"
