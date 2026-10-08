@@ -44,9 +44,11 @@ the owner's password manager, under "Knightly deploy".
       DNS records, and the `knightly-backups` bucket (2026-10-08). `push-tokens.sh` put each
       tunnel's `TUNNEL_TOKEN` in its `.env`, and both tunnels connected healthy from the
       machine. The sites answer 502 until the app runs.
-- [ ] **Backup key** (§7): R2 › Manage API tokens › *Object Read & Write* on
-      `knightly-backups`. Its access key id and secret go in `/opt/knightly/backup.env`. The
-      endpoint and bucket are already filled in.
+- [x] **Backup key** (§7): an R2 token with *Object Read & Write* on `knightly-backups`
+      only. Its Access Key ID (32 characters) and Secret Access Key (64) are in
+      `/opt/knightly/backup.env`. The token value isn't used. Tested from the machine: upload,
+      `rclone check`, delete. Ubuntu's rclone needs `RCLONE_S3_NO_HEAD` for R2, which
+      backup.sh sets. The nightly run itself waits for production's database URL.
 - [ ] **Clerk** (§4): set up a production instance for `knightlychess.app` (its DNS records go
       in Cloudflare). Add a `user.deleted` webhook on both instances, and allow users to delete
       their own accounts.
