@@ -1,5 +1,5 @@
 import { Chess, type Square } from 'chess.js'
-import { ArrowUUpLeftIcon, CircleNotchIcon, FlagIcon, RobotIcon } from '@phosphor-icons/react'
+import { CircleNotchIcon } from '@phosphor-icons/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { KnIcon } from '@/components/kn-icon'
@@ -7,12 +7,12 @@ import { Board, type Palette } from '@/components/board'
 import { Confetti } from '@/components/confetti'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
-import { send, useApi } from '@/lib/api'
+import { type AccountStatus, send, useApi } from '@/lib/api'
 import { BOARDS, usePreferences } from '@/lib/preferences'
-import { durationMs } from '@/lib/motion'
+import { durationMs, useWide } from '@/lib/motion'
 import { playSound } from '@/lib/sound'
 import { cn } from '@/lib/utils'
-import { MoveList, NavButton, PlayerStrip } from '@/components/review-bits'
+import { MoveList } from '@/components/review-bits'
 
 type Side = 'white' | 'black'
 
@@ -74,6 +74,20 @@ function saveState(state: PlayState | null) {
 }
 
 const botName = (elo: number) => (elo >= 3200 ? 'Stockfish' : `Stockfish ${elo}`)
+const levelOf = (elo: number) => LEVELS.find((l) => l.elo === elo)?.label
+
+const PIECE = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' } as const
+
+/** The bot's line when it gives check, naming the piece: "Check! Your king's in the line of my queen." */
+function checkLine(chess: Chess) {
+  const turn = chess.turn()
+  const king = chess.findPiece({ type: 'k', color: turn })[0]
+  const by = king ? chess.attackers(king, turn === 'w' ? 'b' : 'w').flatMap((sq) => chess.get(sq)?.type ?? []) : []
+  if (by.length > 1) return `Double check! My ${PIECE[by[0]]} and my ${PIECE[by[1]]} both hit your king.`
+  if (by[0] === 'n') return "Check! Your king's in my knight's jump."
+  if (by[0] === 'p') return "Check! My pawn's hitting your king."
+  return by[0] ? `Check! Your king's in the line of my ${PIECE[by[0]]}.` : 'Check!'
+}
 
 /** Positions, SAN and last-move squares for the moves so far. */
 function useGame(moves: string[]) {
@@ -109,8 +123,15 @@ function resultText(chess: Chess, me: Side, resigned?: Side) {
 
 export function PlayPage() {
   const { prefs } = usePreferences()
-  const { data: accounts } = useApi<{ source: string; handle: string }[]>('/api/accounts')
-  const you = accounts?.find((a) => a.source === 'chesscom')?.handle ?? accounts?.[0]?.handle ?? 'You'
+  const wide = useWide()
+  const { data: status } = useApi<AccountStatus>('/api/status')
+  const accounts = status?.accounts ?? []
+  const you = accounts.find((a) => a.source === 'chesscom')?.handle ?? accounts[0]?.handle ?? 'You'
+  // Your rating to pitch the bot against: a game rating (Chess.com's first), never a puzzle one.
+  const rating =
+    [...accounts]
+      .sort((a, b) => Number(b.source === 'chesscom') - Number(a.source === 'chesscom'))
+      .find((a) => a.rating != null && a.rating_kind !== 'Puzzles')?.rating ?? null
 
   const [state, setStateRaw] = useState<PlayState | null>(loadState)
   const setState = useCallback((next: PlayState | null) => {
@@ -313,121 +334,221 @@ export function PlayPage() {
   // After a mate the result waits for the king to fall (board.tsx); otherwise it comes at once.
   const resultDelay = { animationDelay: live && mate ? 'calc(var(--duration-move) + 1000ms)' : '0ms' }
 
+  const level = levelOf(elo)
+  const moveNumber = Math.floor(moves.length / 2) + 1
+  const says = !state
+    ? null
+    : error
+      ? error
+      : result
+        ? result.outcome === 'win'
+          ? 'Well played! You got me.'
+          : result.outcome === 'loss'
+            ? 'Good game! Fancy a rematch?'
+            : 'A draw. Fair enough!'
+        : warning
+          ? 'Hmm, are you sure about that?'
+          : thinking || held
+            ? null
+            : moves.length < 2
+              ? `Good luck! I play at about ${state.elo}.`
+              : chess.inCheck() && myTurn
+                ? checkLine(chess)
+                : 'Your move.'
+
+  const board = (
+    <PlayBoard
+      chess={chess}
+      orientation={me}
+      lastMove={squares[squares.length - 1]}
+      hint={hint?.ply === moves.length && hint.step === 2 ? hint.uci : null}
+      glow={hint?.ply === moves.length && hint.step === 1 ? hint.uci.slice(0, 2) : null}
+      danger={warning?.reply_uci ?? null}
+      selected={selected}
+      interactive={playing && myTurn}
+      palette={BOARDS[prefs.board]}
+      onMove={tryMove}
+      onSelect={setSelected}
+    />
+  )
+  const yourLine = <Strip name={you} note={[rating, `you, ${me === 'white' ? 'White' : 'Black'}`].filter(Boolean).join(' · ')} />
+  const blunderWarning = (band?: boolean) =>
+    warning && (
+      <BlunderWarning
+        check={warning}
+        you={san[san.length - 1]}
+        them={me === 'white' ? 'Black' : 'White'}
+        onBack={takeItBack}
+        onPlay={playAnyway}
+        band={band}
+      />
+    )
+  const retryButton = error && playing && !myTurn && (
+    <Button size="sm" variant="outline" onClick={() => setRetry((n) => n + 1)}>
+      Try again
+    </Button>
+  )
+  // The game's three buttons, labelled. Hint gets the room for its second step's longer name
+  // (which drops the bulb to fit).
+  const actions = (
+    <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2">
+      <Button
+        variant="secondary"
+        className="h-10 px-2 text-[13px]"
+        onClick={askHint}
+        disabled={!playing || !myTurn || hintLoading || (hint?.ply === moves.length && hint.step === 2)}
+      >
+        {hintLoading ? (
+          <>
+            <CircleNotchIcon className="size-5 animate-spin" /> Hint
+          </>
+        ) : hint?.ply === moves.length ? (
+          'Show the move'
+        ) : (
+          <>
+            <KnIcon glyph="hint" className="size-5" /> Hint
+          </>
+        )}
+      </Button>
+      <Button variant="secondary" className="h-10 px-2 text-[13px]" onClick={takeback} disabled={!playing || !moves.length}>
+        Take back
+      </Button>
+      <Button variant="secondary" className="h-10 px-2 text-[13px] text-danger-text" onClick={resign} disabled={!playing}>
+        Resign
+      </Button>
+    </div>
+  )
+  const resultCard = (compact?: boolean) =>
+    state &&
+    result &&
+    (mate ? (
+      <MateCard
+        won={result.outcome === 'win'}
+        bot={botName(state.elo)}
+        san={san[san.length - 1]}
+        moveNumber={Math.ceil(san.length / 2)}
+        live={live}
+        compact={compact}
+        style={resultDelay}
+      />
+    ) : (
+      <p
+        className={cn(
+          'text-base font-semibold',
+          result.outcome === 'win' ? 'text-win' : result.outcome === 'loss' ? 'text-loss' : 'text-draw',
+        )}
+      >
+        {result.text}
+      </p>
+    ))
+  const afterGame = state && result && (
+    <>
+      <div className="flex animate-rise flex-col gap-2" style={resultDelay}>
+        {state.savedId &&
+          (analysis === 'running' ? (
+            <Button size="lg" disabled>
+              <CircleNotchIcon className="animate-spin" /> Analysing…
+            </Button>
+          ) : (
+            <Button size="lg" asChild>
+              <Link to={`/games/${state.savedId}`}>Review game</Link>
+            </Button>
+          ))}
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="outline" onClick={start}>
+            Rematch
+          </Button>
+          <Button variant="outline" onClick={() => setState(null)}>
+            New game
+          </Button>
+        </div>
+      </div>
+      {analysis === 'failed' && (
+        <p className="text-muted-foreground">Saved, but the analysis didn't run. `knightly analyze` will pick it up.</p>
+      )}
+    </>
+  )
+
+  // On a phone, one screen with no scrolling: the bot and what it says on top, the board the
+  // full width, and along the bottom Blunder check, the result, or the game's buttons. The
+  // shell's top bar (3.5rem) sits above, its tab bar over the bottom (TAB_BAR).
+  if (!wide) {
+    return (
+      <div className={cn('-mx-4 -mt-6 -mb-30 flex h-[calc(100svh-3.5rem)] flex-col overflow-hidden', TAB_BAR)}>
+        {!state ? (
+          <>
+            <h1 className="flex shrink-0 items-center gap-2.5 px-4 pt-4 font-heading text-2xl font-bold">
+              <KnIcon glyph="engine" className="size-8" /> Play the bot
+            </h1>
+            <Setup setup={setup} rating={rating} onChange={setSetup} onStart={start} />
+          </>
+        ) : (
+          <>
+            <header className="flex shrink-0 items-center gap-2.5 px-4 py-2.5" aria-live="polite">
+              <KnIcon glyph="engine" className="size-9 shrink-0" />
+              <div className="min-w-0 flex-1 leading-tight">
+                <p className="truncate font-extrabold">{botName(state.elo)}</p>
+                <p className={cn('line-clamp-2 text-[13px] text-muted-foreground', error && 'text-destructive')}>
+                  {says ?? <Thinking />}
+                </p>
+              </div>
+              <span className="shrink-0 rounded-[10px] bg-surface-muted px-2.5 py-1 font-mono text-sm tabular-nums">
+                {moveNumber}.
+              </span>
+            </header>
+            {/* 1.75rem: your line under the board. */}
+            <div className="min-h-40 flex-1 px-4 [container-type:size]">
+              <section aria-label="Board" className="mx-auto flex w-[min(100cqw,calc(100cqh-1.75rem))] flex-col">
+                <div className="flex">{board}</div>
+                {yourLine}
+              </section>
+            </div>
+            {warning ? (
+              blunderWarning(true)
+            ) : result ? (
+              <footer className="flex shrink-0 flex-col gap-2.5 border-t-2 bg-card px-4 py-3 text-sm">
+                {resultCard(true)}
+                {afterGame}
+              </footer>
+            ) : (
+              <footer className="flex shrink-0 flex-col items-start gap-2 px-4 pt-2 pb-3 [&>:last-child]:w-full">
+                {retryButton}
+                {actions}
+              </footer>
+            )}
+          </>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex h-5 items-center text-sm font-medium">Play vs bot</div>
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="mx-auto flex w-full max-w-[calc(100svh-170px)] min-w-72 flex-col gap-1.5">
-          <PlayerStrip name={botName(elo)} rating={elo} seconds={null} inset={false} />
-          <PlayBoard
-            chess={chess}
-            orientation={me}
-            lastMove={squares[squares.length - 1]}
-            hint={hint?.ply === moves.length && hint.step === 2 ? hint.uci : null}
-            glow={hint?.ply === moves.length && hint.step === 1 ? hint.uci.slice(0, 2) : null}
-            danger={warning?.reply_uci ?? null}
-            selected={selected}
-            interactive={playing && myTurn}
-            palette={BOARDS[prefs.board]}
-            onMove={tryMove}
-            onSelect={setSelected}
-          />
-          <PlayerStrip name={you} rating={null} seconds={null} you inset={false} />
+          <Strip bot name={botName(elo)} note={level ?? ''} />
+          {board}
+          {yourLine}
         </div>
 
         <div className="relative min-h-[28rem]">
           <aside className="panel flex flex-col overflow-hidden lg:absolute lg:inset-0">
             <div className="flex items-center justify-center gap-2 border-b px-3 py-3 font-semibold">
-              <RobotIcon weight="fill" className="size-5" /> Play bot
+              <KnIcon glyph="engine" className="size-6" /> Play bot
             </div>
 
             {!state ? (
-              <Setup setup={setup} onChange={setSetup} onStart={start} />
+              <Setup setup={setup} rating={rating} onChange={setSetup} onStart={start} />
             ) : (
               <>
-                <BotSays
-                  elo={state.elo}
-                  text={
-                    error
-                      ? error
-                      : result
-                        ? result.outcome === 'win'
-                          ? 'Well played! You got me.'
-                          : result.outcome === 'loss'
-                            ? 'Good game! Fancy a rematch?'
-                            : 'A draw. Fair enough!'
-                        : warning
-                          ? 'Hmm, are you sure about that?'
-                          : thinking || held
-                          ? null
-                          : moves.length < 2
-                            ? `Good luck! I play at about ${state.elo}.`
-                            : chess.inCheck() && myTurn
-                              ? 'Check!'
-                              : 'Your move.'
-                  }
-                  error={!!error}
-                />
-                {warning && (
-                  <BlunderWarning
-                    check={warning}
-                    you={san[san.length - 1]}
-                    them={me === 'white' ? 'Black' : 'White'}
-                    onBack={takeItBack}
-                    onPlay={playAnyway}
-                  />
-                )}
-                {error && playing && !myTurn && (
-                  <div className="border-b px-3 py-2">
-                    <Button size="sm" variant="outline" onClick={() => setRetry((n) => n + 1)}>
-                      Try again
-                    </Button>
-                  </div>
-                )}
+                <BotSays elo={state.elo} text={says} error={!!error} />
+                {blunderWarning()}
+                {retryButton && <div className="border-b px-3 py-2">{retryButton}</div>}
                 {result && (
                   <div className="relative flex flex-col gap-3 border-b px-3 py-3 text-sm">
-                    {mate ? (
-                      <MateCard
-                        won={result.outcome === 'win'}
-                        bot={botName(state.elo)}
-                        san={san[san.length - 1]}
-                        moveNumber={Math.ceil(san.length / 2)}
-                        live={live}
-                        style={resultDelay}
-                      />
-                    ) : (
-                      <p
-                        className={cn(
-                          'text-base font-semibold',
-                          result.outcome === 'win' ? 'text-win' : result.outcome === 'loss' ? 'text-loss' : 'text-draw',
-                        )}
-                      >
-                        {result.text}
-                      </p>
-                    )}
-                    <div className="flex animate-rise flex-col gap-2" style={resultDelay}>
-                      {state.savedId &&
-                        (analysis === 'running' ? (
-                          <Button size="lg" disabled>
-                            <CircleNotchIcon className="animate-spin" /> Analysing…
-                          </Button>
-                        ) : (
-                          <Button size="lg" asChild>
-                            <Link to={`/games/${state.savedId}`}>Review game</Link>
-                          </Button>
-                        ))}
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button variant="outline" onClick={start}>
-                          Rematch
-                        </Button>
-                        <Button variant="outline" onClick={() => setState(null)}>
-                          New game
-                        </Button>
-                      </div>
-                    </div>
-                    {analysis === 'failed' && (
-                      <p className="text-muted-foreground">Saved, but the analysis didn't run. `knightly analyze` will pick it up.</p>
-                    )}
+                    {resultCard()}
+                    {afterGame}
                   </div>
                 )}
                 <div className="flex min-h-0 flex-1 flex-col">
@@ -439,16 +560,7 @@ export function PlayPage() {
                     </p>
                   )}
                 </div>
-                <div className="grid grid-cols-3 gap-2 border-t p-2">
-                  <NavButton label="Resign" onClick={resign} icon={<FlagIcon weight="fill" />} disabled={!playing} />
-                  <NavButton label="Take back" onClick={takeback} icon={<ArrowUUpLeftIcon />} disabled={!playing || !moves.length} />
-                  <NavButton
-                    label={hint?.ply === moves.length ? 'Show the move' : 'Hint'}
-                    onClick={askHint}
-                    disabled={!playing || !myTurn || hintLoading || (hint?.ply === moves.length && hint.step === 2)}
-                    icon={hintLoading ? <CircleNotchIcon className="animate-spin" /> : <KnIcon glyph="hint" className="size-6" />}
-                  />
-                </div>
+                <div className="border-t p-2">{actions}</div>
               </>
             )}
           </aside>
@@ -458,14 +570,49 @@ export function PlayPage() {
   )
 }
 
+/** Bottom padding for a phone screen that fits above the shell's tab bar. */
+const TAB_BAR = 'pb-[calc(4.5rem+max(10px,env(safe-area-inset-bottom)))]'
+
+/** A player's line by the board: the bot with its avatar and level, or you with your rating
+ * and side ("934 · you, White"). */
+function Strip({ name, note, bot }: { name: string; note: string; bot?: boolean }) {
+  return (
+    <div className="flex h-7 min-w-0 items-center gap-2.5 text-sm md:h-9">
+      {bot && <KnIcon glyph="engine" className="size-7 shrink-0" />}
+      <span className="truncate font-extrabold">{name}</span>
+      <span className="shrink-0 text-muted-foreground">{note}</span>
+    </div>
+  )
+}
+
+function Thinking() {
+  return (
+    <span className="flex items-center gap-1.5 text-muted-foreground">
+      <CircleNotchIcon className="size-3.5 animate-spin" /> Thinking…
+    </span>
+  )
+}
+
 interface Setup {
   elo: number
   color: Side | 'random'
   blunderCheck: boolean
 }
 
-function Setup({ setup, onChange, onStart }: { setup: Setup; onChange: (s: Setup) => void; onStart: () => void }) {
+function Setup({
+  setup,
+  rating,
+  onChange,
+  onStart,
+}: {
+  setup: Setup
+  /** Your game rating, to point out the strength nearest it. */
+  rating: number | null
+  onChange: (s: Setup) => void
+  onStart: () => void
+}) {
   const level = LEVELS.find((l) => l.elo === setup.elo)
+  const nearest = rating == null ? null : LEVELS.reduce((a, b) => (Math.abs(b.elo - rating) < Math.abs(a.elo - rating) ? b : a))
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 py-3 text-sm">
       <BotSays elo={setup.elo} text={`Hi! Pick how strong I should be. ${level ? `At ${setup.elo} I'm ${level.label.toLowerCase()} level.` : ''}`} />
@@ -487,6 +634,10 @@ function Setup({ setup, onChange, onStart }: { setup: Setup; onChange: (s: Setup
             </button>
           ))}
         </div>
+        <span className="text-muted-foreground">
+          {setup.elo >= 3200 ? level?.label : `${setup.elo} · ${level?.label}`}.
+          {nearest?.elo === setup.elo && ` About your rating (${rating}).`}
+        </span>
       </div>
       <div className="flex flex-col gap-1.5">
         <span className="text-xs font-medium text-muted-foreground">You play</span>
@@ -536,14 +687,51 @@ function BlunderWarning({
   them,
   onBack,
   onPlay,
+  band,
 }: {
   check: Check
   you: string
   them: string
   onBack: () => void
   onPlay: () => void
+  /** On a phone: a gold band along the bottom, in fewer words. */
+  band?: boolean
 }) {
   const what = check.mates ? ' and mates' : check.wins ? ` and wins your ${check.wins}` : ''
+  if (band) {
+    return (
+      <section aria-live="assertive" className="flex shrink-0 animate-sheet flex-col gap-2.5 border-t-2 border-gold-lip bg-gold/18 px-4 pt-3.5 pb-3">
+        <div className="flex items-start gap-3">
+          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-gold text-[22px] font-black text-on-gold shadow-[inset_0_-3px_0_var(--move-shade)]">
+            !
+          </span>
+          <div>
+            <h2 className="font-heading text-xl font-semibold">Blunder check</h2>
+            <p className="text-sm">
+              After <b>{you}</b>,{' '}
+              {what ? (
+                <>
+                  <b>{check.reply_san}</b>
+                  {what.slice(' and'.length)}
+                </>
+              ) : (
+                <>
+                  {them} plays <b>{check.reply_san}</b>
+                </>
+              )}
+              . Your chance: {check.before}% → {check.after}%.
+            </p>
+          </div>
+        </div>
+        <Button size="lg" className="w-full" onClick={onBack}>
+          Take it back
+        </Button>
+        <Button variant="ghost" className="w-full" onClick={onPlay}>
+          Play it anyway
+        </Button>
+      </section>
+    )
+  }
   return (
     <section aria-live="assertive" className="m-3 flex animate-sheet flex-col gap-3 rounded-xl border-2 border-gold-lip bg-card p-4 shadow-[0_4px_0_var(--gold-lip)]">
       <div className="flex items-center gap-2.5">
@@ -571,23 +759,14 @@ function BlunderWarning({
 function BotSays({ elo, text, error }: { elo: number; text: string | null; error?: boolean }) {
   return (
     <div className="flex items-start gap-3 border-b px-3 py-4" aria-live="polite">
-      <span
-        className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
-        title={botName(elo)}
-      >
-        <RobotIcon weight="fill" className="size-7" />
-      </span>
+      <KnIcon glyph="engine" title={botName(elo)} className="size-11 shrink-0" />
       <div
         className={cn(
           'panel relative min-h-11 flex-1 px-3 py-2 text-sm',
           error && 'text-destructive',
         )}
       >
-        {text ?? (
-          <span className="flex items-center gap-1.5 text-muted-foreground">
-            <CircleNotchIcon className="size-3.5 animate-spin" /> Thinking…
-          </span>
-        )}
+        {text ?? <Thinking />}
       </div>
     </div>
   )
@@ -658,6 +837,7 @@ function MateCard({
   san,
   moveNumber,
   live,
+  compact,
   style,
 }: {
   won: boolean
@@ -665,11 +845,13 @@ function MateCard({
   san: string
   moveNumber: number
   live: boolean
+  /** On a phone, in the band along the bottom: the trophy beside the words, not above them. */
+  compact?: boolean
   style: React.CSSProperties
 }) {
   if (!won) {
     return (
-      <div className="flex animate-rise flex-col gap-1.5 rounded-xl border-2 bg-card p-3.5" style={style}>
+      <div className={cn('flex animate-rise flex-col gap-1.5 rounded-xl border-2 bg-card', compact ? 'p-3' : 'p-3.5')} style={style}>
         <div className="flex items-center gap-2.5">
           <span className="grid size-9 shrink-0 place-items-center rounded-full bg-danger text-xl font-black text-on-danger shadow-[inset_0_-3px_0_var(--move-shade)]">
             #
@@ -684,18 +866,29 @@ function MateCard({
   }
   return (
     <div
-      className="relative flex animate-rise flex-col items-center gap-1.5 rounded-xl border-2 border-gold-lip bg-gold p-4 text-center text-on-gold shadow-[0_4px_0_var(--gold-lip)]"
+      className={cn(
+        'relative flex animate-rise rounded-xl border-2 border-gold-lip bg-gold text-on-gold shadow-[0_4px_0_var(--gold-lip)]',
+        compact ? 'items-center gap-3 p-3' : 'flex-col items-center gap-1.5 p-4 text-center',
+      )}
       style={style}
     >
       {/* Silent: the checkmate sound is this moment's sound. */}
       {live && <Confetti silent delay="calc(var(--duration-move) + 1150ms)" />}
-      <span className="grid size-18 animate-bounce-in place-items-center rounded-full bg-card shadow-[0_3px_0_var(--gold-lip)]" style={style}>
-        <KnIcon glyph="trophy" className="size-12" />
+      <span
+        className={cn(
+          'grid shrink-0 animate-bounce-in place-items-center rounded-full bg-card shadow-[0_3px_0_var(--gold-lip)]',
+          compact ? 'size-14' : 'size-18',
+        )}
+        style={style}
+      >
+        <KnIcon glyph="trophy" className={compact ? 'size-10' : 'size-12'} />
       </span>
-      <span className="text-sm font-extrabold tracking-[.06em] uppercase">Checkmate</span>
-      <span className="font-heading text-xl leading-tight font-bold text-balance">You beat {bot}!</span>
-      <span className="text-sm">
-        {san} on move {moveNumber}. Saved as unrated, so you can review it.
+      <span className={cn('flex min-w-0 flex-col', compact ? 'gap-0.5' : 'items-center gap-1.5')}>
+        <span className="text-sm font-extrabold tracking-[.06em] uppercase">Checkmate</span>
+        <span className="font-heading text-xl leading-tight font-bold text-balance">You beat {bot}!</span>
+        <span className="text-sm">
+          {san} on move {moveNumber}.{!compact && ' Saved as unrated, so you can review it.'}
+        </span>
       </span>
     </div>
   )
