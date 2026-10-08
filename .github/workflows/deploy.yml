@@ -1,0 +1,99 @@
+# Builds the server image and deploys it (docs/deploy.md).
+#
+# - Every push to main: build the image for ARM (the Oracle VM) on GitHub's ARM runner, push
+#   it to ghcr.io/hunterrhansen/knightly as :main and :sha-<commit>, and deploy it to staging.
+# - Production: run this workflow by hand (Actions › Deploy › Run workflow), choosing
+#   production and the sha-<commit> tag that's been on staging.
+#
+# Deploying needs the server: the repository variable DEPLOY_HOST and the secret
+# DEPLOY_SSH_KEY. Until they're set, the deploy job is skipped and the image is still built.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Where to deploy
+        type: choice
+        options: [staging, production]
+        default: staging
+      tag:
+        description: Image tag (sha-<commit>); empty builds this commit
+        required: false
+
+concurrency:
+  group: deploy-${{ inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  image:
+    if: ${{ !inputs.tag }}
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      tag: sha-${{ steps.sha.outputs.short }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: sha
+        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:sha-${{ steps.sha.outputs.short }}
+            ${{ env.IMAGE }}:main
+          cache-from: type=gha,scope=arm64
+          cache-to: type=gha,scope=arm64,mode=max
+
+  deploy:
+    needs: image
+    # Runs after a build, or on its own when a tag was given; skipped until the server exists.
+    if: ${{ always() && (needs.image.result == 'success' || inputs.tag) && vars.DEPLOY_HOST != '' }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'staging' }}
+    env:
+      TARGET: ${{ inputs.environment || 'staging' }}
+      TAG: ${{ inputs.tag || needs.image.outputs.tag }}
+    steps:
+      - name: Deploy over SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ vars.DEPLOY_HOST }}
+        run: |
+          install -m 600 /dev/null ~/deploy_key
+          printf '%s\n' "$SSH_KEY" > ~/deploy_key
+          ssh -i ~/deploy_key -o StrictHostKeyChecking=accept-new "knightly@$HOST" \
+            "TARGET=$TARGET TAG=$TAG bash -s" <<'EOF'
+          set -euo pipefail
+          cd "/opt/knightly/$TARGET"
+          # The tag lives in .env, so restarts, reboots and the nightly backup use this image too.
+          sed -i '/^KNIGHTLY_IMAGE_TAG=/d' .env
+          echo "KNIGHTLY_IMAGE_TAG=$TAG" >> .env
+          docker compose pull --quiet
+          docker compose up -d --remove-orphans
+          # Wait for the new web container to answer (migrations run as it starts).
+          health() { docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q web)"; }
+          for _ in $(seq 1 30); do
+            [ "$(health)" = healthy ] && break
+            sleep 5
+          done
+          docker compose ps
+          [ "$(health)" = healthy ]
+          docker image prune -f
+          EOF
