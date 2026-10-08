@@ -5,6 +5,7 @@ import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-r
 import { LoadingBlock } from '@/components/empty-state'
 import { MoveBadge } from '@/components/move-badge'
 import { MarkedText, MoveText } from '@/components/move-text'
+import { LessonBar, LessonBoard, LessonScreen, LessonVerdict } from '@/components/lesson-bar'
 import { LinePanel, ReviewBoard } from '@/components/review-bits'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -18,7 +19,6 @@ import { durationMs } from '@/lib/motion'
 import { BOARDS, usePreferences } from '@/lib/preferences'
 import { type Replay, type Side, useEngineLines, useLineView, useReplay } from '@/lib/replay'
 import { playSound } from '@/lib/sound'
-import { cn } from '@/lib/utils'
 import { PlayBoard } from '@/pages/play'
 
 /**
@@ -73,7 +73,7 @@ export function ReviewPage() {
   const step = steps[index]
   const last = index === steps.length - 1
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-5">
+    <LessonScreen>
       {/* Keyed by move, so the board, answer and sheet reset for each step. */}
       <Step
         key={step.ply}
@@ -89,7 +89,7 @@ export function ReviewPage() {
         onMark={(mark) => setMarks((m) => (m[step.ply] ? m : { ...m, [step.ply]: mark }))}
         onNext={last ? finish : () => setParams({ step: String(index + 2) }, { replace: true })}
       />
-    </div>
+    </LessonScreen>
   )
 }
 
@@ -259,14 +259,13 @@ function Step({
         {sub && <p className="text-muted-foreground">{sub}</p>}
       </div>
 
-      {/* As big as fits: the full width, or the window's height minus the prompt and answer. */}
-      <div className="mx-auto flex w-full max-w-[calc(100svh-300px)] min-w-64 flex-col gap-2">
-        {line && (
+      {line && (
           <p className="flex items-center gap-2 rounded-lg bg-sky/15 px-3 py-2 text-sm font-extrabold">
             <span className="size-2.5 rounded-full bg-sky" /> Engine line, not the game.
             {lineView && ` Move ${lineStep} of ${lineLength}.`}
           </p>
-        )}
+      )}
+      <LessonBoard>
         {line ? (
           <ReviewBoard
             fen={lineView ? lineView.fens[lineStep] : replay.fens[ply - 1]}
@@ -300,7 +299,7 @@ function Step({
             palette={BOARDS[prefs.board]}
           />
         )}
-      </div>
+      </LessonBoard>
 
       {failed && <p className="text-sm text-destructive">{failed}</p>}
       {line ? (
@@ -322,20 +321,20 @@ function Step({
           />
         </div>
       ) : !answered ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t-2 pt-4">
-          <Button variant="outline" onClick={() => submit(SKIP)} disabled={!!tried}>
+        <LessonBar tone="idle">
+          <Button variant="outline" onClick={() => submit(SKIP)} disabled={!!tried} className="self-start md:self-auto">
             Show me
           </Button>
           <p className="text-sm text-muted-foreground">
             {tried ? 'Checking…' : selected ? 'Now pick where it goes.' : 'Tap a piece, then where it goes. Or drag it.'}
           </p>
-        </div>
+        </LessonBar>
       ) : (
         <Sheet
           tone={step.type === 'praise' ? 'gold' : result?.correct ? 'right' : 'wrong'}
           icon={
             step.type === 'praise' ? (
-              <MoveBadge kind={step.kind} pop className="size-10 text-lg [&_svg]:size-6" />
+              <MoveBadge kind={step.kind} pop className="size-12 text-xl [&_svg]:size-7" />
             ) : result?.correct ? (
               <CheckIcon className="size-6" />
             ) : (
@@ -390,7 +389,7 @@ const PRAISE: Partial<Record<LessonStep['kind'], string>> = {
   best: "They blundered, and you took what they gave: the engine's top choice.",
 }
 
-/** The sheet that slides up under the board: green found, red missed, gold for a great move. */
+/** The verdict along the bottom: green found, red missed, gold for a great move. */
 function Sheet({
   tone,
   icon,
@@ -411,47 +410,28 @@ function Sheet({
   onNext: () => void
 }) {
   return (
-    <section
-      aria-live="polite"
-      className={cn(
-        'panel flex animate-sheet flex-col gap-3 p-5',
-        tone === 'right' ? 'border-brand bg-brand/15' : tone === 'wrong' ? 'border-danger bg-danger/15' : 'border-gold bg-gold/20',
-      )}
-    >
-      <div className="flex items-start gap-3">
-        <span
-          className={cn(
-            'grid size-10 shrink-0 place-items-center rounded-full [animation-delay:calc(var(--duration-sheet)*0.6)]',
-            tone === 'right' && 'animate-bounce-in bg-brand text-on-brand',
-            tone === 'wrong' && 'animate-shake bg-danger text-on-danger',
-          )}
-        >
-          {icon}
-        </span>
-        <div className="min-w-0">
-          <h2
-            className={cn(
-              'text-2xl font-semibold',
-              tone === 'right' ? 'text-brand-text' : tone === 'wrong' ? 'text-danger-text' : 'text-gold-text',
+    <LessonBar tone={tone}>
+      <LessonVerdict
+        tone={tone}
+        icon={icon}
+        title={title}
+        actions={
+          <>
+            {onLine && (
+              <Button size="lg" variant="outline" onClick={onLine}>
+                Show the line
+              </Button>
             )}
-          >
-            {title}
-          </h2>
-          <div className="mt-1">{children}</div>
-        </div>
-      </div>
-      <div className="flex flex-wrap justify-end gap-2">
-        {onLine && (
-          <Button size="lg" variant="outline" onClick={onLine}>
-            Show the line
-          </Button>
-        )}
-        <Button size="lg" variant={tone === 'right' ? 'default' : tone === 'wrong' ? 'danger' : 'gold'} onClick={onNext} disabled={busy}>
-          {busy && <CircleNotchIcon className="animate-spin" />}
-          {next}
-        </Button>
-      </div>
-    </section>
+            <Button size="lg" variant={tone === 'right' ? 'default' : tone === 'wrong' ? 'danger' : 'gold'} onClick={onNext} disabled={busy}>
+              {busy && <CircleNotchIcon className="animate-spin" />}
+              {next}
+            </Button>
+          </>
+        }
+      >
+        {children}
+      </LessonVerdict>
+    </LessonBar>
   )
 }
 

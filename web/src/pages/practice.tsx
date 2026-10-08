@@ -3,6 +3,7 @@ import { CheckIcon, CircleNotchIcon, XIcon } from '@phosphor-icons/react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { Confetti } from '@/components/confetti'
+import { LessonBar, LessonBoard, LessonScreen, LessonVerdict } from '@/components/lesson-bar'
 import { EmptyState, LoadingBlock } from '@/components/empty-state'
 import { MoveBadge } from '@/components/move-badge'
 import { MarkedText } from '@/components/move-text'
@@ -31,14 +32,22 @@ import { PlayBoard } from '@/pages/play'
 export function PracticePage() {
   const { data, error, reload } = useApi<DeckToday>('/api/deck')
 
+  const failed = error && <p className="text-sm text-destructive">Couldn't load your positions. {error}</p>
+  // A position is a lesson screen: one window high, the answer bar along the bottom.
+  if (data?.card) {
+    return (
+      <LessonScreen>
+        {failed}
+        {/* Keyed by position, so the board and answer reset for each card. */}
+        <Position key={`${data.card.game_id}-${data.card.ply}`} deck={data} card={data.card} onNext={reload} />
+      </LessonScreen>
+    )
+  }
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-5">
-      {error && <p className="text-sm text-destructive">Couldn't load your positions. {error}</p>}
+      {failed}
       {!data ? (
         <LoadingBlock label="Picking today's positions…" className="aspect-square w-full rounded-xl" />
-      ) : data.card ? (
-        // Keyed by position, so the board and answer reset for each card.
-        <Position key={`${data.card.game_id}-${data.card.ply}`} deck={data} card={data.card} onNext={reload} />
       ) : (
         <DoneForToday deck={data} />
       )}
@@ -152,8 +161,7 @@ function Position({ deck, card, onNext }: { deck: DeckToday; card: DeckCard; onN
         </p>
       </div>
 
-      {/* As big as fits: the full width, or the window's height minus the prompt and answer. */}
-      <div className="mx-auto flex w-full max-w-[calc(100svh-300px)] min-w-64">
+      <LessonBoard>
         <PlayBoard
           chess={shown}
           orientation={card.color}
@@ -166,20 +174,20 @@ function Position({ deck, card, onNext }: { deck: DeckToday; card: DeckCard; onN
           onMove={tryMove}
           onSelect={setSelected}
         />
-      </div>
+      </LessonBoard>
 
       {failed && <p className="text-sm text-destructive">{failed}</p>}
       {result ? (
         <Verdict result={result} why={why} tactic={card.pattern} onNext={onNext} />
       ) : (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t-2 pt-4">
-          <Button variant="outline" onClick={() => submit(SKIP)} disabled={!!tried}>
+        <LessonBar tone="idle">
+          <Button variant="outline" onClick={() => submit(SKIP)} disabled={!!tried} className="self-start md:self-auto">
             Skip
           </Button>
           <p className="text-sm text-muted-foreground">
             {tried ? 'Checking…' : selected ? 'Now pick where it goes.' : 'Tap a piece, then where it goes. Or drag it.'}
           </p>
-        </div>
+        </LessonBar>
       )}
     </>
   )
@@ -202,47 +210,34 @@ function Verdict({
   const right = result.correct
   const pattern = patternOf(tactic)
   return (
-    <section
-      aria-live="polite"
-      className={cn(
-        'panel flex animate-sheet flex-col gap-3 p-5',
-        right ? 'border-brand bg-brand/15' : 'border-danger bg-danger/15',
-      )}
-    >
-      <div className="flex items-start gap-3">
-        <span
-          className={cn(
-            'grid size-10 shrink-0 place-items-center rounded-full [animation-delay:calc(var(--duration-sheet)*0.6)]',
-            right ? 'animate-bounce-in bg-brand text-on-brand' : 'animate-shake bg-danger text-on-danger',
+    <LessonBar tone={right ? 'right' : 'wrong'}>
+      <LessonVerdict
+        tone={right ? 'right' : 'wrong'}
+        icon={right ? <CheckIcon /> : <XIcon />}
+        title={right ? `Found it: ${result.best_san}` : `The move was ${result.best_san}`}
+        actions={
+          <Button size="lg" variant={right ? 'default' : 'danger'} onClick={onNext}>
+            Continue
+          </Button>
+        }
+      >
+        <p>
+          {why === undefined ? (
+            <span className="flex items-center gap-2 text-muted-foreground">
+              <CircleNotchIcon className="size-4 animate-spin" /> Asking Stockfish why…
+            </span>
+          ) : (
+            <MarkedText text={why ?? 'It keeps the position; the move you played gave it away.'} />
           )}
-        >
-          {right ? <CheckIcon className="size-6" /> : <XIcon className="size-6" />}
-        </span>
-        <div className="min-w-0">
-          <h2 className={cn('text-2xl font-semibold', right ? 'text-brand-text' : 'text-danger-text')}>
-            {right ? `Found it: ${result.best_san}` : `The move was ${result.best_san}`}
-          </h2>
-          <p className="mt-1">
-            {why === undefined ? (
-              <span className="flex items-center gap-2 text-muted-foreground">
-                <CircleNotchIcon className="size-4 animate-spin" /> Asking Stockfish why…
-              </span>
-            ) : (
-              <MarkedText text={why ?? 'It keeps the position; the move you played gave it away.'} />
-            )}
+        </p>
+        {pattern && pattern.label !== PATTERNS.other.label && (
+          <p className="mt-1 text-sm">
+            <span className="font-extrabold">{pattern.one}.</span> {pattern.tip}
           </p>
-          {pattern && pattern.label !== PATTERNS.other.label && (
-            <p className="mt-2 text-sm">
-              <span className="font-extrabold">{pattern.one}.</span> {pattern.tip}
-            </p>
-          )}
-          <p className="mt-1 text-sm text-muted-foreground">{nextTime(result)}</p>
-        </div>
-      </div>
-      <Button size="lg" variant={right ? 'default' : 'danger'} className="self-end" onClick={onNext}>
-        Continue
-      </Button>
-    </section>
+        )}
+        <p className="mt-0.5 text-[13px] text-muted-foreground">{nextTime(result)}</p>
+      </LessonVerdict>
+    </LessonBar>
   )
 }
 
