@@ -12,3 +12,8 @@ sounds/
 .env
 .env.*
 !.env.example
+# OpenTofu / Terraform: providers and any state stay local (infra/oracle/README.md)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
