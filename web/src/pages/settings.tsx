@@ -631,7 +631,7 @@ function DataSection({ settings }: { settings: Settings }) {
   const { database: db, backups } = settings
   const mb = (db.bytes / 1024 / 1024).toFixed(1)
   return (
-    <Section title="Data" glyph="notes" description="Everything lives in one SQLite file on this Mac.">
+    <Section title="Data" glyph="notes" description="Everything lives in one Postgres database.">
       <Row
         label="Database"
         hint={<span className="break-all">{db.path}</span>}

@@ -15,13 +15,13 @@ The tags are Lichess puzzle theme names, so the path can later serve puzzles of 
 theme.
 """
 import os
-import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import chess
 import chess.engine
 
+from . import db
 from .analyze import find_engine
 
 THEMES = ["hangingPiece", "fork", "pin", "skewer", "discoveredAttack", "backRankMate", "mate"]
@@ -170,7 +170,7 @@ def in_line(board: chess.Board, line: list[chess.Move]) -> str | None:
     return None
 
 
-def deepen(conn: sqlite3.Connection, engine_path: str | None = None, workers: int | None = None,
+def deepen(conn: db.Connection, engine_path: str | None = None, workers: int | None = None,
            depth: int = DEEP_DEPTH, log=print) -> int:
     """Settle every "pending" tag with the engine's line: for a blunder or mistake, the line
     after your move (their tactic); for a miss, the line before it (yours). Returns how many
@@ -216,7 +216,7 @@ def deepen(conn: sqlite3.Connection, engine_path: str | None = None, workers: in
     return len(tags)
 
 
-def tag_all(conn: sqlite3.Connection) -> int:
+def tag_all(conn: db.Connection) -> int:
     """First pass over every one of your mistakes, misses and blunders that isn't tagged yet
     (new games, or re-analysed ones, whose rows come back untagged): one-move tactics are
     named, the rest left PENDING for `deepen`. Returns how many were tagged."""

@@ -1,12 +1,14 @@
 # Knightly
 
 Turn your own chess games into daily practice. Knightly pulls all of your chess data
-(Chess.com, Lichess, over-the-board PGNs) into a single SQLite file, analyses it with
+(Chess.com, Lichess, over-the-board PGNs) into one Postgres database, analyses it with
 Stockfish, and turns your mistakes into positions to review.
 
 ## Quick start
 
 ```bash
+brew install postgresql@17 && brew services start postgresql@17   # once
+/opt/homebrew/opt/postgresql@17/bin/createdb knightly             # once
 uv sync
 uv run knightly sync chesscom <username>            # all games, every month
 uv run knightly sync lichess  <username> --token lip_xxx   # games + puzzle history
@@ -15,10 +17,17 @@ uv run knightly sync                                 # later: incremental re-syn
 uv run knightly analyze                              # Stockfish pass over new games
 uv run knightly stats
 uv run knightly serve                                # web app at http://127.0.0.1:8000
-sqlite3 chess.db                                         # it's just SQL from here
+psql knightly                                        # it's just SQL from here
 ```
 
-The DB path defaults to `./chess.db` (override with `--db` or `KNIGHTLY_DB`).
+The database defaults to `postgresql:///knightly`, the local server (override with `--db` or
+`KNIGHTLY_DATABASE_URL`). Every command applies any pending migrations
+([`migrations/`](src/knightly/migrations)) when it connects; `knightly migrate` does only that.
+
+**Coming from SQLite?** Knightly kept everything in `chess.db` until October 2026. Copy it
+into an empty database with `uv run knightly import-sqlite chess.db` (ids, reviews and the
+review deck come along), then reinstall the daily job so it uses the new database:
+`uv run knightly schedule install`. The old file is left as it was.
 `--since 2024-01` limits a first import.
 
 ## Sources
@@ -49,7 +58,8 @@ would mean scraping a logged-in session, which is left out for now.
 
 ## Storage design
 
-SQLite, one file. Tables in [`schema.sql`](src/knightly/schema.sql):
+Postgres. Tables in [`migrations/0001_initial.sql`](src/knightly/migrations/0001_initial.sql);
+each later change to the schema is a new numbered file there, applied once per database:
 
 - `games`: one row per game from any source, keyed on `(source, source_id)`. Normalised
   columns are written from **your** point of view (`user_color`, `user_outcome`,
@@ -81,8 +91,9 @@ Principles:
 ## Daily updates
 
 `knightly update` runs the whole pipeline: sync every known account, analyse new
-games, back up the database to `backups/` (one copy per day, newest 7 kept), and record
-the run in the `runs` table. A second copy started while one is running exits straight away.
+games, back up the database with `pg_dump` to `backups/knightly-YYYY-MM-DD.dump` (one per
+day, newest 7 kept; restore with `pg_restore`), and record the run in the `runs` table. A
+second copy started while one is running exits straight away (a Postgres advisory lock).
 
 To run it every day at 06:00 via launchd (if the Mac is asleep then, it runs on wake):
 
@@ -139,8 +150,7 @@ uv run knightly analyze --reclassify
 
 `knightly serve` runs a FastAPI app ([`api.py`](src/knightly/api.py)) over the
 database and serves the React frontend in [`web/`](web/) (Vite, TypeScript, shadcn/ui,
-Recharts). Pages read through a read-only connection, so it's safe to leave running during
-`sync` or `analyze`. It listens on 127.0.0.1 only.
+Recharts). It's safe to leave running during `sync` or `analyze`. It listens on 127.0.0.1 only.
 
 ```bash
 cd web && pnpm install && pnpm build && cd ..   # once, and after frontend changes
@@ -235,7 +245,8 @@ database.
 
 The board's sounds are made in the browser. To use your own recordings instead, put any of
 `move-self.mp3` (a move), `capture.mp3` (a capture), `game-start.mp3` (starting a game vs the
-bot) and `game-end.mp3` (a checkmate) in a `sounds/` folder beside `chess.db` (it's
+bot) and `game-end.mp3` (a checkmate) in a `sounds/` folder in the folder you run Knightly
+from, or in `$KNIGHTLY_DATA_DIR` (it's
 gitignored: other people's sounds shouldn't end up in this repo). Reload the page; there's
 nothing to rebuild. Without them, the built-in sounds play.
 
@@ -246,12 +257,11 @@ it's built on (arm64 on an Apple-silicon Mac or an ARM server). It's the first s
 Knightly multi-user; see the architecture doc for the plan.
 
 ```bash
-docker compose up --build          # http://localhost:8000
-docker compose run --rm -v "$PWD:/import:ro" web cp /import/chess.db /data/chess.db   # start from a copy of yours
+docker compose up --build          # http://localhost:8000, with its own Postgres
+docker compose run --rm -v "$PWD:/import:ro" web knightly import-sqlite /import/chess.db   # your data, from SQLite
 ```
 
-The database lives in a Docker volume rather than a folder on your Mac, because SQLite's WAL
-breaks on folders shared into Docker's VM. In the image Knightly runs in **server mode**
+Backups and your own sounds live in the `/data` volume. In the image Knightly runs in **server mode**
 (`KNIGHTLY_MODE=server`, the default anywhere but macOS): no launchd schedule, no Keychain, no
 macOS notifications. Settings hides the daily schedule, and Run now logs to the container's
 output. Set `KNIGHTLY_MODE=server` on a Mac to try that behaviour without Docker.
@@ -260,16 +270,17 @@ output. Set `KNIGHTLY_MODE=server` on a Mac to try that behaviour without Docker
 
 ```sql
 -- Score by opening as black
-SELECT eco, opening, count(*) n, avg(user_outcome='win') win_rate
-FROM games WHERE user_color='black' GROUP BY eco ORDER BY n DESC;
+SELECT eco, opening, count(*) n, avg((user_outcome = 'win')::int) win_rate
+FROM games WHERE user_color = 'black' GROUP BY eco, opening ORDER BY n DESC;
 
 -- Where do my blunders happen, and am I short on time when they do?
 SELECT phase, count(*) blunders, round(avg(clock_left)) avg_clock_secs
-FROM moves WHERE is_user AND classification = 'blunder' GROUP BY phase;
+FROM moves WHERE is_user = 1 AND classification = 'blunder' GROUP BY phase;
 
 -- Puzzle themes I fail most
-SELECT t.value theme, count(*) n, avg(success) solved
-FROM puzzle_attempts, json_each(themes) t GROUP BY 1 HAVING n >= 10 ORDER BY solved;
+SELECT t.theme, count(*) n, avg(success) solved
+FROM puzzle_attempts, jsonb_array_elements_text(themes::jsonb) t(theme)
+GROUP BY 1 HAVING count(*) >= 10 ORDER BY solved;
 ```
 
 ## Next steps (not built yet)

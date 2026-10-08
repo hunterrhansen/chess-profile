@@ -48,12 +48,12 @@ def test_server_mode_leaves_the_mac_alone(server):
             action()
 
 
-def test_server_mode_settings_and_run_now(server, monkeypatch, tmp_path):
-    db.connect(tmp_path / "chess.db").close()
+def test_server_mode_settings_and_run_now(db_url, server, monkeypatch, tmp_path):
+    db.connect(db_url).close()
     spawned = {}
     monkeypatch.setattr(api.subprocess, "Popen", lambda args, **kw: spawned.update(args=args, kw=kw))
     monkeypatch.setattr(api, "engine_name", lambda: None)
-    client = TestClient(api.create_app(tmp_path / "chess.db"))
+    client = TestClient(api.create_app(db_url))
 
     s = client.get("/api/settings").json()
     assert s["schedule"] is None and s["schedule_available"] is False and s["lichess_token"] is False
@@ -65,8 +65,8 @@ def test_server_mode_settings_and_run_now(server, monkeypatch, tmp_path):
 
 
 @pytest.mark.skipif(not shutil.which("stockfish"), reason="stockfish not installed")
-def test_bench_compares_limits(tmp_path):
-    conn = db.connect(tmp_path / "chess.db")
+def test_bench_compares_limits(db_url, tmp_path):
+    conn = db.connect(db_url)
     conn.execute("INSERT INTO games (source, source_id, pgn, user_color, variant, played_at) "
                  "VALUES ('otb', 'x', ?, 'white', 'standard', '2026-01-01')", (SCHOLARS_MATE,))
     results = bench.run(conn, [chess.engine.Limit(depth=6), chess.engine.Limit(nodes=20_000)],

@@ -11,8 +11,9 @@ COPY web/ ./
 RUN pnpm build
 
 FROM python:3.11-slim-trixie
-# Debian's Stockfish lands in /usr/games; zstd unpacks the Lichess puzzle database.
-RUN apt-get update && apt-get install --yes --no-install-recommends stockfish zstd \
+# Debian's Stockfish lands in /usr/games; zstd unpacks the Lichess puzzle database;
+# postgresql-client brings pg_dump for the daily backup.
+RUN apt-get update && apt-get install --yes --no-install-recommends stockfish zstd postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=ghcr.io/astral-sh/uv:0.12 /uv /usr/local/bin/uv
 
@@ -27,6 +28,7 @@ COPY --from=web /web/dist web/dist
 
 RUN useradd --create-home --uid 1000 knightly && mkdir /data && chown knightly /data
 USER knightly
-ENV PATH="/app/.venv/bin:/usr/games:$PATH" KNIGHTLY_MODE=server KNIGHTLY_DB=/data/chess.db
+# KNIGHTLY_DATABASE_URL comes from the environment it runs in (docker-compose.yml).
+ENV PATH="/app/.venv/bin:/usr/games:$PATH" KNIGHTLY_MODE=server KNIGHTLY_DATA_DIR=/data
 EXPOSE 8000
 CMD ["knightly", "serve", "--host", "0.0.0.0", "--port", "8000"]

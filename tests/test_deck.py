@@ -29,8 +29,8 @@ def add_move(conn, gid, ply, *, cls="blunder", is_user=1, color="black", best=-5
 
 
 @pytest.fixture
-def conn(tmp_path):
-    c = db.connect(tmp_path / "chess.db")
+def conn(db_url, tmp_path):
+    c = db.connect(db_url)
     yield c
     c.close()
 
@@ -163,8 +163,8 @@ def test_promotion_to_a_queen_counts_for_any_promotion(conn):
     assert deck.answer(conn, 1, 2, "b2b1q")["correct"]
 
 
-def test_api_serves_a_card_and_grades_it(tmp_path):
-    path = tmp_path / "chess.db"
+def test_api_serves_a_card_and_grades_it(db_url, tmp_path):
+    path = db_url
     with db.connect(path) as c:
         add_game(c, 1)
         add_move(c, 1, 1, cls="best", is_user=0, color="white", uci="e2e4", best_uci="e2e4")
@@ -189,8 +189,8 @@ def test_api_serves_a_card_and_grades_it(tmp_path):
     assert client.post("/api/deck/hint", json={"game_id": 9, "ply": 2}).status_code == 404
 
 
-def test_skip_counts_as_a_miss(tmp_path):
-    path = tmp_path / "chess.db"
+def test_skip_counts_as_a_miss(db_url, tmp_path):
+    path = db_url
     with db.connect(path) as c:
         add_game(c, 1)
         add_move(c, 1, 1, cls="best", is_user=0, color="white", uci="e2e4", best_uci="e2e4")

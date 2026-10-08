@@ -6,12 +6,13 @@ Every step is idempotent and incremental, so a run that fails or is cut short (l
 asleep, network down) is simply finished by the next one; there is no retry logic.
 """
 
-import fcntl
 import json
-import sqlite3
+import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
+
+from psycopg.conninfo import make_conninfo
 
 from . import analyze, config, patterns
 from .sources import chesscom, lichess
@@ -96,18 +97,35 @@ def known_accounts(conn) -> list[tuple[str, str]]:
         "SELECT source, handle FROM accounts WHERE source IN ('chesscom', 'lichess') ORDER BY source")]
 
 
-def backup(conn, db_path: Path, backup_dir: Path | None = None, keep: int = KEEP_BACKUPS) -> Path:
-    """Consistent online copy of the DB to backups/chess-YYYY-MM-DD.db (one per day, newest
-    wins), pruning all but the newest `keep`."""
-    backup_dir = backup_dir or db_path.parent / "backups"
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    dest = backup_dir / f"{db_path.stem}-{datetime.now():%Y-%m-%d}.db"
-    target = sqlite3.connect(dest)
-    try:
-        conn.backup(target)
-    finally:
-        target.close()
-    for old in sorted(backup_dir.glob(f"{db_path.stem}-????-??-??.db"))[:-keep]:
+BACKUP_GLOB = "knightly-????-??-??.dump"
+# Homebrew's Postgres is keg-only, so its pg_dump isn't on PATH unless you add it.
+PG_DUMP_FALLBACKS = ["/opt/homebrew/opt/postgresql@17/bin/pg_dump", "/usr/local/opt/postgresql@17/bin/pg_dump"]
+
+
+def backup_dir() -> Path:
+    return config.data_dir() / "backups"
+
+
+def pg_dump() -> str:
+    found = shutil.which("pg_dump") or next((p for p in PG_DUMP_FALLBACKS if Path(p).exists()), None)
+    if not found:
+        raise RuntimeError("pg_dump not found (brew install postgresql@17)")
+    return found
+
+
+def backup(conn, folder: Path | None = None, keep: int = KEEP_BACKUPS) -> Path:
+    """A pg_dump of the database to backups/knightly-YYYY-MM-DD.dump (one per day, newest
+    wins), pruning all but the newest `keep`. Restore with pg_restore."""
+    folder = folder or backup_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    dest = folder / f"knightly-{datetime.now():%Y-%m-%d}.dump"
+    info = conn.pg.info
+    target = make_conninfo(info.dsn, password=info.password) if info.password else info.dsn
+    result = subprocess.run([pg_dump(), "--format=custom", "--file", str(dest), "--dbname", target],
+                            capture_output=True, text=True)
+    if result.returncode:
+        raise RuntimeError(f"pg_dump failed: {result.stderr.strip()}")
+    for old in sorted(folder.glob(BACKUP_GLOB))[:-keep]:
         old.unlink()
     return dest
 
@@ -128,51 +146,47 @@ class AlreadyRunning(Exception):
 
 
 class Lock:
-    """Exclusive, non-blocking lock on <db>.lock; released automatically if the process dies."""
+    """Exclusive, non-blocking Postgres advisory lock for this connection's session, so only
+    one update runs per database, from any machine; released if the process dies."""
+    KEY = 4_243_002
 
-    def __init__(self, db_path: Path):
-        self.path = db_path.with_name(db_path.name + ".lock")
+    def __init__(self, conn):
+        self.conn = conn
 
     def __enter__(self):
-        self.file = open(self.path, "w")
-        try:
-            fcntl.flock(self.file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            self.file.close()
-            raise AlreadyRunning(f"another update is running ({self.path})") from None
+        if not self.conn.execute("SELECT pg_try_advisory_lock(?)", (self.KEY,)).fetchone()[0]:
+            raise AlreadyRunning("another update is running")
         return self
 
     def __exit__(self, *exc):
-        fcntl.flock(self.file, fcntl.LOCK_UN)
-        self.file.close()
+        self.conn.execute("SELECT pg_advisory_unlock(?)", (self.KEY,))
 
 
 def _finish(conn, run_id: int, **fields) -> None:
     sets = ", ".join(f"{k} = ?" for k in fields)
     with conn:
-        conn.execute(f"UPDATE runs SET {sets}, finished_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') "
-                     "WHERE id = ?", [*fields.values(), run_id])
+        conn.execute(f"UPDATE runs SET {sets}, finished_at = iso_now() WHERE id = ?",
+                     [*fields.values(), run_id])
 
 
-def run(conn, db_path: Path, token: str | None, workers: int | None = None, depth: int = 18,
+def run(conn, token: str | None, workers: int | None = None, depth: int = 18,
         engine_path: str | None = None, backup_dir: Path | None = None, keep: int = KEEP_BACKUPS,
         trigger: str = "manual", notify_on_failure: bool = False, log=print) -> str:
     """Run the pipeline once. Returns the run's status: ok | partial | failed | skipped."""
-    db_path = Path(db_path).resolve()
     try:
-        with Lock(db_path):
-            return _run_locked(conn, db_path, token, workers, depth, engine_path, backup_dir,
+        with Lock(conn):
+            return _run_locked(conn, token, workers, depth, engine_path, backup_dir,
                                keep, trigger, notify_on_failure, log)
     except AlreadyRunning as e:
         log(f"Skipping: {e}")
         return "skipped"
 
 
-def _run_locked(conn, db_path, token, workers, depth, engine_path, backup_dir, keep, trigger,
+def _run_locked(conn, token, workers, depth, engine_path, backup_dir, keep, trigger,
                 notify_on_failure, log) -> str:
     with conn:
-        run_id = conn.execute("INSERT INTO runs (status, trigger) VALUES ('running', ?)",
-                              (trigger,)).lastrowid
+        run_id = conn.execute("INSERT INTO runs (status, trigger) VALUES ('running', ?) RETURNING id",
+                              (trigger,)).fetchone()[0]
     errors, counts = [], {}
     targets = known_accounts(conn)
     progress = Progress(conn, run_id, [f"sync:{s}:{u}" for s, u in targets] + ["analyze", "patterns", "backup"])
@@ -207,7 +221,7 @@ def _run_locked(conn, db_path, token, workers, depth, engine_path, backup_dir, k
 
         progress.start("backup", "Copying the database")
         try:
-            dest = backup(conn, db_path, backup_dir, keep)
+            dest = backup(conn, backup_dir, keep)
             counts["backup_path"] = str(dest)
             log(f"Backed up to {dest}")
             progress.finish(f"Saved {dest.name}")

@@ -10,8 +10,8 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 @pytest.fixture
-def conn(tmp_path):
-    return db.connect(tmp_path / "test.db")
+def conn(db_url, tmp_path):
+    return db.connect(db_url)
 
 
 def test_chesscom_game_row(conn):
@@ -48,7 +48,7 @@ def test_lichess_puzzle_row(conn):
     assert db.insert_puzzle_attempt(conn, row) is True
     assert db.insert_puzzle_attempt(conn, row) is False
     themes = [r[0] for r in conn.execute(
-        "SELECT t.value FROM puzzle_attempts, json_each(themes) t")]
+        "SELECT t.value FROM puzzle_attempts, jsonb_array_elements_text(themes::jsonb) t")]
     assert themes == ["middlegame", "short"]
 
 

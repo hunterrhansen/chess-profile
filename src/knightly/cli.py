@@ -2,9 +2,10 @@ import argparse
 import os
 import subprocess
 import sys
+from contextlib import closing
 from pathlib import Path
 
-from . import analyze, bench, config, db, deck, patterns, puzzles, schedule, update
+from . import analyze, bench, config, db, deck, patterns, puzzles, schedule, sqlite_import, update
 from .sources import pgn_file
 
 
@@ -47,7 +48,7 @@ def cmd_sync(conn, args) -> None:
 
 
 def cmd_update(conn, args) -> None:
-    status = update.run(conn, Path(args.db), lichess_token(), workers=args.workers,
+    status = update.run(conn, lichess_token(), workers=args.workers,
                         depth=db.analysis_depth(conn),
                         trigger="schedule" if args.scheduled else "manual",
                         notify_on_failure=args.scheduled, log=log)
@@ -57,7 +58,7 @@ def cmd_update(conn, args) -> None:
 
 def cmd_schedule(conn, args) -> None:
     if args.action == "install":
-        schedule.install(Path(args.db), hour=args.hour, minute=args.minute, log=log)
+        schedule.install(args.db, hour=args.hour, minute=args.minute, log=log)
     elif args.action == "uninstall":
         schedule.uninstall(log=log)
     elif args.action == "run-now":
@@ -152,29 +153,40 @@ def cmd_stats(conn, args) -> None:
 
     table("Games by source / speed", """
         SELECT source, coalesce(speed, '-') AS speed, count(*) AS games,
-               sum(user_outcome = 'win') AS w, sum(user_outcome = 'draw') AS d,
-               sum(user_outcome = 'loss') AS l,
-               printf('%.0f%%', 100.0 * avg(CASE user_outcome WHEN 'win' THEN 1 WHEN 'draw' THEN 0.5
-                                                 WHEN 'loss' THEN 0 END)) AS score,
+               count(*) FILTER (WHERE user_outcome = 'win') AS w,
+               count(*) FILTER (WHERE user_outcome = 'draw') AS d,
+               count(*) FILTER (WHERE user_outcome = 'loss') AS l,
+               round(100 * avg(CASE user_outcome WHEN 'win' THEN 1 WHEN 'draw' THEN 0.5
+                                                 WHEN 'loss' THEN 0 END)) || '%' AS score,
                min(substr(played_at, 1, 10)) AS first, max(substr(played_at, 1, 10)) AS last
         FROM games GROUP BY 1, 2 ORDER BY 3 DESC""")
     table("Most played openings (as each color, min 5 games)", """
         SELECT user_color AS color, eco, coalesce(max(opening), '') AS opening, count(*) AS games,
-               printf('%.0f%%', 100.0 * avg(CASE user_outcome WHEN 'win' THEN 1 WHEN 'draw' THEN 0.5
-                                                 WHEN 'loss' THEN 0 END)) AS score
+               round(100 * avg(CASE user_outcome WHEN 'win' THEN 1 WHEN 'draw' THEN 0.5
+                                                 WHEN 'loss' THEN 0 END)) || '%' AS score
         FROM games WHERE user_color IS NOT NULL AND eco IS NOT NULL
         GROUP BY 1, 2 HAVING count(*) >= 5 ORDER BY 4 DESC LIMIT 12""")
     table("Puzzle attempts", """
-        SELECT source, count(*) AS attempts, printf('%.0f%%', 100.0 * avg(success)) AS solved,
+        SELECT source, count(*) AS attempts, round(100 * avg(success)) || '%' AS solved,
                min(substr(attempted_at, 1, 10)) AS first, max(substr(attempted_at, 1, 10)) AS last
         FROM puzzle_attempts GROUP BY 1""")
     table("Weakest puzzle themes (min 10 attempts)", """
-        SELECT t.value AS theme, count(*) AS attempts, printf('%.0f%%', 100.0 * avg(success)) AS solved
-        FROM puzzle_attempts, json_each(puzzle_attempts.themes) t
+        SELECT t.theme, count(*) AS attempts, round(100 * avg(success)) || '%' AS solved
+        FROM puzzle_attempts, jsonb_array_elements_text(puzzle_attempts.themes::jsonb) AS t(theme)
         GROUP BY 1 HAVING count(*) >= 10 ORDER BY avg(success) LIMIT 10""")
     table("Other", """
         SELECT (SELECT count(*) FROM snapshots) AS snapshots,
-               (SELECT group_concat(source || ':' || handle, ', ') FROM accounts) AS accounts""")
+               (SELECT string_agg(source || ':' || handle, ', ') FROM accounts) AS accounts""")
+
+
+def cmd_migrate(conn, args) -> None:
+    log("Database is up to date.")  # connecting applied any pending migrations
+
+
+def cmd_import_sqlite(conn, args) -> None:
+    counts = sqlite_import.run(conn, Path(args.file), log=log)
+    for table, n in counts.items():
+        log(f"  {table}: {n:,}")
 
 
 def cmd_serve(conn, args) -> None:
@@ -190,8 +202,9 @@ def cmd_serve(conn, args) -> None:
 
 def main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="knightly", description=__doc__ or
-                                "Aggregate your chess data into one SQLite database.")
-    p.add_argument("--db", default=db.DEFAULT_DB, help="SQLite file (default: $KNIGHTLY_DB or ./chess.db)")
+                                "Aggregate your chess data into one Postgres database.")
+    p.add_argument("--db", default=db.DEFAULT_URL,
+                   help="Postgres URL (default: $KNIGHTLY_DATABASE_URL or postgresql:///knightly)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("sync", help="Pull games (and Lichess puzzles) from Chess.com / Lichess. "
@@ -264,13 +277,22 @@ def main(argv=None) -> None:
     s = sub.add_parser("stats", help="Summary of what's in the database")
     s.set_defaults(func=cmd_stats)
 
+    s = sub.add_parser("migrate", help="Apply any pending database migrations (every command does "
+                                       "this on connecting; this does only that)")
+    s.set_defaults(func=cmd_migrate)
+
+    s = sub.add_parser("import-sqlite", help="Copy everything from a SQLite chess.db (Knightly before "
+                                             "Postgres) into this database, which must be empty")
+    s.add_argument("file", help="Path to chess.db")
+    s.set_defaults(func=cmd_import_sqlite)
+
     s = sub.add_parser("serve", help="Run the web app at http://127.0.0.1:8000")
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8000)
     s.set_defaults(func=cmd_serve)
 
     args = p.parse_args(argv)
-    with db.connect(args.db) as conn:
+    with closing(db.connect(args.db)) as conn:
         args.func(conn, args)
 
 

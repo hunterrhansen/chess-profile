@@ -26,7 +26,7 @@ def run(conn, limits: list[chess.engine.Limit], games: int = 5, engine_path: str
     "label_agreement", "best_agreement"}; agreements are vs the first limit, None for it."""
     engine_path = find_engine(engine_path)
     todo = conn.execute("""SELECT id, pgn, user_color, time_control FROM games
-                           WHERE variant = 'standard' ORDER BY played_at DESC LIMIT ?""", (games,)).fetchall()
+                           WHERE variant = 'standard' ORDER BY played_at DESC NULLS LAST LIMIT ?""", (games,)).fetchall()
     if not todo:
         raise SystemExit("No games to benchmark on; sync some first.")
     log(f"{len(todo)} games, one single-threaded Stockfish, on {platform.machine()} "
