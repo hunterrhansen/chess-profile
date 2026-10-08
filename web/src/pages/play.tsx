@@ -252,6 +252,7 @@ export function PlayPage() {
     setError(null)
     setAnalysis(null)
     setHeld(null)
+    playSound('gameStart')
     setState({ elo: setup.elo, color, moves: [], startedAt: new Date().toISOString(), blunderCheck: setup.blunderCheck })
   }
 
@@ -296,17 +297,18 @@ export function PlayPage() {
   const elo = state?.elo ?? setup.elo
 
   // The game ending gets its sound once the last move has landed; a finished game you come
-  // back to stays quiet.
+  // back to stays quiet. A mate needs none: the board plays the checkmate sound as it lands.
   const endedBefore = useRef(over)
   const outcome = result?.outcome
+  const mate = chess.isCheckmate()
   useEffect(() => {
     if (!outcome) {
       endedBefore.current = false
       return
     }
-    if (endedBefore.current) return
+    if (endedBefore.current || mate) return
     return playSound(outcome === 'win' ? 'win' : 'gameOver', durationMs('--duration-move') + 150)
-  }, [outcome])
+  }, [outcome, mate])
 
   return (
     <div className="flex flex-col gap-3">

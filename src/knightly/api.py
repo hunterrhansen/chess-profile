@@ -237,7 +237,8 @@ def _headline_rating(source: str, data: dict | None) -> dict:
 
 
 SOURCES = ("chesscom", "lichess")
-LOCAL_SOUNDS = ("move-self.mp3", "capture.mp3")  # `sounds/` beside the database, if present
+# Your own recordings in `sounds/` beside the database, if present (README: Sounds)
+LOCAL_SOUNDS = ("move-self.mp3", "capture.mp3", "game-start.mp3", "game-end.mp3")
 HANDLE = re.compile(r"^[A-Za-z0-9_-]{2,40}$")
 KEYCHAIN_SERVICE = "knightly-lichess"  # same entry `cli.keychain_token` reads
 STALE_RUN = timedelta(hours=3)  # a "running" row older than this is a crashed run

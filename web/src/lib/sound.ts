@@ -18,16 +18,24 @@ export type SoundName =
   | 'brilliant'
   | 'win'
   | 'gameOver'
+  | 'gameStart'
+  | 'checkmate'
   | 'celebrate'
 
 let enabled = true
 let ctx: AudioContext | null = null
 let out: GainNode | null = null
 
-/* Your own recordings for a move and a capture, if you've put them in the `sounds/` folder
-   beside the database (README: Sounds). Fetched once at startup and decoded with the first
-   sound; until then, or without them, the built-in knock plays. */
-const SAMPLE_FILES = { move: 'move-self.mp3', capture: 'capture.mp3' } as const
+/* Your own recordings for a move, a capture, a game starting and a game ending in mate, if
+   you've put them in the `sounds/` folder beside the database (README: Sounds). Fetched once
+   at startup and decoded with the first sound; until then, or without them, the built-in
+   sounds play. */
+const SAMPLE_FILES = {
+  move: 'move-self.mp3',
+  capture: 'capture.mp3',
+  gameStart: 'game-start.mp3',
+  gameEnd: 'game-end.mp3',
+} as const
 type Sample = keyof typeof SAMPLE_FILES
 const fetched: Partial<Record<Sample, Promise<ArrayBuffer | null>>> = {}
 const samples: Partial<Record<Sample, AudioBuffer>> = {}
@@ -220,6 +228,19 @@ const SOUNDS: Record<SoundName, () => void> = {
     bell(0.11, E5, { loud: 0.2 })
     bell(0.22, G5, { length: 0.8, loud: 0.22 })
   },
+  // a new game: two pieces set down, then a bright note
+  gameStart: () => {
+    if (sample('gameStart', 0)) return
+    knock(0, { loud: 0.8 })
+    knock(0.09, { pitch: 1.1, loud: 0.7 })
+    bell(0.2, G5, { length: 0.5, loud: 0.15 })
+  },
+  // the mating move: it lands, then the game ends on a low, settled chord
+  checkmate: () => {
+    if (sample('gameEnd', 0)) return
+    knock(0, { pitch: 0.9, loud: 1.2 })
+    for (const f of [C5, G5, C6]) bell(0.12, f, { length: 0.9, loud: 0.12 })
+  },
   // a loss or a draw: the game is over, quietly
   gameOver: () => {
     bell(0, G5, { length: 0.35, loud: 0.15 })
@@ -249,9 +270,10 @@ function playNow(name: SoundName) {
   }
 }
 
-/** The sound for one move: castle, promotion, check, capture, or a plain move. */
+/** The sound for one move: checkmate, castle, promotion, check, capture, or a plain move. */
 export function soundForMove(m: Move): SoundName {
-  if (m.san.includes('+') || m.san.includes('#')) return 'check'
+  if (m.san.includes('#')) return 'checkmate'
+  if (m.san.includes('+')) return 'check'
   if (m.isKingsideCastle() || m.isQueensideCastle()) return 'castle'
   if (m.isPromotion()) return 'promote'
   if (m.isCapture()) return 'capture'

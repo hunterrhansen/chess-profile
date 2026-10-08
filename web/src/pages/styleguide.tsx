@@ -337,7 +337,7 @@ const EASINGS = [
 const SOUND_GROUPS: [string, [SoundName, string][]][] = [
   ['Board', [['move', 'Move'], ['capture', 'Capture'], ['check', 'Check'], ['castle', 'Castle'], ['promote', 'Promote']]],
   ['Answers', [['right', 'Right'], ['wrong', 'Wrong'], ['brilliant', 'Brilliant']]],
-  ['Moments', [['win', 'Game won'], ['gameOver', 'Game over'], ['celebrate', 'Celebrate']]],
+  ['Moments', [['gameStart', 'Game start'], ['checkmate', 'Checkmate'], ['win', 'Game won'], ['gameOver', 'Game over'], ['celebrate', 'Celebrate']]],
 ]
 
 /** The motion tokens and every animation, each one replayable. */

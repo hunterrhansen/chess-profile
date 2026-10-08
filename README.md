@@ -228,10 +228,11 @@ database.
 
 ### Sounds
 
-The board's sounds are made in the browser. To use your own recordings for a move and a
-capture instead, put `move-self.mp3` and/or `capture.mp3` in a `sounds/` folder beside
-`chess.db` (it's gitignored: other people's sounds shouldn't end up in this repo). Reload the
-page; there's nothing to rebuild. Without them, the built-in sounds play.
+The board's sounds are made in the browser. To use your own recordings instead, put any of
+`move-self.mp3` (a move), `capture.mp3` (a capture), `game-start.mp3` (starting a game vs the
+bot) and `game-end.mp3` (a checkmate) in a `sounds/` folder beside `chess.db` (it's
+gitignored: other people's sounds shouldn't end up in this repo). Reload the page; there's
+nothing to rebuild. Without them, the built-in sounds play.
 
 ## Example queries
 

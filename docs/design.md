@@ -202,14 +202,15 @@ Rules:
 
 Sounds pair with the motion: a wooden piece on a wooden board when a piece lands, a chime when you're right, a
 fanfare with the confetti. They're made in the browser with the Web Audio API
-(`lib/sound.ts`), with no audio files, and Settings has an on/off switch (on by default).
+(`lib/sound.ts`); recordings in the `sounds/` folder replace some of them (README: Sounds). Settings has an on/off switch (on by default).
 
 | Sound | Plays when | Wired in |
 | --- | --- | --- |
-| `move`, `capture`, `check`, `castle`, `promote` | A board's position changes by one move (one back plays `move`; a jump is silent), as the piece lands: after the slide, or at once for a dragged piece | `useMoveSound` in `Board` |
+| `move`, `capture`, `check`, `checkmate`, `castle`, `promote` | A board's position changes by one move (one back plays `move`; a jump is silent), as the piece lands: after the slide, or at once for a dragged piece | `useMoveSound` in `Board` |
 | `right` / `wrong` | A practice answer is checked, with the square's flash | `practice.tsx` |
 | `brilliant` | A Brilliant or Great badge lands with its ring | `MoveBadge pop` |
-| `win` / `gameOver` | A game against the bot ends (won / lost or drawn) | `play.tsx` |
+| `gameStart` | A game against the bot starts (Play, Rematch) | `play.tsx` |
+| `win` / `gameOver` | A game against the bot ends other than by mate (won / lost or drawn); a mate has `checkmate` already | `play.tsx` |
 | `celebrate` | Confetti fires | `Confetti` (pass `silent` to skip) |
 
 Rules:
