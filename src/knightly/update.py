@@ -121,7 +121,10 @@ def backup(conn, folder: Path | None = None, keep: int = KEEP_BACKUPS) -> Path:
     dest = folder / f"knightly-{datetime.now():%Y-%m-%d}.dump"
     info = conn.pg.info
     target = make_conninfo(info.dsn, password=info.password) if info.password else info.dsn
-    result = subprocess.run([pg_dump(), "--format=custom", "--file", str(dest), "--dbname", target],
+    # Knightly's tables only: a hosted Postgres (Supabase) has its own schemas beside them,
+    # which a restore isn't allowed to touch.
+    result = subprocess.run([pg_dump(), "--format=custom", "--schema=public", "--file", str(dest),
+                             "--dbname", target],
                             capture_output=True, text=True)
     if result.returncode:
         raise RuntimeError(f"pg_dump failed: {result.stderr.strip()}")

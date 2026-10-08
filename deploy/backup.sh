@@ -5,7 +5,7 @@
 #
 #   /opt/knightly/backup.sh production      (with backup.env's RCLONE_CONFIG_OFFSITE_* set)
 #
-# Restore: download a .dump, then pg_restore --clean --no-owner -d "$KNIGHTLY_DATABASE_URL" <file>
+# Restore: download a .dump, then pg_restore --clean --if-exists --no-owner -d "$KNIGHTLY_DATABASE_URL" <file>
 set -euo pipefail
 
 env="${1:?usage: backup.sh <staging|production>}"

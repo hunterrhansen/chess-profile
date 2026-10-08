@@ -214,7 +214,7 @@ curl -s https://<domain>/api/health
 ```bash
 rclone ls offsite:knightly-backups/production          # with backup.env loaded, or from the R2 dashboard
 rclone copy offsite:knightly-backups/production/knightly-2026-10-08.dump .
-pg_restore --clean --if-exists --no-owner --no-acl -d "$KNIGHTLY_DATABASE_URL" knightly-2026-10-08.dump
+pg_restore --clean --if-exists --no-owner -d "$KNIGHTLY_DATABASE_URL" knightly-2026-10-08.dump
 ```
 
 To restore into a new Supabase project, skip `--clean`, then point `KNIGHTLY_DATABASE_URL` at it.
