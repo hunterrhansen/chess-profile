@@ -139,12 +139,13 @@ export function ReviewDonePage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col items-center gap-7 py-6 text-center">
-      <div className="relative grid size-40 place-items-center">
+        // Fits an 800px-tall window without scrolling, unit row and all.
+    <div className="mx-auto flex max-w-2xl flex-col items-center gap-5 text-center">
+      <div className="relative grid size-32 place-items-center">
         <span className="absolute inset-0 rounded-full bg-gold/25" />
         {celebrate && <Confetti />}
         <span className={celebrate ? 'animate-bounce-in' : undefined}>
-          <KnIcon glyph="trophy" className="size-26" />
+          <KnIcon glyph="trophy" className="size-22" />
         </span>
       </div>
 
