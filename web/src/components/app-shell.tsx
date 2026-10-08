@@ -207,7 +207,7 @@ function NavItem({ to, active, label, glyph, labelClass }: { to: string; active:
 /** For lessons (Practice): no sidebar or tabs, just the page, which brings its own ✕. */
 export function FocusShell() {
   return (
-    <main className="min-h-svh bg-background text-foreground">
+    <main className="min-h-svh overflow-x-clip bg-background text-foreground">
       <div className="mx-auto max-w-6xl px-4 py-6 md:px-8">
         <Outlet />
       </div>

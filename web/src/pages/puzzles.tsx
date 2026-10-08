@@ -3,6 +3,7 @@ import { ArrowSquareOutIcon, CheckIcon, XIcon } from '@phosphor-icons/react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { Confetti } from '@/components/confetti'
+import { LessonBar, LessonBoard, LessonScreen, LessonVerdict } from '@/components/lesson-bar'
 import { EmptyState, LoadingBlock } from '@/components/empty-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -23,7 +24,8 @@ const toMove = (uci: string) => ({ from: uci.slice(0, 2), to: uci.slice(2, 4), p
 /**
  * Puzzles for the tactic behind most of your mistakes (?theme=hangingPiece), from the
  * Lichess puzzle database. A lesson like Practice: full screen, a set of SESSION puzzles,
- * then a summary. A wrong move ends the puzzle (it counts as a miss) and shows the answer.
+ * then a summary. A wrong move, or Show me, ends the puzzle (it counts as a miss) and shows the
+ * answer.
  */
 export function PuzzlesPage() {
   const [params] = useSearchParams()
@@ -48,8 +50,10 @@ export function PuzzlesPage() {
   const session = next?.session ?? 5
   const finished = results.length >= session
 
+  // A puzzle is a lesson screen: one window high, the answer bar along the bottom.
+  const Screen = !finished && next?.puzzle ? LessonScreen : Column
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-5">
+    <Screen>
       <header className="flex items-center gap-3">
         <Button asChild variant="ghost" size="icon" aria-label="Stop for now">
           <Link to="/">
@@ -88,8 +92,12 @@ export function PuzzlesPage() {
           last={results.length + 1 >= session}
         />
       )}
-    </div>
+    </Screen>
   )
+}
+
+function Column({ children }: { children: React.ReactNode }) {
+  return <div className="mx-auto flex w-full max-w-xl flex-col gap-5">{children}</div>
 }
 
 function PuzzleBoard({
@@ -172,7 +180,7 @@ function PuzzleBoard({
         </h1>
       </div>
 
-      <div className="mx-auto flex w-full max-w-[calc(100svh-300px)] min-w-64">
+      <LessonBoard>
         <PlayBoard
           chess={chess}
           orientation={me}
@@ -185,45 +193,37 @@ function PuzzleBoard({
           onMove={tryMove}
           onSelect={setSelected}
         />
-      </div>
+      </LessonBoard>
 
       {result ? (
-        <section
-          aria-live="polite"
-          className={cn(
-            'panel flex animate-sheet flex-col gap-3 p-5',
-            result === 'solved' ? 'border-brand bg-brand/15' : 'border-danger bg-danger/15',
-          )}
-        >
-          <div className="flex items-start gap-3">
-            <span
-              className={cn(
-                'grid size-10 shrink-0 place-items-center rounded-full [animation-delay:calc(var(--duration-sheet)*0.6)]',
-                result === 'solved' ? 'animate-bounce-in bg-brand text-on-brand' : 'animate-shake bg-danger text-on-danger',
-              )}
-            >
-              {result === 'solved' ? <CheckIcon className="size-6" /> : <XIcon className="size-6" />}
-            </span>
-            <div className="min-w-0">
-              <h2 className={cn('text-2xl font-semibold', result === 'solved' ? 'text-brand-text' : 'text-danger-text')}>
-                {result === 'solved' ? 'Solved!' : 'Not this time'}
-              </h2>
-              <p className="mt-1">{result === 'solved' ? `You found ${label.toLowerCase()}.` : 'The green arrow shows the move. Spotting it gets easier with every one.'}</p>
-              {puzzle.url && (
-                <a href={puzzle.url} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-                  The game it comes from <ArrowSquareOutIcon className="size-3.5" />
-                </a>
-              )}
-            </div>
-          </div>
-          <Button size="lg" variant={result === 'solved' ? 'default' : 'danger'} className="self-end" onClick={onNext}>
-            {last ? 'See how it went' : 'Next puzzle'}
-          </Button>
-        </section>
+        <LessonBar tone={result === 'solved' ? 'right' : 'wrong'}>
+          <LessonVerdict
+            tone={result === 'solved' ? 'right' : 'wrong'}
+            icon={result === 'solved' ? <CheckIcon /> : <XIcon />}
+            title={result === 'solved' ? 'Solved!' : 'Not this time'}
+            actions={
+              <Button size="lg" variant={result === 'solved' ? 'default' : 'danger'} onClick={onNext}>
+                {last ? 'See how it went' : 'Next puzzle'}
+              </Button>
+            }
+          >
+            <p>{result === 'solved' ? `You found ${label.toLowerCase()}.` : 'The green arrow shows the move. Spotting it gets easier with every one.'}</p>
+            {puzzle.url && (
+              <a href={puzzle.url} target="_blank" rel="noreferrer" className="mt-0.5 inline-flex items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground">
+                The game it comes from <ArrowSquareOutIcon className="size-3.5" />
+              </a>
+            )}
+          </LessonVerdict>
+        </LessonBar>
       ) : (
-        <p className="text-center text-sm text-muted-foreground">
-          {played === 0 ? 'Their move first.' : selected ? 'Now pick where it goes.' : 'Tap a piece, then where it goes. Or drag it.'}
-        </p>
+        <LessonBar tone="idle">
+          <Button variant="outline" onClick={() => finish(false)} disabled={!yourTurn} className="self-start md:self-auto">
+            Show me
+          </Button>
+          <p className="text-sm text-muted-foreground">
+            {played === 0 ? 'Their move first.' : selected ? 'Now pick where it goes.' : 'Tap a piece, then where it goes. Or drag it.'}
+          </p>
+        </LessonBar>
       )}
     </>
   )
