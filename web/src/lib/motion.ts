@@ -19,15 +19,18 @@ export function useReducedMotion() {
   )
 }
 
-/** True from the md breakpoint up; below it, screens use their phone layout. */
-export function useWide() {
+const BREAKPOINT = { md: '(min-width: 768px)', lg: '(min-width: 1024px)' }
+
+/** True from the md breakpoint up (or `from`); below it, screens use their phone layout. */
+export function useWide(from: keyof typeof BREAKPOINT = 'md') {
+  const query = BREAKPOINT[from]
   return useSyncExternalStore(
     (onChange) => {
-      const mq = matchMedia('(min-width: 768px)')
+      const mq = matchMedia(query)
       mq.addEventListener('change', onChange)
       return () => mq.removeEventListener('change', onChange)
     },
-    () => matchMedia('(min-width: 768px)').matches,
+    () => matchMedia(query).matches,
   )
 }
 
