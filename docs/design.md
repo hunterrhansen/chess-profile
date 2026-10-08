@@ -231,7 +231,17 @@ with help, red missed, gold a great move (review only). Each mark is a rounded b
   line of what it's for, then rows: the name and a hint on the left, the control on the
   right. Choices are `Segmented` (the options on a sunken `surface-muted` track, the chosen one
   raised on a ledge); on/off is `Switch` (`components/ui/switch.tsx`: grey off, green on its
-  ledge).
+  ledge). **Your data** (canvas: Your data & admin): your games and size, how far back a server
+  reaches, Download (a zip), Privacy, and Delete account (`danger`, then `ConfirmDialog` with
+  the word *delete*). Data (the database path and backups) shows only without sign-in; the
+  Admin card only to admins.
+- **Privacy** (`pages/privacy.tsx`): public, outside sign-in. The `Logo` and Back, then a
+  reading column (720px, 17px text): what's kept, a `panel` of who handles it, cookies, your
+  choices, and the contact from `KNIGHTLY_CONTACT`. Linked under the sign-in form.
+- **Admin** (`pages/admin.tsx`, `/settings/admin`): stat tiles (running, waiting, done and
+  failed in the last day), the database as a sky `Progress` out of Supabase's 500 MB, failed
+  jobs with their error in `font-mono` and Retry, the queue (a sky dot while running), and a
+  `Table` of people. Refreshes every 10 seconds.
 
 ## Type
 
@@ -270,6 +280,7 @@ with help, red missed, gold a great move (review only). Each mark is a rounded b
 | LogoMark / Logo | `components/logo.tsx` | The mark, and the mark with the name |
 | LogoLoader / LoadingBlock / EmptyState | `components/logo.tsx`, `components/empty-state.tsx` | Loading a view; nothing to show yet |
 | Confetti | `components/confetti.tsx` | The big moments (see Motion); plays the celebrate sound |
+| ConfirmDialog | `components/confirm-dialog.tsx` | A question before something that can't be undone: a modal `panel` over the page dimmed with `scrim`, Cancel (`secondary`) and the action (`danger`); `word` makes you type it first |
 
 ## Voice
 

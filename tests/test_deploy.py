@@ -9,11 +9,14 @@ PUBLISHABLE = "pk_test_" + base64.b64encode(b"test-knightly.clerk.accounts.dev$"
 
 
 def test_the_web_app_reads_its_sign_in_key_at_runtime(db_url, monkeypatch):
-    assert TestClient(api.create_app(db_url)).get("/api/config").json() == {"clerk_publishable_key": None}
+    monkeypatch.delenv("KNIGHTLY_CONTACT", raising=False)
+    assert TestClient(api.create_app(db_url)).get("/api/config").json() == {"clerk_publishable_key": None, "contact": None}
     monkeypatch.delenv("KNIGHTLY_AUTH")
+    monkeypatch.setenv("KNIGHTLY_CONTACT", "me@example.com")
     monkeypatch.setenv("CLERK_PUBLISHABLE_KEY", PUBLISHABLE)
     client = TestClient(api.create_app(db_url))
-    assert client.get("/api/config").json() == {"clerk_publishable_key": PUBLISHABLE}  # no token needed
+    assert client.get("/api/config").json() == {"clerk_publishable_key": PUBLISHABLE,
+                                                "contact": "me@example.com"}  # no token needed
 
 
 def test_health(db_url):

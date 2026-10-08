@@ -56,6 +56,7 @@ import { GameRow } from '@/pages/games'
 import { BlunderWarning, BotSays } from '@/pages/play'
 import { WinGraph } from '@/pages/review-moves'
 import { AccountCard, FindingRow, SiteChoice } from '@/pages/welcome'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Segmented, Row as SettingRow, Section as SettingsSection } from '@/pages/settings'
 
 /**
@@ -264,6 +265,7 @@ export function StyleguidePage() {
 
       <SettingsBlock />
       <SignInBlock />
+      <ConfirmBlock />
       <WelcomeBlock />
 
       <GamesBlock />
@@ -636,7 +638,7 @@ function Demo({ title, note, className, children }: { title: string; note: strin
 const KINDS: Classification[] = ['brilliant', 'great', 'best', 'excellent', 'good', 'inaccuracy', 'mistake', 'blunder', 'miss']
 
 const COLOR_GROUPS: [string, string[]][] = [
-  ['Surfaces and text', ['page', 'surface', 'surface-muted', 'line', 'lip', 'ink', 'ink-muted', 'focus']],
+  ['Surfaces and text', ['page', 'surface', 'surface-muted', 'line', 'lip', 'ink', 'ink-muted', 'focus', 'scrim']],
   ['Brand and accents', ['brand', 'brand-lip', 'on-brand', 'brand-text', 'gold', 'gold-lip', 'on-gold', 'gold-text']],
   ['More accents', ['sky', 'sky-lip', 'on-sky', 'danger', 'danger-lip', 'on-danger', 'danger-text']],
   ['Chess', ['board-light', 'board-dark', 'board-highlight-light', 'board-highlight-dark', 'line-highlight-light', 'line-highlight-dark', 'selected', 'move-hint']],
@@ -1095,6 +1097,40 @@ function SettingsBlock() {
           <Switch checked={sound} onCheckedChange={setSound} aria-label="Sounds" />
         </SettingRow>
       </SettingsSection>
+    </Block>
+  )
+}
+
+/** ConfirmDialog, as Settings › Your data › Delete account uses it. */
+function ConfirmBlock() {
+  const [open, setOpen] = useState(false)
+  return (
+    <Block
+      title="Confirm dialog"
+      note="ConfirmDialog (components/confirm-dialog.tsx): a native modal dialog, a panel over the page dimmed with scrim. Cancel is secondary, the action danger; with word, it waits for that word to be typed."
+    >
+      <div className="panel flex justify-center p-8">
+        <Button variant="danger" onClick={() => setOpen(true)}>
+          Delete account
+        </Button>
+      </div>
+      <ConfirmDialog
+        open={open}
+        title="Delete your account?"
+        confirmLabel="Delete everything"
+        cancelLabel="Keep my account"
+        word="delete"
+        onConfirm={() => setOpen(false)}
+        onClose={() => setOpen(false)}
+      >
+        <p>This deletes, right away and for good:</p>
+        <ul className="flex list-disc flex-col gap-1.5 pl-5 text-foreground">
+          <li>687 games and their analysis</li>
+          <li>Your reviews, practice cards and puzzle history</li>
+          <li>Your sign-in. Your Chess.com and Lichess accounts aren't touched.</li>
+        </ul>
+        <p className="text-sm">Want a copy? Download your data first.</p>
+      </ConfirmDialog>
     </Block>
   )
 }

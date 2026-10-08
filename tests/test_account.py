@@ -46,6 +46,14 @@ def test_deleting_your_account_removes_everything_of_yours(two, db_url):
         {"source": "chesscom", "handle": "bob_handle"}]
 
 
+def test_settings_show_your_data_not_the_servers(two):
+    data = two.get("/api/settings", headers=as_user("user_alice")).json()
+    assert data["your_data"]["games"] == 3 and data["your_data"]["analysed"] == 2
+    assert data["your_data"]["approx_bytes"] == 3 * jobs.GAME_BYTES + 2 * jobs.ANALYSED_BYTES
+    assert data["database"] is None and data["backups"] is None  # everyone's, and where it lives
+    assert data["limits"]["max_accounts"] == limits.MAX_ACCOUNTS
+
+
 def test_without_sign_in_there_is_no_account_to_delete(db_url):
     client = TestClient(api.create_app(db_url))
     assert client.delete("/api/account").status_code == 400

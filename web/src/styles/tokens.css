@@ -17,6 +17,7 @@
   --lip: #c9d0bc;
   --ink: #1d2618;
   --ink-muted: #56614e;
+  --scrim: rgb(29 38 24 / 45%);  /* the page under a modal dialog */
 
   /* bright fills, each with its ledge and its text color */
   --brand: #6cc23a;
@@ -109,6 +110,7 @@
   --lip: #0f0e0d;
   --ink: #f2f1ec;
   --ink-muted: #aba89f;
+  --scrim: rgb(0 0 0 / 60%);
 
   --brand-lip: #3f8a18;
   --brand-text: #8ad850;
