@@ -20,7 +20,7 @@ import { type FindOutcome, useFindMove } from '@/lib/find-move'
 import { moveLabel } from '@/lib/key-moments'
 import { PATTERNS, patternOf, tacticHint } from '@/lib/patterns'
 import { BOARDS, usePreferences } from '@/lib/preferences'
-import { cn } from '@/lib/utils'
+import { MarkRow } from '@/components/mark-row'
 import { PlayBoard } from '@/pages/play'
 
 /**
@@ -225,14 +225,6 @@ function Position({
   )
 }
 
-// The marks on Done for today: found, a good move, found with help, missed.
-const MARK: Record<PracticeMark, { label: string; className: string }> = {
-  found: { label: 'found', className: 'bg-brand' },
-  good: { label: 'a good move', className: 'bg-[color-mix(in_srgb,var(--brand)_50%,var(--card))]' },
-  helped: { label: 'found with help', className: 'bg-sky' },
-  missed: { label: 'missed', className: 'bg-danger' },
-}
-
 function DoneForToday({ deck }: { deck: DeckToday }) {
   if (deck.total === 0) {
     return (
@@ -282,16 +274,7 @@ function DoneForToday({ deck }: { deck: DeckToday }) {
       {results.length > 0 && (
         <Card className="w-full animate-rise gap-2.5 px-5 text-left [animation-delay:calc(var(--duration-celebrate)*0.45)]">
           <p className="eyebrow">Today, one by one</p>
-          <div className="flex gap-1.5">
-            {results.map((r, i) => (
-              <span
-                key={i}
-                role="img"
-                aria-label={`Position ${i + 1}: ${MARK[r.mark].label}`}
-                className={cn('h-3.5 flex-1 rounded-full', MARK[r.mark].className)}
-              />
-            ))}
-          </div>
+          <MarkRow marks={results.map((r, i) => ({ key: i, mark: r.mark, name: `Position ${i + 1}` }))} />
           {misses.length > 0 && (
             <p className="text-sm text-muted-foreground">
               To go over again:{' '}

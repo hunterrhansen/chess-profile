@@ -241,11 +241,16 @@ with help, red missed, gold a great move (review only). Each mark is a rounded b
 | Piece / PieceGlyph | `components/pieces.tsx` | A piece on its own; a piece in the text color for notation |
 | KnIcon | `components/kn-icon.tsx` | Brand icons: navigation, the path, big moments |
 | PathNode | `components/path-node.tsx` | A step on Home's path |
+| UnitBanner / LessonCard / GoalCard / GoalDone / UnitComplete / PhoneCounter | `components/home-cards.tsx` | Home's lead unit, the current step's card, Today's goal, the gold moments, the phone top bar's counts |
+| UnitCard | `components/unit-card.tsx` | A unit on Progress: the lead one in brand, the rest locked or done |
+| FilterPill | `components/filter-pill.tsx` | A quick filter with its count (Games) |
+| MarkRow | `components/mark-row.tsx` | One mark per position or key moment (Review complete, Done for today); the marks are in `lib/marks.ts` |
+| NavItem / PhoneTopBar / PhoneTab | `components/app-shell.tsx` | The sidebar tabs; the phone's top bar and bottom tabs |
 | LessonScreen / LessonBoard / LessonBar / LessonVerdict | `components/lesson-bar.tsx` | A lesson's layout, its bottom bar and verdicts (see Lessons) |
 | FindBar | `components/find-bar.tsx` | The bar while you find a move: Hint, Show me, the verdict |
 | MoveText / MarkedText | `components/move-text.tsx` | A move in figurine notation; text with moves tagged in it |
 | Switch | `components/ui/switch.tsx` | On/off settings |
-| AccountStatus | `components/account-status.tsx` | The sidebar's account row and the daily update's status |
+| AccountStatus / AccountRow | `components/account-status.tsx` | The sidebar's account row and the daily update's status; AccountRow is the row without its menu |
 | CountUp / CountUpText | `components/ui/count-up.tsx` | Numbers that count up to their value |
 | LogoMark / Logo | `components/logo.tsx` | The mark, and the mark with the name |
 | LogoLoader / LoadingBlock / EmptyState | `components/logo.tsx`, `components/empty-state.tsx` | Loading a view; nothing to show yet |

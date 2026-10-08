@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { PhoneHeader } from '@/components/app-shell'
+import { GoalCard, GoalDone, LessonCard, PhoneCounter, UnitBanner, UnitComplete } from '@/components/home-cards'
 import { type Glyph, KnIcon } from '@/components/kn-icon'
 import { LogoLoader } from '@/components/logo'
 import { PathNode, type PathNodeState } from '@/components/path-node'
@@ -152,53 +153,33 @@ export function HomePage() {
   return (
     <div className="flex flex-wrap items-start justify-center gap-10 py-2">
       <PhoneHeader>
-        <Link
+        <PhoneCounter
           to={game ? `/games/${game.id}` : '/games?to_review=true'}
-          aria-label={`Today's game: ${reviewed_today ? 'reviewed' : 'not reviewed yet'}`}
-          className="flex h-11 items-center gap-1 rounded-md px-2 text-[15px] font-extrabold tabular-nums"
+          glyph="review"
+          label={`Today's game: ${reviewed_today ? 'reviewed' : 'not reviewed yet'}`}
         >
-          <KnIcon glyph="review" className="size-[26px]" />
           {reviewed_today ? 1 : 0}/1
-        </Link>
+        </PhoneCounter>
         {positions.total > 0 && (
-          <Link
-            to="/practice"
-            aria-label={`Positions to review: ${positions.done} of ${positions.total} done`}
-            className="flex h-11 items-center gap-1 rounded-md px-2 text-[15px] font-extrabold tabular-nums"
-          >
-            <KnIcon glyph="drill" className="size-6" />
+          <PhoneCounter to="/practice" glyph="drill" label={`Positions to review: ${positions.done} of ${positions.total} done`}>
             {positions.done}/{positions.total}
-          </Link>
+          </PhoneCounter>
         )}
       </PhoneHeader>
       <section aria-label="Your path" className="flex max-w-xl min-w-0 flex-[1_1_26rem] flex-col gap-6">
         {finished && (
-          <div className="flex animate-bounce-in items-center gap-4 rounded-xl bg-gold px-5 py-4 text-on-gold shadow-[0_4px_0_var(--gold-lip)]">
-            <KnIcon glyph="trophy" className="size-14" />
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-extrabold tracking-[.06em] uppercase">Unit complete</p>
-              <p className="font-heading text-xl font-bold">{finished.title}</p>
-              <p className="text-sm">
-                {unitCopy(finished).checkResult}. You hit the target: {unitCopy(finished).target}.
-              </p>
-            </div>
-          </div>
+          <UnitComplete title={finished.title} className="animate-bounce-in">
+            {unitCopy(finished).checkResult}. You hit the target: {unitCopy(finished).target}.
+          </UnitComplete>
         )}
 
-        <div className="rounded-xl bg-brand px-5 py-4 text-on-brand shadow-[0_4px_0_var(--brand-lip)]">
-          <p className="text-[13px] font-extrabold tracking-[.06em] uppercase opacity-80">Unit 1 · Your main focus</p>
-          <h1 className="mt-0.5 font-heading text-2xl font-bold">{lead.title}</h1>
-          <p className="mt-1">{copy.goal}</p>
-          <div className="mt-3 flex items-center gap-2.5">
-            <div className="h-3 flex-1 overflow-hidden rounded-full bg-brand-lip">
-              <div
-                className="h-full rounded-full bg-on-brand transition-[width] duration-(--duration-fill)"
-                style={{ width: `${Math.max(4, (lead.check.hits / lead.check.size) * 100)}%` }}
-              />
-            </div>
-            <span className="text-[13px] font-extrabold">{copy.checkProgress}</span>
-          </div>
-        </div>
+        <UnitBanner
+          as="h1"
+          title={lead.title}
+          goal={copy.goal}
+          progress={lead.check.hits / lead.check.size}
+          progressText={copy.checkProgress}
+        />
 
         <ol className="flex flex-col items-center gap-5 py-2">
           {steps.map((s, i) => (
@@ -213,14 +194,7 @@ export function HomePage() {
                 onClick={i === current && card ? () => setOpen((o) => !o) : undefined}
               />
               {i === current && card && open && (
-                <Card className="-mt-1 w-full max-w-sm animate-rise gap-3 border-brand px-5 text-left shadow-[0_4px_0_var(--brand-lip)]">
-                  <p className="eyebrow">{card.eyebrow}</p>
-                  <h2 className="font-heading text-xl font-semibold">{card.title}</h2>
-                  <p className="text-muted-foreground">{card.body}</p>
-                  <Button asChild size="lg" variant={card.quiet ? 'outline' : 'default'} className="w-full">
-                    <Link to={card.to}>{card.cta}</Link>
-                  </Button>
-                </Card>
+                <LessonCard {...card} className="-mt-1 animate-rise" />
               )}
             </li>
           ))}
@@ -253,22 +227,14 @@ export function HomePage() {
 
       <aside aria-label="Today" className="flex max-w-sm min-w-0 flex-[1_1_18rem] flex-col gap-5">
         {goalDone ? (
-          <Card className="items-center gap-2.5 border-gold-lip bg-gold px-5 text-center text-on-gold shadow-[0_4px_0_var(--gold-lip)]">
-            <KnIcon glyph="trophy" className="size-16 animate-pop" />
-            <h2 className="font-heading text-2xl font-bold">Today's goal done!</h2>
-            <p className="text-sm">
-              {[reviewed_today ? 'Game reviewed' : null, positions.done ? `${positions.done} positions cleared` : null]
-                .filter(Boolean)
-                .join(' and ') || 'Nothing due today'}
-              . The next ones come due tomorrow.
-            </p>
-          </Card>
+          <GoalDone>
+            {[reviewed_today ? 'Game reviewed' : null, positions.done ? `${positions.done} positions cleared` : null]
+              .filter(Boolean)
+              .join(' and ') || 'Nothing due today'}
+            . The next ones come due tomorrow.
+          </GoalDone>
         ) : (
-          <Card className="gap-3.5 px-5">
-            <div className="flex items-center gap-3">
-              <KnIcon glyph="goal" className="size-9" />
-              <h2 className="font-heading text-xl font-semibold">Today's goal</h2>
-            </div>
+          <GoalCard>
             {game || reviewed_today ? (
               <Progress
                 label="Today's game"
@@ -299,7 +265,7 @@ export function HomePage() {
               </>
             )}
             <p className="text-[13px] text-muted-foreground">Found ones come back later and later. Misses come back sooner.</p>
-          </Card>
+          </GoalCard>
         )}
 
         {overview?.rating.current != null && (
