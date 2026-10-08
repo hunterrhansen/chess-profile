@@ -174,7 +174,7 @@ function SiteTag({ source, className }: { source: string; className?: string }) 
 }
 
 /** Your initial on a brand disc, wearing a small tag per site; on the rail, the status dot. */
-function Avatar({ initial, sources, dot }: { initial: string; sources: string[]; dot: Tone | null }) {
+export function Avatar({ initial, sources, dot }: { initial: string; sources: string[]; dot: Tone | null }) {
   return (
     <span className="relative size-10 shrink-0">
       <span className="grid size-10 place-items-center rounded-full bg-brand font-heading text-lg font-bold text-on-brand uppercase shadow-[inset_0_-3px_0_var(--brand-lip)]">

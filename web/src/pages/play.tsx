@@ -512,7 +512,7 @@ function Setup({ setup, onChange, onStart }: { setup: Setup; onChange: (s: Setup
 }
 
 /** Blunder check's warning: what your move allows, how much it costs, and the two ways on. */
-function BlunderWarning({
+export function BlunderWarning({
   check,
   you,
   them,
@@ -550,7 +550,7 @@ function BlunderWarning({
 }
 
 /** The bot's avatar and a speech bubble; `text` null shows it thinking. */
-function BotSays({ elo, text, error }: { elo: number; text: string | null; error?: boolean }) {
+export function BotSays({ elo, text, error }: { elo: number; text: string | null; error?: boolean }) {
   return (
     <div className="flex items-start gap-3 border-b px-3 py-4" aria-live="polite">
       <span

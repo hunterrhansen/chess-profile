@@ -168,7 +168,7 @@ export function AppShell() {
 }
 
 /** A sidebar tab: the brand icon and an uppercase label; the current one is outlined in sky. */
-function NavItem({ to, active, label, glyph, labelClass }: { to: string; active: boolean; label: string; glyph: Glyph; labelClass: string }) {
+export function NavItem({ to, active, label, glyph, labelClass }: { to: string; active: boolean; label: string; glyph: Glyph; labelClass: string }) {
   return (
     <Link
       to={to}

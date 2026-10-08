@@ -250,7 +250,7 @@ const ENDED: Record<string, string> = { Resigned: 'resignation', Time: 'on time'
 
 /** One game as a card: result, opponent, when and how it ended, opening, accuracy, its
  * blunders and mistakes (or Clean), and whether you've reviewed it. */
-function GameRow({ game: g }: { game: Game }) {
+export function GameRow({ game: g }: { game: Game }) {
   const badges = [
     ...Array<'blunder'>(Math.min(g.blunders ?? 0, 3)).fill('blunder'),
     ...Array<'mistake'>(Math.max(0, Math.min(g.mistakes ?? 0, 3 - Math.min(g.blunders ?? 0, 3)))).fill('mistake'),
