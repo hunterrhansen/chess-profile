@@ -204,6 +204,13 @@ of the overview's stats, and analysed straight away (spread over every core, abo
 These, cached engine lines, games played on Play, finished reviews and the review deck are the app's only writes to the
 database.
 
+### Sounds
+
+The board's sounds are made in the browser. To use your own recordings for a move and a
+capture instead, put `move-self.mp3` and/or `capture.mp3` in a `sounds/` folder beside
+`chess.db` (it's gitignored: other people's sounds shouldn't end up in this repo). Reload the
+page; there's nothing to rebuild. Without them, the built-in sounds play.
+
 ## Example queries
 
 ```sql
