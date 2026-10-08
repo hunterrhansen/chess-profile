@@ -123,6 +123,11 @@ Great needs the engine's second-best move, so games analysed before it was added
 `analyze --force` to get it. (Chess.com's Book isn't computed.) Accuracy uses
 Lichess's per-move formula, so it runs a bit higher than Chess.com's own accuracy numbers.
 
+To see what analysis costs on this machine, `knightly bench` times one single-threaded
+Stockfish over your newest games at depth 18 and at a node budget (1M nodes per position by
+default; `--nodes` is repeatable), and reports how often the cheaper setting labels your moves
+the same. Nothing is saved.
+
 After changing the thresholds in `analyze.py`, re-label saved moves without re-running the
 engine:
 
@@ -233,6 +238,23 @@ The board's sounds are made in the browser. To use your own recordings instead, 
 bot) and `game-end.mp3` (a checkmate) in a `sounds/` folder beside `chess.db` (it's
 gitignored: other people's sounds shouldn't end up in this repo). Reload the page; there's
 nothing to rebuild. Without them, the built-in sounds play.
+
+## Docker (server mode)
+
+The `Dockerfile` builds the server: the API, the built web app and Stockfish, for the machine
+it's built on (arm64 on an Apple-silicon Mac or an ARM server). It's the first step of making
+Knightly multi-user; see the architecture doc for the plan.
+
+```bash
+docker compose up --build          # http://localhost:8000
+docker compose run --rm -v "$PWD:/import:ro" web cp /import/chess.db /data/chess.db   # start from a copy of yours
+```
+
+The database lives in a Docker volume rather than a folder on your Mac, because SQLite's WAL
+breaks on folders shared into Docker's VM. In the image Knightly runs in **server mode**
+(`KNIGHTLY_MODE=server`, the default anywhere but macOS): no launchd schedule, no Keychain, no
+macOS notifications. Settings hides the daily schedule, and Run now logs to the container's
+output. Set `KNIGHTLY_MODE=server` on a Mac to try that behaviour without Docker.
 
 ## Example queries
 

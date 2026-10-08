@@ -1,0 +1,20 @@
+# Runs the server image locally -> http://localhost:8000
+#   docker compose up --build
+# The database lives in the `knightly-data` volume, not a folder on your Mac: SQLite's WAL
+# needs shared memory, which breaks on a folder shared into Docker's VM ("disk I/O error").
+# To start from a copy of your own database:
+#   docker compose run --rm -v "$PWD:/import:ro" web cp /import/chess.db /data/chess.db
+# On a Linux server, KNIGHTLY_DATA=/some/dir uses that directory instead.
+# Workers and a local Postgres join this file once there's code for them (Phases 1 and 3).
+services:
+  web:
+    build: .
+    image: knightly
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ${KNIGHTLY_DATA:-knightly-data}:/data
+    restart: unless-stopped
+
+volumes:
+  knightly-data:

@@ -13,7 +13,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from . import analyze, patterns
+from . import analyze, config, patterns
 from .sources import chesscom, lichess
 
 KEEP_BACKUPS = 7
@@ -114,6 +114,8 @@ def backup(conn, db_path: Path, backup_dir: Path | None = None, keep: int = KEEP
 
 def notify(title: str, message: str) -> None:
     """macOS notification; silently does nothing elsewhere."""
+    if not config.on_mac():
+        return
     script = f"display notification {json.dumps(message)} with title {json.dumps(title)}"
     try:
         subprocess.run(["osascript", "-e", script], capture_output=True, timeout=10)

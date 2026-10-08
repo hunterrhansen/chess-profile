@@ -12,10 +12,18 @@ import subprocess
 import sys
 from pathlib import Path
 
+from . import config
+
 LABEL = "com.knightly.update"
 PLIST = Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
 LOG = Path.home() / "Library" / "Logs" / "knightly.log"
 SCHEDULED_WORKERS = 3  # leave most cores free; a day's games take a minute or two anyway
+
+
+def _require_mac() -> None:
+    if not config.on_mac():
+        raise SystemExit("The daily schedule uses macOS launchd, which is off in server mode "
+                         "(KNIGHTLY_MODE=server).")
 
 
 def _executable() -> str:
@@ -54,6 +62,7 @@ def _launchctl(*args) -> subprocess.CompletedProcess:
 
 
 def install(db_path: Path, hour: int = 6, minute: int = 0, log=print) -> None:
+    _require_mac()
     if not Path(db_path).exists():
         raise SystemExit(f"No database at {db_path}; run a sync first.")
     stockfish = os.environ.get("STOCKFISH") or shutil.which("stockfish")
@@ -77,6 +86,7 @@ def install(db_path: Path, hour: int = 6, minute: int = 0, log=print) -> None:
 
 
 def uninstall(log=print) -> None:
+    _require_mac()
     _launchctl("bootout", f"gui/{os.getuid()}/{LABEL}")
     if PLIST.exists():
         PLIST.unlink()
@@ -87,6 +97,7 @@ def uninstall(log=print) -> None:
 
 def run_now(log=print) -> None:
     """Kick the installed job immediately, exactly as launchd would run it."""
+    _require_mac()
     result = _launchctl("kickstart", f"gui/{os.getuid()}/{LABEL}")
     if result.returncode != 0:
         raise SystemExit("Not installed (run `knightly schedule install` first).")
@@ -94,8 +105,9 @@ def run_now(log=print) -> None:
 
 
 def current() -> dict | None:
-    """The installed schedule as {"hour", "minute", "loaded"}, or None if not installed."""
-    if not PLIST.exists():
+    """The installed schedule as {"hour", "minute", "loaded"}, or None if not installed (or
+    not on a Mac)."""
+    if not config.on_mac() or not PLIST.exists():
         return None
     when = plistlib.loads(PLIST.read_bytes())["StartCalendarInterval"]
     loaded = _launchctl("print", f"gui/{os.getuid()}/{LABEL}").returncode == 0

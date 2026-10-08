@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import analyze, db, deck, patterns, puzzles, schedule, update
+from . import analyze, bench, config, db, deck, patterns, puzzles, schedule, update
 from .sources import pgn_file
 
 
@@ -19,6 +19,8 @@ def keychain_token() -> str | None:
     """Lichess token from the macOS Keychain, stored with:
     security add-generic-password -a "$USER" -s knightly-lichess -w
     """
+    if not config.on_mac():
+        return None
     try:
         out = subprocess.run(["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"],
                              capture_output=True, text=True, check=True)
@@ -86,6 +88,22 @@ def cmd_analyze(conn, args) -> None:
         sys.exit(130)
     if n:
         log(f"-> {n} games analysed")
+
+
+def cmd_bench(conn, args) -> None:
+    import chess.engine
+
+    limits = [chess.engine.Limit(depth=args.depth)]
+    limits += [chess.engine.Limit(nodes=n) for n in args.nodes or [1_000_000]]
+    results = bench.run(conn, limits, games=args.games, engine_path=args.engine, log=log)
+    pct = lambda v: "-" if v is None else f"{100 * v:.0f}%"
+    print(f"\n{'setting':<14}{'s/game':>8}{'CPU-min/game':>14}{'ms/position':>13}"
+          f"{'same label':>12}{'same best':>11}")
+    for r in results:
+        print(f"{r['setting']:<14}{r['seconds_per_game']:>8.1f}{r['seconds_per_game'] / 60:>14.2f}"
+              f"{1000 * r['seconds_per_position']:>13.0f}{pct(r['label_agreement']):>12}"
+              f"{pct(r['best_agreement']):>11}")
+    print("\nsame label / same best: your moves labelled alike / with the same best move as the first row.")
 
 
 def cmd_patterns(conn, args) -> None:
@@ -204,6 +222,15 @@ def main(argv=None) -> None:
     s.add_argument("--reclassify", action="store_true",
                    help="Re-label saved moves (best ... blunder, miss) without running the engine")
     s.set_defaults(func=cmd_analyze)
+
+    s = sub.add_parser("bench", help="Time engine analysis per game at a fixed depth against node "
+                                     "budgets, on the newest games (nothing is saved)")
+    s.add_argument("--games", type=int, default=5, help="How many of the newest games (default: 5)")
+    s.add_argument("--depth", type=int, default=18, help="The fixed depth to compare with (default: 18)")
+    s.add_argument("--nodes", type=int, action="append",
+                   help="A node budget per position; repeatable (default: 1000000)")
+    s.add_argument("--engine", help="Path to Stockfish (default: $STOCKFISH or `stockfish` on PATH)")
+    s.set_defaults(func=cmd_bench)
 
     s = sub.add_parser("patterns", help="Tag each of your mistakes with the tactic behind it "
                                         "(fork, pin, loose piece...). The daily update does this too.")
