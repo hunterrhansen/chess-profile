@@ -18,7 +18,8 @@ const BAND: Record<Tone, string> = {
  */
 export function LessonScreen({ children }: { children: React.ReactNode }) {
   // -my-6 / pt-6 undo and redo FocusShell's padding, so the bar can sit on the bottom edge.
-  return <div className="mx-auto -my-6 flex h-svh w-full max-w-xl flex-col gap-4 pt-6">{children}</div>
+  // Clipped below, so the verdict sliding up from under the edge doesn't flash a scrollbar.
+  return <div className="mx-auto -my-6 flex h-svh w-full max-w-xl flex-col gap-4 overflow-y-clip pt-6">{children}</div>
 }
 
 /** The board in a lesson: as big as the space between the prompt and the bar allows. */
