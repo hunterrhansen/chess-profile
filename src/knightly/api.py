@@ -30,7 +30,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from . import auth, config, db, deck, jobs, lines, lookup, patterns, play, positions, puzzles, schedule, units, update, users
+from . import auth, config, db, deck, jobs, lines, lookup, monitoring, patterns, play, positions, puzzles, schedule, units, update, users
 from .analyze import THRESHOLDS, find_engine
 
 # A position counts as "winning" once the user's win chance reaches this after one of
@@ -324,6 +324,7 @@ current_user: ContextVar[User] = ContextVar("current_user")
 
 
 def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = None) -> FastAPI:
+    monitoring.init("web")
     clerk = auth.from_env()
     with closing(db.connect(database_url)) as conn:  # applies any pending migrations
         local = None if clerk else User(users.ensure(conn, users.LOCAL), users.LOCAL)
@@ -958,6 +959,22 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
                 (game_id, now, json.dumps([m.model_dump() for m in body.marks]) if body and body.marks else None),
             )
         return {"reviewed_at": now}
+
+    @app.get("/api/config", include_in_schema=False)
+    def app_config():
+        """What the web app needs before it renders: whether to sign in with Clerk, and with
+        which (public) key. Read at runtime, so one build serves staging and production."""
+        return {"clerk_publishable_key": os.environ.get("CLERK_PUBLISHABLE_KEY") if clerk else None}
+
+    @app.get("/api/health", include_in_schema=False)
+    def health():
+        """For uptime checks and the container's health check: up, and the database answers."""
+        try:
+            with admin() as conn:
+                conn.execute("SELECT 1")
+        except Exception:
+            raise HTTPException(503, "database unreachable") from None
+        return {"ok": True}
 
     @app.get("/api/sounds", include_in_schema=False)
     def sounds():

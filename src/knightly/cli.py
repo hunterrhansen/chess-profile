@@ -179,6 +179,11 @@ def cmd_stats(conn, args) -> None:
                (SELECT string_agg(source || ':' || handle, ', ') FROM accounts) AS accounts""")
 
 
+def cmd_backup(conn, args) -> None:
+    dest = update.backup(conn, Path(args.dir) if args.dir else None, keep=args.keep)
+    log(f"Backed up to {dest}")
+
+
 def cmd_migrate(conn, args) -> None:
     log("Database is up to date.")  # connecting applied any pending migrations
 
@@ -308,6 +313,12 @@ def main(argv=None) -> None:
     s = sub.add_parser("migrate", help="Apply any pending database migrations (every command does "
                                        "this on connecting; this does only that)")
     s.set_defaults(func=cmd_migrate, admin=True)
+
+    s = sub.add_parser("backup", help="pg_dump the whole database to backups/knightly-YYYY-MM-DD.dump "
+                                      "(one a day, newest --keep kept); restore with pg_restore")
+    s.add_argument("--dir", help="Where to write it (default: $KNIGHTLY_DATA_DIR/backups)")
+    s.add_argument("--keep", type=int, default=update.KEEP_BACKUPS, help="How many to keep (default: 7)")
+    s.set_defaults(func=cmd_backup, admin=True)
 
     s = sub.add_parser("users", help="List users; `link local <clerk id>` gives the local user's "
                                      "data to a Clerk account; `delete <clerk id>`")
