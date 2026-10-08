@@ -331,6 +331,20 @@ Deleting an account in Clerk deletes everything of theirs, through a webhook: in
 dashboard add one for `user.deleted` pointing at `/api/webhooks/clerk`, and put its signing
 secret in `CLERK_WEBHOOK_SECRET`.
 
+Each person can download everything Knightly keeps about them (Settings › Your data: their
+games as PGN and every table as CSV, [`export.py`](src/knightly/export.py)) and delete their
+account, which deletes their data at once and then their Clerk account.
+
+On a shared server ([`limits.py`](src/knightly/limits.py)):
+
+- a first import reaches back `KNIGHTLY_HISTORY_MONTHS` (24), and backfills stop once
+  `KNIGHTLY_MAX_ANALYSED` (1000) games are analysed; new games are always analysed. A game
+  takes about 3 KB, and 11 KB more once analysed.
+- each person follows up to 4 accounts, and the routes that start Stockfish in the web
+  process (a move's Why/Best line, the bot) allow 60 calls a minute each.
+- `KNIGHTLY_ADMINS` (Clerk user ids) see the admin page: the job queue, failed jobs (with a
+  Retry), and each user's games and size. Without sign-in, you're the admin.
+
 ## Example queries
 
 ```sql

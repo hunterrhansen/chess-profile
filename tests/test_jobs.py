@@ -130,6 +130,23 @@ def test_a_long_history_is_analysed_newest_first_then_in_batches(db_url, fake_up
     assert conn.execute("SELECT count(*) FROM game_analysis").fetchone()[0] == 5
 
 
+def test_backfills_stop_at_the_analysed_limit_but_new_games_still_count(db_url, fake_update, monkeypatch):
+    monkeypatch.setenv("KNIGHTLY_MAX_ANALYSED", "3")
+    _, conn = as_user(db_url, "user_a")
+    for i in range(6):
+        conn.execute("INSERT INTO games (source, source_id, pgn, variant, played_at) VALUES ('otb', ?, '', 'standard', ?)",
+                     (str(i), f"2026-10-0{i + 1}"))
+    jobs.enqueue(conn, "update", {"trigger": "account"})
+    assert jobs.work(db_url, scheduler=False, log=quiet, once=True) == 2  # update (2), one backfill (1)
+    assert [c["limit"] for c in fake_update] == [2, 1]
+    assert conn.execute("SELECT count(*) FROM game_analysis").fetchone()[0] == 3
+    # At the limit, the daily update still analyses the newest games; no backfill follows.
+    conn.execute("INSERT INTO games (source, source_id, pgn, variant, played_at) VALUES ('otb', 'new', '', 'standard', '2026-10-09')")
+    jobs.enqueue(conn, "update", {"trigger": "schedule"})
+    assert jobs.work(db_url, scheduler=False, log=quiet, once=True) == 1
+    assert fake_update[-1] == {"trigger": "schedule", "limit": 2, "sync": True}
+
+
 def test_a_job_that_fails_waits_and_the_worker_carries_on(db_url, monkeypatch):
     _, conn = as_user(db_url, "user_a")
     jobs.enqueue(conn, "update")

@@ -23,14 +23,14 @@ from pathlib import Path
 import chess
 import chess.engine
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from typing import Literal
 
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from . import auth, config, db, deck, jobs, lines, lookup, monitoring, patterns, play, positions, puzzles, schedule, units, update, users
+from . import auth, config, db, deck, export, jobs, limits, lines, lookup, monitoring, patterns, play, positions, puzzles, schedule, units, update, users
 from .analyze import THRESHOLDS, find_engine
 
 # A position counts as "winning" once the user's win chance reaches this after one of
@@ -370,6 +370,62 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
 
     read = write = connect
 
+    admins = {a.strip() for a in os.environ.get("KNIGHTLY_ADMINS", "").split(",") if a.strip()}
+
+    def is_admin() -> bool:
+        """KNIGHTLY_ADMINS lists the Clerk ids that see the admin page; without sign-in
+        (your own Mac) you're the admin."""
+        return clerk is None or current_user.get().clerk_id in admins
+
+    def require_admin() -> None:
+        if not is_admin():
+            raise HTTPException(403, "Admins only.")
+
+    engine_calls = limits.RateLimit(limits.ENGINE_PER_MINUTE)
+
+    def engine_quota() -> None:
+        """Shared by the routes that start Stockfish in the web process."""
+        if not engine_calls.allow(current_user.get().id):
+            raise HTTPException(429, "That's a lot of engine work at once. Try again in a minute.")
+
+    @api.get("/api/me")
+    def me():
+        """Who's signed in, as the app needs it: whether to show the admin page, and the
+        limits that apply to them."""
+        return {"admin": is_admin(), "limits": limits.describe()}
+
+    @api.get("/api/export")
+    def download_data():
+        """Everything Knightly keeps about you, as a zip: your games as PGN and every table
+        as CSV."""
+        with read() as conn:
+            body = export.zip_for(conn)
+        name = f"knightly-export-{date.today():%Y-%m-%d}.zip"
+        return StreamingResponse(export.chunks(body), media_type="application/zip",
+                                 headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+    @api.delete("/api/account", status_code=204)
+    def delete_account():
+        """Delete you and everything of yours, right away (the web app then deletes the Clerk
+        account, and Clerk's user.deleted webhook would do this again, harmlessly)."""
+        if clerk is None:
+            raise HTTPException(400, "Without sign-in there's no account to delete.")
+        with admin() as conn:
+            users.delete(conn, current_user.get().clerk_id)
+
+    @api.get("/api/admin", dependencies=[Depends(require_admin)])
+    def admin_overview():
+        """The admin page: the job queue and everyone's usage."""
+        with admin() as conn:
+            return jobs.overview(conn)
+
+    @api.post("/api/admin/jobs/{job_id}/retry", dependencies=[Depends(require_admin)])
+    def retry_job(job_id: int):
+        with admin() as conn:
+            if not jobs.retry(conn, job_id):
+                raise HTTPException(404, "No failed job with that id.")
+        return {"ok": True}
+
     @api.get("/api/accounts")
     def accounts():
         return [dict(r) for r in query("SELECT source, handle FROM accounts ORDER BY source")]
@@ -381,6 +437,10 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
         if not HANDLE.match(body.handle):
             raise HTTPException(400, "That doesn't look like a username.")
         with write() as conn, conn:
+            known = conn.execute("SELECT count(*) FROM accounts WHERE NOT (source = ? AND handle = ?)",
+                                 (body.source, body.handle)).fetchone()[0]
+            if known >= limits.MAX_ACCOUNTS:
+                raise HTTPException(400, f"You can follow up to {limits.MAX_ACCOUNTS} accounts.")
             db.add_account(conn, body.source, body.handle)
             jobs.enqueue(conn, "update", {"trigger": "account"})  # bring its games in now
         return {"source": body.source, "handle": body.handle}
@@ -447,7 +507,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
         with write() as conn, conn:
             conn.execute("DELETE FROM accounts WHERE source = ? AND handle = ?", (source, handle))
 
-    @api.get("/api/games/{game_id}/lines/{ply}")
+    @api.get("/api/games/{game_id}/lines/{ply}", dependencies=[Depends(engine_quota)])
     def engine_lines(game_id: int, ply: int):
         """The "Why" and "Best line" for one move. Computed with Stockfish the first time
         (about a second, at depth 18), then served from the engine_lines table."""
@@ -480,7 +540,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
                          (game_id, ply, depth, json.dumps(data)))
         return data
 
-    @api.post("/api/play/move")
+    @api.post("/api/play/move", dependencies=[Depends(engine_quota)])
     def bot_move(body: BotMoveIn):
         """The bot's reply at `elo`, or the engine's best move when `elo` is left out."""
         try:
@@ -496,7 +556,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             raise HTTPException(503, str(e)) from None
         return {"uci": move.uci(), "san": board.san(move)}
 
-    @api.post("/api/play/check")
+    @api.post("/api/play/check", dependencies=[Depends(engine_quota)])
     def blunder_check(body: CheckIn):
         """Blunder check: is your move (`uci`, from `fen`) a blunder, and what punishes it?"""
         try:
@@ -528,7 +588,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
                                    (row["source"], row["source_id"])).fetchone()[0]
         return {"id": game_id}
 
-    @api.post("/api/play/games/{game_id}/analysis")
+    @api.post("/api/play/games/{game_id}/analysis", dependencies=[Depends(engine_quota)])
     def analyse_played(game_id: int):
         """Engine analysis of one game right away (several seconds), at the Settings budget."""
         with write() as conn:
