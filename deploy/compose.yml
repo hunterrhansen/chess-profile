@@ -1,0 +1,46 @@
+# One Knightly environment (staging or production) on the server: the web app, the worker,
+# and a Cloudflare Tunnel that is the only way in (no ports are opened on the machine).
+# The database is Supabase, outside; nothing here holds data that isn't also elsewhere, so
+# the machine can be rebuilt from deploy/bootstrap.sh at any time.
+#
+# Lives at /opt/knightly/<env>/compose.yml beside that environment's .env (deploy/env.example).
+# The deploy workflow sets KNIGHTLY_IMAGE_TAG in that .env, then: docker compose pull && up -d
+services:
+  web:
+    image: ghcr.io/hunterrhansen/knightly:${KNIGHTLY_IMAGE_TAG:-main}
+    env_file: .env
+    volumes:
+      - ./data:/data  # backups/ (on their way off the machine) and sounds/
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+    restart: unless-stopped
+
+  # Runs queued jobs (syncing, analysing) and queues everyone's daily update. CPU-heavy:
+  # WORKER_CPUS caps it, so staging never starves production on a shared machine.
+  worker:
+    image: ghcr.io/hunterrhansen/knightly:${KNIGHTLY_IMAGE_TAG:-main}
+    command: ["knightly", "worker"]
+    env_file: .env
+    volumes:
+      - ./data:/data
+    cpus: ${WORKER_CPUS:-2}
+    depends_on:
+      web:
+        condition: service_healthy  # web applies the migrations first
+    restart: unless-stopped
+
+  # Cloudflare's connector: carries https://<your domain> to web:8000 from the inside, so
+  # no ports are open. The tunnel and its public hostname are set up in Cloudflare (docs/deploy.md).
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env}
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped

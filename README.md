@@ -281,8 +281,7 @@ nothing to rebuild. Without them, the built-in sounds play.
 ## Docker (server mode)
 
 The `Dockerfile` builds the server: the API, the built web app and Stockfish, for the machine
-it's built on (arm64 on an Apple-silicon Mac or an ARM server). It's the first step of making
-Knightly multi-user; see the architecture doc for the plan.
+it's built on (arm64 on an Apple-silicon Mac or an ARM server). To try it locally:
 
 ```bash
 docker compose up --build          # http://localhost:8000, with its own Postgres
@@ -293,6 +292,10 @@ Backups and your own sounds live in the `/data` volume. In the image Knightly ru
 (`KNIGHTLY_MODE=server`, the default anywhere but macOS): no launchd schedule, no Keychain, no
 macOS notifications. Settings hides the daily schedule, and Run now logs to the container's
 output. Set `KNIGHTLY_MODE=server` on a Mac to try that behaviour without Docker.
+
+Deploying it for real (staging and production on an Oracle Cloud VM, behind Cloudflare
+Tunnels, with Supabase, Clerk and nightly backups to R2) is [docs/deploy.md](docs/deploy.md),
+using the files in [`deploy/`](deploy/) and the **Deploy** GitHub workflow.
 
 ## Users and sign-in
 
