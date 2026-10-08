@@ -8,3 +8,7 @@ backups/
 *.db.lock
 # your own move/capture sounds (README: Sounds); not ours to redistribute
 sounds/
+# keys (Clerk, ...): never committed
+.env
+.env.*
+!.env.example

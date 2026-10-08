@@ -29,9 +29,9 @@ def old_database(path):
 def test_import_copies_rows_keeps_ids_and_continues_the_counter(db_url, tmp_path):
     old_database(tmp_path / "chess.db")
     conn = db.connect(db_url)
-    counts = sqlite_import.run(conn, tmp_path / "chess.db", log=lambda _: None)
+    counts = sqlite_import.run(conn, tmp_path / "chess.db", 1, log=lambda _: None)
     assert counts == {"accounts": 1, "games": 2, "moves": 1}
-    assert [r["id"] for r in conn.execute("SELECT id FROM games ORDER BY id")] == [7, 42]
+    assert [tuple(r) for r in conn.execute("SELECT id, user_id FROM games ORDER BY id")] == [(7, 1), (42, 1)]
     m = conn.execute("SELECT * FROM moves").fetchone()
     assert (m["game_id"], m["san"], m["win_pct_before"]) == (42, "d4", 51.5)
     db.insert_game(conn, {"source": "chesscom", "source_id": "c", "pgn": "1. c4"})
@@ -42,5 +42,5 @@ def test_import_needs_an_empty_database(db_url, tmp_path):
     old_database(tmp_path / "chess.db")
     conn = db.connect(db_url)
     db.add_account(conn, "lichess", "already")
-    with pytest.raises(SystemExit, match="already has data"):
-        sqlite_import.run(conn, tmp_path / "chess.db", log=lambda _: None)
+    with pytest.raises(SystemExit, match="data here already"):
+        sqlite_import.run(conn, tmp_path / "chess.db", 1, log=lambda _: None)

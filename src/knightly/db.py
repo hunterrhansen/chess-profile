@@ -5,6 +5,10 @@ code was written against (Knightly used SQLite until Phase 1a): `execute` with `
 placeholders, rows readable by name or position, and `with conn:` as a transaction. Outside
 a `with` block each statement commits on its own, so a long engine run never holds a
 transaction open.
+
+A connection made with `user_id` acts for that user: it can only see and write their rows
+(row-level security, migrations/0003_users.sql). Without one it's the owner's connection,
+for migrations and managing users.
 """
 import json
 import os
@@ -101,13 +105,19 @@ class Connection:
         self.pg.close()
 
 
-def connect(url: str = DEFAULT_URL, migrate: bool = True) -> Connection:
+APP_ROLE = "knightly_app"  # has no right to bypass row-level security
+
+
+def connect(url: str = DEFAULT_URL, migrate: bool = True, user_id: int | None = None) -> Connection:
     pg = psycopg.connect(url, autocommit=True, row_factory=_row_factory)
     pg.adapters.register_loader("numeric", FloatLoader)  # avg(), round(): floats, as in SQLite
     pg.adapters.register_dumper(bool, IntDumper)  # True -> 1: flags are INTEGER columns, as in SQLite
     conn = Connection(pg)
     if migrate:
         apply_migrations(conn)
+    if user_id is not None:
+        conn.execute(f"SET ROLE {APP_ROLE}")
+        conn.execute("SELECT set_config('app.user_id', ?, false)", (str(user_id),))
     return conn
 
 
@@ -191,7 +201,7 @@ def get_setting(conn, key: str, default=None):
 def set_setting(conn, key: str, value) -> None:
     conn.execute(
         """INSERT INTO settings (key, value) VALUES (?, ?)
-           ON CONFLICT (key) DO UPDATE
+           ON CONFLICT (user_id, key) DO UPDATE
            SET value = excluded.value, updated_at = iso_now()""",
         (key, json.dumps(value)),
     )
@@ -212,7 +222,7 @@ def get_cursor(conn, source: str, account: str, kind: str) -> str | None:
 def set_cursor(conn, source: str, account: str, kind: str, cursor: str) -> None:
     conn.execute(
         """INSERT INTO sync_state (source, account, kind, cursor) VALUES (?, ?, ?, ?)
-           ON CONFLICT (source, account, kind) DO UPDATE
+           ON CONFLICT (user_id, source, account, kind) DO UPDATE
            SET cursor = excluded.cursor, updated_at = iso_now()""",
         (source, account.lower(), kind, cursor),
     )

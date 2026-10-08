@@ -147,19 +147,19 @@ class AlreadyRunning(Exception):
 
 class Lock:
     """Exclusive, non-blocking Postgres advisory lock for this connection's session, so only
-    one update runs per database, from any machine; released if the process dies."""
+    one update runs per user at a time, from any machine; released if the process dies."""
     KEY = 4_243_002
 
     def __init__(self, conn):
         self.conn = conn
 
     def __enter__(self):
-        if not self.conn.execute("SELECT pg_try_advisory_lock(?)", (self.KEY,)).fetchone()[0]:
+        if not self.conn.execute("SELECT pg_try_advisory_lock(?, app_user())", (self.KEY,)).fetchone()[0]:
             raise AlreadyRunning("another update is running")
         return self
 
     def __exit__(self, *exc):
-        self.conn.execute("SELECT pg_advisory_unlock(?)", (self.KEY,))
+        self.conn.execute("SELECT pg_advisory_unlock(?, app_user())", (self.KEY,))
 
 
 def _finish(conn, run_id: int, **fields) -> None:
@@ -189,7 +189,11 @@ def _run_locked(conn, token, workers, depth, engine_path, backup_dir, keep, trig
                               (trigger,)).fetchone()[0]
     errors, counts = [], {}
     targets = known_accounts(conn)
-    progress = Progress(conn, run_id, [f"sync:{s}:{u}" for s, u in targets] + ["analyze", "patterns", "backup"])
+    # The backup copies the whole database, so it's a step only on your own Mac; a server
+    # backs up on its own schedule, not whenever one person updates.
+    backs_up = config.on_mac()
+    steps = ["analyze", "patterns"] + (["backup"] if backs_up else [])
+    progress = Progress(conn, run_id, [f"sync:{s}:{u}" for s, u in targets] + steps)
     try:
         games, puzzles, sync_errors = sync_accounts(conn, targets, token, log=log, progress=progress)
         counts.update(new_games=games, new_puzzles=puzzles)
@@ -219,16 +223,17 @@ def _run_locked(conn, token, workers, depth, engine_path, backup_dir, keep, trig
             errors.append(f"patterns: {e}")
             progress.finish(None, error=str(e))
 
-        progress.start("backup", "Copying the database")
-        try:
-            dest = backup(conn, backup_dir, keep)
-            counts["backup_path"] = str(dest)
-            log(f"Backed up to {dest}")
-            progress.finish(f"Saved {dest.name}")
-        except Exception as e:
-            log(f"Backup failed: {e}")
-            errors.append(f"backup: {e}")
-            progress.finish(None, error=str(e))
+        if backs_up:
+            progress.start("backup", "Copying the database")
+            try:
+                dest = backup(conn, backup_dir, keep)
+                counts["backup_path"] = str(dest)
+                log(f"Backed up to {dest}")
+                progress.finish(f"Saved {dest.name}")
+            except Exception as e:
+                log(f"Backup failed: {e}")
+                errors.append(f"backup: {e}")
+                progress.finish(None, error=str(e))
     except BaseException as e:  # anything unexpected, incl. Ctrl-C: record it, then re-raise
         errors.append(f"{type(e).__name__}: {e}")
         _finish(conn, run_id, status="failed", errors=json.dumps(errors), **counts)

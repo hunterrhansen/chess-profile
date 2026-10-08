@@ -12,7 +12,8 @@ quiet = lambda _: None
 @pytest.fixture
 def setup(db_url, data_dir, monkeypatch):
     """A DB with one account per source, and sync/analysis stubbed out. Returns the
-    connection and the folder backups go in."""
+    connection and the folder backups go in. On a Mac, where the update backs up too."""
+    monkeypatch.setenv("KNIGHTLY_MODE", "mac")
     conn = db.connect(db_url)
     db.add_account(conn, "chesscom", "me")
     db.add_account(conn, "lichess", "me")
@@ -102,7 +103,7 @@ def test_plist():
     assert p["Label"] == schedule.LABEL
     args = p["ProgramArguments"]
     assert args[0].endswith("knightly") and args[1:3] == ["--db", "postgresql:///knightly"]
-    assert args[3:5] == ["update", "--scheduled"]
+    assert args[3:7] == ["--user", "local", "update", "--scheduled"]
     assert p["StartCalendarInterval"] == {"Hour": 6, "Minute": 30}
     assert p["EnvironmentVariables"]["STOCKFISH"] == "/opt/sf"
     plistlib.dumps(p)  # serialisable

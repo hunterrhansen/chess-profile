@@ -16,19 +16,22 @@ import shutil
 import subprocess
 import sys
 from contextlib import closing
+from contextvars import ContextVar
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import chess
 import chess.engine
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from typing import Literal
 
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
-from . import config, db, deck, lines, patterns, play, positions, puzzles, schedule, units, update
+from . import auth, config, db, deck, lines, patterns, play, positions, puzzles, schedule, units, update, users
 from .analyze import THRESHOLDS, find_engine
 
 # A position counts as "winning" once the user's win chance reaches this after one of
@@ -332,13 +335,53 @@ def lichess_token_saved() -> bool:
     return found.returncode == 0
 
 
+@dataclass(frozen=True)
+class User:
+    id: int
+    clerk_id: str
+
+
+# Who the request in progress is for, set by `authenticate` before the route runs.
+current_user: ContextVar[User] = ContextVar("current_user")
+
+
 def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = None) -> FastAPI:
-    db.connect(database_url).close()  # apply any pending migrations once, at startup
+    clerk = auth.from_env()
+    with closing(db.connect(database_url)) as conn:  # applies any pending migrations
+        local = None if clerk else User(users.ensure(conn, users.LOCAL), users.LOCAL)
+    known: dict[str, User] = {}  # Clerk id -> user, so a request costs no lookup
+
+    def admin():
+        """The owner's connection, for the users table itself."""
+        return closing(db.connect(database_url, migrate=False))
+
+    def signed_in(token: str) -> User:
+        clerk_id = clerk.user(token)
+        if clerk_id not in known:
+            with admin() as conn:  # the first request after signing up creates the user
+                known[clerk_id] = User(users.ensure(conn, clerk_id), clerk_id)
+        return known[clerk_id]
+
+    async def authenticate(request: Request) -> None:
+        if clerk is None:
+            current_user.set(local)
+            return
+        header = request.headers.get("authorization", "")
+        if not header.lower().startswith("bearer "):
+            raise HTTPException(401, "Sign in first.")
+        try:  # a thread: the first token can mean fetching Clerk's public keys
+            current_user.set(await run_in_threadpool(signed_in, header[7:]))
+        except auth.Unauthorized as e:
+            raise HTTPException(401, f"Sign in again ({e}).") from None
+
     app = FastAPI(title="knightly")
+    # Every /api route but sounds and the Clerk webhook acts for the signed-in user.
+    api = APIRouter(dependencies=[Depends(authenticate)])
 
     def connect():
-        """A short-lived connection; `with connect() as conn, conn:` for a transaction."""
-        return closing(db.connect(database_url, migrate=False))
+        """A short-lived connection for the current user (it sees only their rows);
+        `with connect() as conn, conn:` for a transaction."""
+        return closing(db.connect(database_url, migrate=False, user_id=current_user.get().id))
 
     def query(sql: str, params=()) -> list[db.Row]:
         with connect() as conn:
@@ -349,11 +392,11 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
 
     read = write = connect
 
-    @app.get("/api/accounts")
+    @api.get("/api/accounts")
     def accounts():
         return [dict(r) for r in query("SELECT source, handle FROM accounts ORDER BY source")]
 
-    @app.post("/api/accounts", status_code=201)
+    @api.post("/api/accounts", status_code=201)
     def add_account(body: AccountIn):
         if body.source not in SOURCES:
             raise HTTPException(400, f"source must be one of {', '.join(SOURCES)}")
@@ -363,13 +406,13 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             db.add_account(conn, body.source, body.handle)
         return {"source": body.source, "handle": body.handle}
 
-    @app.delete("/api/accounts/{source}/{handle}", status_code=204)
+    @api.delete("/api/accounts/{source}/{handle}", status_code=204)
     def remove_account(source: str, handle: str):
         # Games already imported stay; the account just stops being synced.
         with write() as conn, conn:
             conn.execute("DELETE FROM accounts WHERE source = ? AND handle = ?", (source, handle))
 
-    @app.get("/api/games/{game_id}/lines/{ply}")
+    @api.get("/api/games/{game_id}/lines/{ply}")
     def engine_lines(game_id: int, ply: int):
         """The "Why" and "Best line" for one move. Computed with Stockfish the first time
         (about a second) at the Settings depth, then served from the engine_lines table."""
@@ -403,7 +446,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
                          (game_id, ply, depth, json.dumps(data)))
         return data
 
-    @app.post("/api/play/move")
+    @api.post("/api/play/move")
     def bot_move(body: BotMoveIn):
         """The bot's reply at `elo`, or the engine's best move when `elo` is left out."""
         try:
@@ -419,7 +462,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             raise HTTPException(503, str(e)) from None
         return {"uci": move.uci(), "san": board.san(move)}
 
-    @app.post("/api/play/check")
+    @api.post("/api/play/check")
     def blunder_check(body: CheckIn):
         """Blunder check: is your move (`uci`, from `fen`) a blunder, and what punishes it?"""
         try:
@@ -435,7 +478,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
         except SystemExit as e:  # Stockfish not installed
             raise HTTPException(503, str(e)) from None
 
-    @app.post("/api/play/games", status_code=201)
+    @api.post("/api/play/games", status_code=201)
     def save_played(body: PlayedGameIn):
         """Save a finished game against the bot as an unrated game, so it can be reviewed."""
         handles = query("SELECT handle FROM accounts ORDER BY source = 'chesscom' DESC, source")
@@ -451,7 +494,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
                                    (row["source"], row["source_id"])).fetchone()[0]
         return {"id": game_id}
 
-    @app.post("/api/play/games/{game_id}/analysis")
+    @api.post("/api/play/games/{game_id}/analysis")
     def analyse_played(game_id: int):
         """Engine analysis of one game right away (several seconds), at the Settings depth."""
         with write() as conn:
@@ -463,7 +506,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
                 raise HTTPException(503, str(e)) from None
         return {"analysed": True}
 
-    @app.get("/api/deck")
+    @api.get("/api/deck")
     def deck_today():
         """The review deck's counts and today's next card (null when today's are done).
         Adds cards for newly analysed games first, so the deck is always current."""
@@ -492,7 +535,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
                 card["fen_before"] = positions.fen_before(conn, card["game_id"], card["ply"])
         return {**info, "card": card}
 
-    @app.post("/api/deck/answer")
+    @api.post("/api/deck/answer")
     def deck_answer(body: AnswerIn):
         with write() as conn, conn:
             try:
@@ -501,7 +544,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             except KeyError:
                 raise HTTPException(404, "No card for that position.") from None
 
-    @app.post("/api/deck/hint")
+    @api.post("/api/deck/hint")
     def deck_hint(body: HintIn):
         """The move behind the two-step Hint: the piece to move, then the arrow."""
         with write() as conn, conn:
@@ -510,7 +553,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             except KeyError:
                 raise HTTPException(404, "No card for that position.") from None
 
-    @app.get("/api/settings")
+    @api.get("/api/settings")
     def settings():
         backups = sorted(update.backup_dir().glob(update.BACKUP_GLOB))
         cursors = {(r["source"], r["account"], r["kind"]): r["cursor"]
@@ -560,7 +603,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
                         "keep": update.KEEP_BACKUPS},
         }
 
-    @app.get("/api/status")
+    @api.get("/api/status")
     def status():
         """The sidebar's account row: your accounts with their latest rating, and the daily
         update's state (the run in progress, else the last one)."""
@@ -584,36 +627,39 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             if last else None,
         }
 
-    @app.put("/api/settings/analysis")
+    @api.put("/api/settings/analysis")
     def set_analysis(body: AnalysisIn):
         with write() as conn, conn:
             db.set_setting(conn, "analysis_depth", body.depth)
         return {"depth": body.depth}
 
-    @app.put("/api/settings/schedule")
+    @api.put("/api/settings/schedule")
     def set_schedule(body: ScheduleIn):
         try:
             if body.enabled:
-                schedule.install(database_url, hour=body.hour, minute=body.minute, log=lambda _: None)
+                schedule.install(database_url, hour=body.hour, minute=body.minute, log=lambda _: None,
+                                 user=current_user.get().clerk_id)
             else:
                 schedule.uninstall(log=lambda _: None)
         except SystemExit as e:  # schedule.py reports failures this way for the CLI
             raise HTTPException(400, str(e)) from None
         return schedule.current()
 
-    @app.post("/api/update/run", status_code=202)
+    @api.post("/api/update/run", status_code=202)
     def run_update():
         """Start the update pipeline in the background: via launchd when the daily job is
         installed (same low priority and log), else as a detached `knightly update`. In
         server mode its output joins the server's own (the container's log)."""
-        if schedule.current():
+        me = current_user.get()
+        installed = schedule.current()
+        if installed and installed["user"] == me.clerk_id:
             try:
                 schedule.run_now(log=lambda _: None)
             except SystemExit as e:
                 raise HTTPException(400, str(e)) from None
             return {"started": True}
-        command = [str(Path(sys.executable).parent / "knightly"), "--db", database_url, "update",
-                   "--workers", str(schedule.SCHEDULED_WORKERS)]
+        command = [str(Path(sys.executable).parent / "knightly"), "--db", database_url,
+                   "--user", me.clerk_id, "update", "--workers", str(schedule.SCHEDULED_WORKERS)]
         options = {"stdin": subprocess.DEVNULL, "cwd": str(config.data_dir()), "start_new_session": True}
         if config.on_mac():
             schedule.LOG.parent.mkdir(parents=True, exist_ok=True)
@@ -623,7 +669,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             subprocess.Popen(command, **options)
         return {"started": True}
 
-    @app.get("/api/home")
+    @api.get("/api/home")
     def home():
         """Home: the units in path order, and today's goal. Today's game is your newest
         analysed game you haven't reviewed, played after the newest one you have (and in the
@@ -679,7 +725,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             },
         }
 
-    @app.get("/api/puzzles/next")
+    @api.get("/api/puzzles/next")
     def puzzle_next(theme: str = Query(pattern="^[A-Za-z]{1,32}$")):
         """A Lichess puzzle in `theme` you haven't tried here, near your puzzle rating."""
         if theme not in patterns.THEMES:
@@ -688,7 +734,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             return {"puzzle": puzzles.next_puzzle(conn, theme), "done_today": puzzles.done_today(conn),
                     "session": puzzles.SESSION, "available": puzzles.available(conn)}
 
-    @app.post("/api/puzzles/answer")
+    @api.post("/api/puzzles/answer")
     def puzzle_answer(body: PuzzleAnswerIn):
         with write() as conn, conn:
             try:
@@ -697,7 +743,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
                 raise HTTPException(404, "No such puzzle.") from None
             return {"done_today": puzzles.done_today(conn)}
 
-    @app.get("/api/patterns")
+    @api.get("/api/patterns")
     def what_you_blunder(range: str = Query("90d", pattern="^(30d|90d|all)$")):
         """What your mistakes come down to (patterns.py): how many of your blunders, mistakes
         and misses in rated games in the range carry each tactic, most common first."""
@@ -719,7 +765,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
         ranked = sorted(by.values(), key=lambda p: (p["pattern"] == patterns.OTHER, -p["total"]))
         return {"range": range, "patterns": ranked, "pending": pending["total"] if pending else 0}
 
-    @app.get("/api/overview")
+    @api.get("/api/overview")
     def overview(range: str = Query("90d", pattern="^(30d|90d|all)$")):
         start, end, prev_start = period_bounds(range)
         # Overview stats are rated games only: unrated daily games are mostly vs bots.
@@ -771,7 +817,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             "top_openings": [dict(o) for o in openings],
         }
 
-    @app.get("/api/games")
+    @api.get("/api/games")
     def games(
         q: str | None = None,
         speed: str | None = None,
@@ -839,7 +885,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             "games": [_game_json(r) for r in page_rows],
         }
 
-    @app.get("/api/games/{game_id}")
+    @api.get("/api/games/{game_id}")
     def game(game_id: int):
         rows = facts("f.id = ?", (game_id,))
         if not rows:
@@ -873,7 +919,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             "review_marks": json.loads(review[0]["marks"]) if review and review[0]["marks"] else [],
         }
 
-    @app.post("/api/games/{game_id}/review")
+    @api.post("/api/games/{game_id}/review")
     def finish_review(game_id: int, body: ReviewIn | None = None):
         """Marks a game reviewed ("Finish review"), with how each lesson step went for the
         summary's marks. Finishing again moves the time forward and replaces the marks. Also
@@ -908,6 +954,29 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
         if not path.is_file():
             raise HTTPException(404, "not there")
         return FileResponse(path, media_type="audio/mpeg")
+
+    @app.post("/api/webhooks/clerk", include_in_schema=False)
+    async def clerk_webhook(request: Request):
+        """Clerk tells us when someone deletes their account: everything of theirs goes too.
+        Set up in Clerk's dashboard (Webhooks, event user.deleted), with its signing secret
+        in CLERK_WEBHOOK_SECRET."""
+        secret = os.environ.get("CLERK_WEBHOOK_SECRET")
+        if not secret:
+            raise HTTPException(404, "webhooks aren't set up")
+        try:
+            event = auth.webhook(secret, request.headers, await request.body())
+        except auth.Unauthorized as e:
+            raise HTTPException(400, str(e)) from None
+        clerk_id = (event.get("data") or {}).get("id")
+        if event.get("type") == "user.deleted" and clerk_id:
+            def forget():
+                with admin() as conn:
+                    users.delete(conn, clerk_id)
+                known.pop(clerk_id, None)
+            await run_in_threadpool(forget)
+        return {"ok": True}
+
+    app.include_router(api)
 
     if static_dir and static_dir.is_dir():
         app.mount("/assets", StaticFiles(directory=static_dir / "assets"), name="assets")

@@ -5,7 +5,7 @@ import sys
 from contextlib import closing
 from pathlib import Path
 
-from . import analyze, bench, config, db, deck, patterns, puzzles, schedule, sqlite_import, update
+from . import analyze, bench, config, db, deck, patterns, puzzles, schedule, sqlite_import, update, users
 from .sources import pgn_file
 
 
@@ -58,7 +58,7 @@ def cmd_update(conn, args) -> None:
 
 def cmd_schedule(conn, args) -> None:
     if args.action == "install":
-        schedule.install(args.db, hour=args.hour, minute=args.minute, log=log)
+        schedule.install(args.db, hour=args.hour, minute=args.minute, log=log, user=args.user)
     elif args.action == "uninstall":
         schedule.uninstall(log=log)
     elif args.action == "run-now":
@@ -184,9 +184,22 @@ def cmd_migrate(conn, args) -> None:
 
 
 def cmd_import_sqlite(conn, args) -> None:
-    counts = sqlite_import.run(conn, Path(args.file), log=log)
+    counts = sqlite_import.run(conn, Path(args.file), users.ensure(conn, args.user), log=log)
     for table, n in counts.items():
         log(f"  {table}: {n:,}")
+
+
+def cmd_users(conn, args) -> None:
+    if args.action == "link":
+        users.link(conn, args.old, args.new)
+        log(f"{args.old}'s games, reviews and settings now belong to {args.new}.")
+    elif args.action == "delete":
+        if not users.delete(conn, args.clerk_id):
+            sys.exit(f"No user {args.clerk_id!r}.")
+        log(f"Deleted {args.clerk_id} and everything of theirs.")
+    else:
+        for u in users.listing(conn):
+            print(f"{u['id']:>4}  {u['clerk_id']:<34} {u['games']:>6} games  {u['accounts'] or ''}")
 
 
 def cmd_serve(conn, args) -> None:
@@ -205,6 +218,9 @@ def main(argv=None) -> None:
                                 "Aggregate your chess data into one Postgres database.")
     p.add_argument("--db", default=db.DEFAULT_URL,
                    help="Postgres URL (default: $KNIGHTLY_DATABASE_URL or postgresql:///knightly)")
+    p.add_argument("--user", default=users.LOCAL,
+                   help='Whose data: a Clerk user id, or "local" (default), the one person a Mac '
+                        "install serves without signing in")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("sync", help="Pull games (and Lichess puzzles) from Chess.com / Lichess. "
@@ -254,7 +270,7 @@ def main(argv=None) -> None:
     s = sub.add_parser("puzzles", help="Import puzzles for your weak tactics from the Lichess puzzle "
                                        "database (lichess_db_puzzle.csv.zst from database.lichess.org)")
     s.add_argument("file", help="Path to lichess_db_puzzle.csv.zst (or the unpacked .csv)")
-    s.set_defaults(func=cmd_puzzles)
+    s.set_defaults(func=cmd_puzzles, admin=True)  # the puzzle catalogue is shared by everyone
 
     s = sub.add_parser("update", help="Sync every account, analyse new games, back up the DB. "
                                       "What the daily schedule runs.")
@@ -279,12 +295,22 @@ def main(argv=None) -> None:
 
     s = sub.add_parser("migrate", help="Apply any pending database migrations (every command does "
                                        "this on connecting; this does only that)")
-    s.set_defaults(func=cmd_migrate)
+    s.set_defaults(func=cmd_migrate, admin=True)
+
+    s = sub.add_parser("users", help="List users; `link local <clerk id>` gives the local user's "
+                                     "data to a Clerk account; `delete <clerk id>`")
+    actions = s.add_subparsers(dest="action")
+    a = actions.add_parser("link")
+    a.add_argument("old", help='The user whose data moves, usually "local"')
+    a.add_argument("new", help="The Clerk user id it moves to (user_...)")
+    a = actions.add_parser("delete")
+    a.add_argument("clerk_id")
+    s.set_defaults(func=cmd_users, admin=True)
 
     s = sub.add_parser("import-sqlite", help="Copy everything from a SQLite chess.db (Knightly before "
                                              "Postgres) into this database, which must be empty")
     s.add_argument("file", help="Path to chess.db")
-    s.set_defaults(func=cmd_import_sqlite)
+    s.set_defaults(func=cmd_import_sqlite, admin=True)
 
     s = sub.add_parser("serve", help="Run the web app at http://127.0.0.1:8000")
     s.add_argument("--host", default="127.0.0.1")
@@ -292,7 +318,13 @@ def main(argv=None) -> None:
     s.set_defaults(func=cmd_serve)
 
     args = p.parse_args(argv)
-    with closing(db.connect(args.db)) as conn:
+    # Admin commands work on the whole database; the rest act for one user and see only theirs.
+    with closing(db.connect(args.db)) as owner:
+        if getattr(args, "admin", False):
+            args.func(owner, args)
+            return
+        user_id = users.ensure(owner, args.user)
+    with closing(db.connect(args.db, migrate=False, user_id=user_id)) as conn:
         args.func(conn, args)
 
 
