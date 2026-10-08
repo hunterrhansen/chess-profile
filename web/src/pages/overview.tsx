@@ -1,4 +1,4 @@
-import { ArrowRightIcon } from '@phosphor-icons/react'
+import { ArrowRightIcon, CaretDownIcon } from '@phosphor-icons/react'
 import type { ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts'
@@ -16,12 +16,18 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { type DeckToday, type Home, type Kpis, type Overview, type PatternCounts, type Range, type Unit, useApi } from '@/lib/api'
 import { longDate, num, openingLabel, pct, shortDate, signed } from '@/lib/format'
+import { useWide } from '@/lib/motion'
 import { usePreferences } from '@/lib/preferences'
 import { patternOf } from '@/lib/patterns'
 import { unitCopy } from '@/lib/units'
 import { cn } from '@/lib/utils'
 
 const ROLLING_WINDOW = 20
+const RANGES: { value: Range; label: string }[] = [
+  { value: '30d', label: '30 days' },
+  { value: '90d', label: '90 days' },
+  { value: 'all', label: 'All time' },
+]
 
 export function ProgressPage() {
   const [params, setParams] = useSearchParams()
@@ -31,10 +37,45 @@ export function ProgressPage() {
   const { data: home } = useApi<Home>('/api/home')
   const { data: deck } = useApi<DeckToday>('/api/deck')
   const { data: blunders } = useApi<PatternCounts>(`/api/patterns?range=${range}`)
+  const wide = useWide()
+  const pick = (v: string) => v && setParams(v === prefs.overviewRange ? {} : { range: v })
 
   // KPI links carry this page's range into the games list.
   const gamesLink = (extra: Record<string, string> = {}) =>
     `/games?${new URLSearchParams({ ...(range !== 'all' && { range }), ...extra })}`
+
+  // On a phone, the headline numbers only: the rating with its line, the deck, and the units
+  // as short rows. The range is a dropdown.
+  if (!wide) {
+    return (
+      <div className="flex flex-col gap-3.5">
+        <div className="flex items-center gap-2.5">
+          <h1 className="flex-1 text-[26px] font-bold">Progress</h1>
+          <label className="relative">
+            <span className="sr-only">Period</span>
+            <select
+              value={range}
+              onChange={(e) => pick(e.target.value)}
+              className="h-9 appearance-none rounded-[10px] bg-surface-muted pr-7 pl-2.5 text-[13px] font-extrabold"
+            >
+              {RANGES.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+            <CaretDownIcon weight="bold" className="pointer-events-none absolute top-1/2 right-2.5 size-3 -translate-y-1/2" />
+          </label>
+        </div>
+        {error && <p className="text-sm text-destructive">Couldn't load your progress. {error}</p>}
+        {!data ? (
+          <LoadingBlock label="Counting up your games…" className="h-80 rounded-xl" />
+        ) : (
+          <PhoneBody data={data} units={home?.units} deck={deck} gamesLink={gamesLink} />
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="flex max-w-5xl flex-col gap-8">
@@ -45,11 +86,13 @@ export function ProgressPage() {
           variant="outline"
           spacing={0}
           value={range}
-          onValueChange={(v) => v && setParams(v === prefs.overviewRange ? {} : { range: v })}
+          onValueChange={pick}
         >
-          <ToggleGroupItem value="30d">30 days</ToggleGroupItem>
-          <ToggleGroupItem value="90d">90 days</ToggleGroupItem>
-          <ToggleGroupItem value="all">All time</ToggleGroupItem>
+          {RANGES.map((r) => (
+            <ToggleGroupItem key={r.value} value={r.value}>
+              {r.label}
+            </ToggleGroupItem>
+          ))}
         </ToggleGroup>
       </div>
 
@@ -301,6 +344,111 @@ function OverviewBody({
         </Card>
       </div>
     </>
+  )
+}
+
+/** Progress on a phone: the rating with a sparkline, the deck in one row with its Mastered
+ * bar, and each unit as a short row (the current one in green). */
+function PhoneBody({
+  data,
+  units,
+  deck,
+  gamesLink,
+}: {
+  data: Overview
+  units?: Unit[]
+  deck: DeckToday | null
+  gamesLink: (extra?: Record<string, string>) => string
+}) {
+  return (
+    <>
+      <div className="panel flex items-end gap-3.5 px-4 py-3.5">
+        <div className="shrink-0">
+          <StatLabel>Rapid rating</StatLabel>
+          <StatValue className="mt-1">
+            {data.rating.current ?? '—'}
+            {!!data.rating.change && <StatDelta value={data.rating.change} better={data.rating.change > 0} />}
+          </StatValue>
+        </div>
+        <Sparkline ratings={data.rating_series.map((p) => p.rating)} />
+      </div>
+
+      {deck && deck.total > 0 && (
+        <div className="panel flex flex-col gap-2.5 px-4 py-3.5">
+          <div className="flex items-center gap-2.5">
+            <KnIcon glyph="drill" className="size-[30px]" />
+            <h2 className="flex-1 font-heading text-[19px] font-semibold">Your review deck</h2>
+            <span className="font-heading text-[22px] font-bold tabular-nums">{deck.total}</span>
+          </div>
+          <Progress label="Mastered" value={(deck.mastered / deck.total) * 100} valueText={`${deck.mastered} of ${deck.total}`} />
+        </div>
+      )}
+
+      {!!units?.length && (
+        <section aria-labelledby="units-h" className="flex flex-col gap-2.5">
+          <h2 id="units-h" className="eyebrow pl-0.5">
+            Your units
+          </h2>
+          <ol className="flex flex-col gap-2.5">
+            {units.map((u, i) => {
+              const c = UNIT_CARD[u.id]
+              const lead = i === 0
+              return (
+                <li key={u.id}>
+                  <Link
+                    to={gamesLink({ kpi: c.link.kpi })}
+                    className={cn(
+                      'panel panel-link flex items-center gap-3 rounded-[18px] px-3.5 py-3',
+                      lead && 'border-brand-lip bg-brand text-on-brand shadow-[0_4px_0_var(--brand-lip)]',
+                    )}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className={cn('block text-[11px] font-extrabold tracking-[.06em] uppercase', !lead && 'text-muted-foreground')}>
+                        Unit {i + 1}
+                        {lead ? ' · Now' : u.done ? ' · Done' : ''}
+                      </span>
+                      <span className="block truncate font-heading text-[17px] font-semibold">{u.title}</span>
+                    </span>
+                    <span className="font-heading text-2xl font-bold tabular-nums">{c.value(data.kpis)}</span>
+                  </Link>
+                </li>
+              )
+            })}
+          </ol>
+        </section>
+      )}
+    </>
+  )
+}
+
+/** The rating's 20-game average as a small line, ending on a dot at today's value. */
+function Sparkline({ ratings }: { ratings: number[] }) {
+  if (ratings.length < 2) return <p className="flex-1 pb-1 text-right text-sm text-muted-foreground">Not enough rated games yet.</p>
+  const avg = ratings.map((_, i) => {
+    const window = ratings.slice(Math.max(0, i - ROLLING_WINDOW + 1), i + 1)
+    return window.reduce((s, r) => s + r, 0) / window.length
+  })
+  const lo = Math.min(...avg)
+  const span = Math.max(1, Math.max(...avg) - lo)
+  const pts = avg.map((r, i) => [(i / (avg.length - 1)) * 194 + 3, 64 - ((r - lo) / span) * 58] as const)
+  const [x, y] = pts[pts.length - 1]
+  return (
+    <svg
+      viewBox="0 0 200 70"
+      className="h-16 min-w-0 flex-1"
+      role="img"
+      aria-label={`Rating over this period, from about ${Math.round(avg[0])} to ${Math.round(avg[avg.length - 1])}`}
+    >
+      <polyline
+        points={pts.map((p) => p.join(',')).join(' ')}
+        fill="none"
+        stroke="var(--brand-text)"
+        strokeWidth={3.5}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      <circle cx={x} cy={y} r={4.5} fill="var(--brand)" stroke="var(--surface)" strokeWidth={2} />
+    </svg>
   )
 }
 
