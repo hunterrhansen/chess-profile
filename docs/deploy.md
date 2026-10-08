@@ -52,15 +52,29 @@ the owner's password manager, under "Knightly deploy".
 - [ ] **Clerk** (§4): set up a production instance for `knightlychess.app` (its DNS records go
       in Cloudflare). Add a `user.deleted` webhook on both instances, and allow users to delete
       their own accounts.
+      Production instance created (2026-10-08), all five DNS CNAMEs are managed in
+      `infra/cloudflare/clerk.tf` and verified by Clerk. Both deletion webhooks exist;
+      production allows self-service deletion. Email sign-in is enabled. Google sign-in
+      still needs custom OAuth credentials. Copy the two webhook signing secrets into the
+      matching server env files; delivery and account deletion need testing after deployment.
 - [ ] **Fill in `.env` on the machine** (§6, §7): `/opt/knightly/{staging,production}/.env`
       and `/opt/knightly/backup.env`. The owner pastes the secrets over SSH.
+      Both allowed origins are set to their real domains. Staging's existing development
+      Clerk publishable key and owner admin ID are set (2026-10-08), as is production's
+      publishable key. Database URLs, webhook secrets and contact email still need filling in.
 - [ ] **GitHub** (§8), last, because setting `DEPLOY_HOST` starts deploying on every push to
       `main`. Set the `DEPLOY_SSH_KEY` secret, the `DEPLOY_HOST` variable, and the `staging` and
       `production` environments. Make the GHCR package public.
+      The deploy key is saved, both environments exist, production requires the owner's
+      review, and GHCR is public (2026-10-08). `DEPLOY_HOST` is still unset until staging's
+      app configuration is ready.
 - [ ] **Staging:** push to `main`, then check `https://staging.knightlychess.app` and
       `/api/health`, and sign up with a test account.
 - [ ] **Production:** move the Mac data in (§3: migrate, then a data-only restore), deploy the
       staging tag (§9), and sign in as the owner. Run the backup by hand once (§7).
+      A data-only export is prepared on the Mac at
+      `backups/first-deploy-data-2026-10-08.dump`, excluding migration history. Refresh the
+      export before restoring if the Mac data has changed; do not restore it twice.
 - [ ] **Done when** (architecture doc, Phases 4 and 5): a push to `main` reaches staging with
       no manual steps, and a friend can sign up, use Knightly and delete their account. Test
       the deletion in Safari with a throwaway account, since Clerk's captcha blocks automated
