@@ -148,6 +148,16 @@ const GLYPHS = {
       <circle cx="16" cy="18" r="2.2" style={f('gold-lip')} />
     </>
   ),
+  // Hint: a gold bulb on its ledge, with a glint, over a grey base.
+  hint: (
+    <>
+      <path transform="translate(0 2)" style={f('gold-lip')} d="M16 3a9 9 0 0 0-5.4 16.2c1 .8 1.4 1.7 1.4 2.8v.5h8v-.5c0-1.1.4-2 1.4-2.8A9 9 0 0 0 16 3z" />
+      <path style={f('gold')} d="M16 3a9 9 0 0 0-5.4 16.2c1 .8 1.4 1.7 1.4 2.8v.5h8v-.5c0-1.1.4-2 1.4-2.8A9 9 0 0 0 16 3z" />
+      <path d="M11.6 10.4a4.6 4.6 0 0 1 3.6-3.5" style={{ fill: 'none', stroke: 'var(--surface)', strokeWidth: 2.2, strokeLinecap: 'round' }} />
+      <rect x="11.5" y="25" width="9" height="2.8" rx="1.4" style={f('ink-muted')} />
+      <rect x="13" y="28.4" width="6" height="2.4" rx="1.2" style={f('ink-muted')} />
+    </>
+  ),
 } satisfies Record<string, ReactNode>
 
 export type Glyph = keyof typeof GLYPHS

@@ -1,7 +1,8 @@
 import { Chess, type Square } from 'chess.js'
-import { ArrowUUpLeftIcon, CircleNotchIcon, FlagIcon, LightbulbIcon, RobotIcon } from '@phosphor-icons/react'
+import { ArrowUUpLeftIcon, CircleNotchIcon, FlagIcon, RobotIcon } from '@phosphor-icons/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
+import { KnIcon } from '@/components/kn-icon'
 import { Board, type Palette } from '@/components/board'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -427,7 +428,7 @@ export function PlayPage() {
                     label={hint?.ply === moves.length ? 'Show the move' : 'Hint'}
                     onClick={askHint}
                     disabled={!playing || !myTurn || hintLoading || (hint?.ply === moves.length && hint.step === 2)}
-                    icon={hintLoading ? <CircleNotchIcon className="animate-spin" /> : <LightbulbIcon weight="fill" />}
+                    icon={hintLoading ? <CircleNotchIcon className="animate-spin" /> : <KnIcon glyph="hint" className="size-6" />}
                   />
                 </div>
               </>

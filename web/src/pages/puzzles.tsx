@@ -1,8 +1,9 @@
 import { Chess } from 'chess.js'
-import { ArrowSquareOutIcon, CheckIcon, LightbulbIcon, XIcon } from '@phosphor-icons/react'
+import { ArrowSquareOutIcon, CheckIcon, XIcon } from '@phosphor-icons/react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { Confetti } from '@/components/confetti'
+import { KnIcon } from '@/components/kn-icon'
 import { LessonBar, LessonBoard, LessonScreen, LessonVerdict } from '@/components/lesson-bar'
 import { EmptyState, LoadingBlock } from '@/components/empty-state'
 import { Badge } from '@/components/ui/badge'
@@ -264,7 +265,7 @@ function PuzzleBoard({
                 }}
                 disabled={!yourTurn || !hintReady}
               >
-                <LightbulbIcon weight="fill" className="text-gold" />
+                <KnIcon glyph="hint" className="size-5" />
                 {rungs[hints] === 'move' ? 'Show the move' : rungs[hints] === 'piece' && hints > 0 ? 'Show the piece' : 'Hint'}
               </Button>
             )}
