@@ -54,6 +54,8 @@ export function useFindMove({
   const [outcome, setOutcome] = useState<FindOutcome | null>(null)
   const [played, setPlayed] = useState<string | null>(null) // your move, once it's right
   const [error, setError] = useState<string | null>(null)
+  // When the position appeared: a quick first try of the engine's move is Easy (deck.py).
+  const [shownAt] = useState(() => Date.now())
 
   useEffect(() => {
     const t = setTimeout(() => setHintReady(true), HINT_DELAY_MS)
@@ -69,7 +71,8 @@ export function useFindMove({
     setSelected(null)
     setError(null)
     const isFirst = !first
-    send<DeckAnswer>('POST', '/api/deck/answer', { game_id: gameId, ply, uci, hinted: isFirst && hints > 0, redo })
+    const seconds = isFirst ? (Date.now() - shownAt) / 1000 : undefined
+    send<DeckAnswer>('POST', '/api/deck/answer', { game_id: gameId, ply, uci, hinted: isFirst && hints > 0, redo, seconds })
       .then((r) => {
         if (isFirst) setFirst(r)
         if (uci === SKIP) setOutcome('shown')

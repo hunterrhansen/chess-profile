@@ -269,6 +269,7 @@ class AnswerIn(BaseModel):
     ply: int
     uci: str = Field(pattern=r"^([a-h][1-8][a-h][1-8][qrbn]?|0000)$")  # 0000: Show me / Skip
     hinted: bool = False  # took a hint before this first answer: it counts as Again
+    seconds: float | None = Field(None, ge=0, le=86400)  # how long the first try took (Easy)
     redo: bool = False    # the end-of-session redo: judged, never graded
 
 
@@ -496,7 +497,8 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
     def deck_answer(body: AnswerIn):
         with write() as conn, conn:
             try:
-                return deck.answer(conn, body.game_id, body.ply, body.uci, hinted=body.hinted, redo=body.redo)
+                return deck.answer(conn, body.game_id, body.ply, body.uci, hinted=body.hinted, redo=body.redo,
+                                   seconds=body.seconds)
             except KeyError:
                 raise HTTPException(404, "No card for that position.") from None
 

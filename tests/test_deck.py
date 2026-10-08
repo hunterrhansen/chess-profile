@@ -231,3 +231,19 @@ def test_judge_accepts_moves_close_to_the_best(monkeypatch):
     assert deck.judge(after_e4, deck.SKIP, "e7e5", 30) == "shown"
     fools = "rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2"
     assert deck.judge(fools, "d8h4", "e5e4", 0) == "best"  # any mate counts
+
+
+def test_a_quick_clean_find_is_easy(conn):
+    add_game(conn, 1)
+    for ply in (2, 4, 6):
+        add_move(conn, 1, ply)
+    deck.sync(conn)
+    quick = deck.answer(conn, 1, 2, "e7e5", seconds=6, today=DAY, now=NOON)
+    assert quick["rating"] == "easy"
+    # FSRS: Easy on a new card is about 8 days (fuzzed a little, as in Anki)
+    assert 6 <= (date.fromisoformat(quick["due"]) - DAY).days <= 10
+    slow = deck.answer(conn, 1, 4, "e7e5", seconds=40, today=DAY, now=NOON)
+    assert slow["rating"] == "good"
+    hinted = deck.answer(conn, 1, 6, "e7e5", seconds=3, hinted=True, today=DAY, now=NOON)
+    assert hinted["rating"] == "again"
+    assert deck.mark("easy", True) == "found"

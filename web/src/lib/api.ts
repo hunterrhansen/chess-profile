@@ -115,7 +115,7 @@ export type PracticeMark = 'found' | 'good' | 'helped' | 'missed'
 export interface DeckAnswer {
   correct: boolean
   quality: 'best' | 'excellent' | 'good' | 'wrong' | 'shown'
-  rating: 'again' | 'hard' | 'good' | null
+  rating: 'again' | 'hard' | 'good' | 'easy' | null
   best_uci: string
   best_san: string
   mastered: boolean
