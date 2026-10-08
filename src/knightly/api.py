@@ -215,6 +215,27 @@ def _game_json(r) -> dict:
     }
 
 
+def _headline_rating(source: str, data: dict | None) -> dict:
+    """An account's one number for the sidebar: its rating in the speed you play most,
+    else (a Lichess account used for puzzles only) its puzzle rating."""
+    best = None  # (games, rating, kind)
+    if data and source == "chesscom":
+        for speed in ("rapid", "blitz", "bullet", "daily"):
+            s = data.get(f"chess_{speed}") or {}
+            games = sum((s.get("record") or {}).get(k, 0) for k in ("win", "loss", "draw"))
+            if s.get("last") and (best is None or games > best[0]):
+                best = (games, s["last"]["rating"], speed.capitalize())
+    elif data and source == "lichess":
+        perfs = data.get("perfs") or {}
+        for speed in ("rapid", "blitz", "bullet", "classical", "correspondence"):
+            p = perfs.get(speed) or {}
+            if p.get("games") and (best is None or p["games"] > best[0]):
+                best = (p["games"], p["rating"], speed.capitalize())
+        if best is None and (perfs.get("puzzle") or {}).get("games"):
+            best = (perfs["puzzle"]["games"], perfs["puzzle"]["rating"], "Puzzles")
+    return {"rating": best[1], "rating_kind": best[2]} if best else {"rating": None, "rating_kind": None}
+
+
 SOURCES = ("chesscom", "lichess")
 LOCAL_SOUNDS = ("move-self.mp3", "capture.mp3")  # `sounds/` beside the database, if present
 HANDLE = re.compile(r"^[A-Za-z0-9_-]{2,40}$")
@@ -533,6 +554,30 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
             },
             "backups": {"dir": str(path.parent / "backups"), "count": len(backups),
                         "keep": update.KEEP_BACKUPS},
+        }
+
+    @app.get("/api/status")
+    def status():
+        """The sidebar's account row: your accounts with their latest rating, and the daily
+        update's state (the run in progress, else the last one)."""
+        cutoff = (datetime.now(timezone.utc) - STALE_RUN).strftime("%Y-%m-%dT%H:%M:%SZ")
+        current = query("""SELECT started_at, progress FROM runs
+                           WHERE status = 'running' AND started_at >= ? ORDER BY id DESC LIMIT 1""", (cutoff,))
+        last = query("""SELECT started_at, finished_at, status, new_games, games_analysed, errors
+                        FROM runs WHERE status != 'running' ORDER BY id DESC LIMIT 1""")
+        accounts = []
+        for a in query("SELECT source, handle FROM accounts ORDER BY source = 'chesscom' DESC, source"):
+            snap = query("""SELECT data FROM snapshots WHERE source = ? AND lower(account) = lower(?)
+                              AND kind IN ('stats', 'profile') ORDER BY taken_at DESC LIMIT 1""",
+                         (a["source"], a["handle"]))
+            accounts.append({**dict(a), **_headline_rating(a["source"], json.loads(snap[0]["data"]) if snap else None)})
+        return {
+            "accounts": accounts,
+            "current_run": {"started_at": current[0]["started_at"],
+                            "progress": json.loads(current[0]["progress"]) if current[0]["progress"] else None}
+            if current else None,
+            "last_run": {**dict(last[0]), "errors": json.loads(last[0]["errors"]) if last[0]["errors"] else []}
+            if last else None,
         }
 
     @app.put("/api/settings/analysis")

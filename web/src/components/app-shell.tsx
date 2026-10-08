@@ -2,9 +2,9 @@ import { SidebarSimpleIcon } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, Outlet, useLocation } from 'react-router'
+import { AccountStatus } from '@/components/account-status'
 import { type Glyph, KnIcon } from '@/components/kn-icon'
 import { LogoMark } from '@/components/logo'
-import { useApi } from '@/lib/api'
 import { lastLocation, rememberLocation, type Section, sectionsOf } from '@/lib/last-location'
 import { usePreferences } from '@/lib/preferences'
 import { cn } from '@/lib/utils'
@@ -34,15 +34,12 @@ export function PhoneHeader({ children }: { children: React.ReactNode }) {
   return slot ? createPortal(children, slot) : null
 }
 
-const SOURCE_LABEL: Record<string, string> = { chesscom: 'Chess.com', lichess: 'Lichess' }
-
 /**
  * From md up, a left sidebar like Chess.com's: brand, the tabs and Settings, then collapse and
- * accounts at the bottom. Collapsed (the "Collapse" button or ⌘B / Ctrl+B; remembered per
+ * your account row at the bottom (with the daily update's status). Collapsed (the "Collapse" button or ⌘B / Ctrl+B; remembered per
  * browser) it's an icon rail. On a phone: a top bar with Settings, and the tabs along the bottom.
  */
 export function AppShell() {
-  const { data: accounts } = useApi<{ source: string; handle: string }[]>('/api/accounts')
   const { prefs, set } = usePreferences()
   const collapsed = prefs.sidebarCollapsed
   const toggle = () => set({ sidebarCollapsed: !collapsed })
@@ -116,25 +113,9 @@ export function AppShell() {
           </button>
         </div>
 
-        {!!accounts?.length && (
-          <div className="flex flex-col gap-1 border-t px-2 py-3">
-            {accounts.map((a) => (
-              <div
-                key={`${a.source}-${a.handle}`}
-                title={`${SOURCE_LABEL[a.source] ?? a.source}: ${a.handle}`}
-                className="flex h-10 items-center gap-3 rounded-md px-3 text-sm"
-              >
-                <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-sidebar-accent text-[11px] font-semibold uppercase">
-                  {a.handle[0]}
-                </span>
-                <span className={cn('min-w-0 flex-col leading-tight', collapsed ? 'hidden' : 'flex')}>
-                  <span className="truncate font-medium">{a.handle}</span>
-                  <span className="text-xs text-sidebar-foreground/60">{SOURCE_LABEL[a.source] ?? a.source}</span>
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
+        <div className="border-t-2 px-2 py-2.5">
+          <AccountStatus collapsed={collapsed} />
+        </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">

@@ -183,8 +183,8 @@ function OverviewBody({
             )}
           </div>
           <p className="text-sm text-muted-foreground">
-            Every mistake from your games where one move was clearly better. A position is mastered once you've solved it 4
-            times over about two months. At most 10 a day.
+            Every mistake from your games where one move was clearly better, scheduled like Anki (FSRS). Mastered: you're
+            expected to still know it two months from now. At most 10 a day.
           </p>
         </Card>
       )}

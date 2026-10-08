@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -335,3 +336,21 @@ def test_spa_serves_top_level_files_and_routes(tmp_path):
     assert client.get("/favicon.svg").text == "<svg/>"
     assert client.get("/games/1").text == "<html>app</html>"
     assert client.get("/../chess.db").text == "<html>app</html>"
+
+
+def test_status_has_each_accounts_headline_rating_and_the_last_run(tmp_path):
+    path = tmp_path / "chess.db"
+    with db.connect(path) as conn:
+        conn.execute("INSERT INTO accounts (source, handle) VALUES ('chesscom', 'gghansen'), ('lichess', 'hunterrhansen')")
+        conn.execute("INSERT INTO snapshots (source, account, kind, data) VALUES ('chesscom', 'gghansen', 'stats', ?)",
+                     (json.dumps({"chess_rapid": {"last": {"rating": 922}, "record": {"win": 306, "loss": 249, "draw": 25}},
+                                  "chess_blitz": {"last": {"rating": 700}, "record": {"win": 3, "loss": 4, "draw": 0}}}),))
+        conn.execute("INSERT INTO snapshots (source, account, kind, data) VALUES ('lichess', 'hunterrhansen', 'profile', ?)",
+                     (json.dumps({"perfs": {"rapid": {"games": 0, "rating": 1500}, "puzzle": {"games": 278, "rating": 1547}}}),))
+        conn.execute("INSERT INTO runs (started_at, finished_at, status, trigger, new_games, games_analysed) "
+                     "VALUES ('2026-10-07T12:00:05Z', '2026-10-07T12:15:04Z', 'ok', 'schedule', 8, 8)")
+    s = TestClient(api.create_app(path)).get("/api/status").json()
+    assert [(a["source"], a["rating"], a["rating_kind"]) for a in s["accounts"]] == [
+        ("chesscom", 922, "Rapid"), ("lichess", 1547, "Puzzles")]
+    assert s["current_run"] is None
+    assert s["last_run"]["status"] == "ok" and s["last_run"]["new_games"] == 8 and s["last_run"]["errors"] == []

@@ -31,8 +31,15 @@ import { PlayBoard } from '@/pages/play'
  */
 export function PracticePage() {
   const { data, error, reload } = useApi<DeckToday>('/api/deck')
-  // Positions to go over again before the session ends, in the order you missed them.
-  const [again, setAgain] = useState<DeckCard[]>([])
+  // Positions to go over again before the session ends, in the order you missed them. Kept
+  // in this browser for the day, so a reload doesn't lose them.
+  const [again, setAgainState] = useState<DeckCard[]>(loadAgain)
+  const setAgain = (update: (cards: DeckCard[]) => DeckCard[]) =>
+    setAgainState((cards) => {
+      const next = update(cards)
+      saveAgain(next)
+      return next
+    })
 
   const failed = error && <p className="text-sm text-destructive">Couldn't load your positions. {error}</p>
   const card = data?.card ?? null
@@ -71,6 +78,27 @@ export function PracticePage() {
       )}
     </div>
   )
+}
+
+const AGAIN_KEY = 'knightly.practice.again'
+const today = () => new Date().toDateString()
+
+function loadAgain(): DeckCard[] {
+  try {
+    const saved = JSON.parse(localStorage.getItem(AGAIN_KEY) ?? 'null') as { day: string; cards: DeckCard[] } | null
+    return saved?.day === today() ? saved.cards : []
+  } catch {
+    return [] // storage blocked or corrupt: no redo list, nothing else breaks
+  }
+}
+
+function saveAgain(cards: DeckCard[]) {
+  try {
+    if (cards.length) localStorage.setItem(AGAIN_KEY, JSON.stringify({ day: today(), cards }))
+    else localStorage.removeItem(AGAIN_KEY)
+  } catch {
+    // storage blocked: the redo still works until the page is reloaded
+  }
 }
 
 function Position({
