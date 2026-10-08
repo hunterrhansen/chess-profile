@@ -103,7 +103,7 @@ export function HomePage() {
       card: {
         eyebrow: `Your review deck · about ${Math.max(1, Math.round((left * SECONDS_PER_POSITION) / 60))} minutes`,
         title: "Review today's positions",
-        body: `${left} position${left === 1 ? '' : 's'} from your own games ${left === 1 ? 'is' : 'are'} due. Right answers come back later and later; misses come back tomorrow.`,
+        body: `${left} position${left === 1 ? '' : 's'} from your own games ${left === 1 ? 'is' : 'are'} due. Found ones come back later and later; misses come back sooner.`,
         cta: 'Start',
         to: '/practice',
       },
@@ -298,7 +298,7 @@ export function HomePage() {
                 )}
               </>
             )}
-            <p className="text-[13px] text-muted-foreground">Right answers come back later and later. Misses come back tomorrow.</p>
+            <p className="text-[13px] text-muted-foreground">Found ones come back later and later. Misses come back sooner.</p>
           </Card>
         )}
 

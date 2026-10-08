@@ -191,6 +191,21 @@ export interface RunProgress {
   done: { key: string; summary: string | null; error: string | null }[]
 }
 
+/** The sidebar's account row (/api/status): accounts with their headline rating, and the
+ * daily update, running or last finished. */
+export interface AccountStatus {
+  accounts: { source: string; handle: string; rating: number | null; rating_kind: string | null }[]
+  current_run: { started_at: string; progress: RunProgress | null } | null
+  last_run: {
+    started_at: string
+    finished_at: string | null
+    status: 'ok' | 'partial' | 'failed'
+    new_games: number | null
+    games_analysed: number | null
+    errors: string[]
+  } | null
+}
+
 export interface Settings {
   accounts: { source: string; handle: string; synced_through: string | null }[]
   lichess_token: boolean
