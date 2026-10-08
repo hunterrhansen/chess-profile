@@ -1,9 +1,11 @@
 import { ClerkProvider, SignIn, useAuth, useClerk, useUser } from '@clerk/react'
 import { SignOutIcon } from '@phosphor-icons/react'
-import type { ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
+import { Link, useNavigate } from 'react-router'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Logo, LogoLoader } from '@/components/logo'
 import { Button } from '@/components/ui/button'
-import { setTokenSource } from '@/lib/api'
+import { send, setTokenSource } from '@/lib/api'
 
 /**
  * Sign-in, with Clerk. The server says whether to use it: `/api/config` gives its
@@ -20,6 +22,15 @@ export function setClerkKey(key: string | null | undefined) {
 }
 
 export const signInEnabled = () => !!KEY
+
+let CONTACT: string | null = null
+
+/** Who to write to about your data (KNIGHTLY_CONTACT), for the privacy page. */
+export function setContact(contact: string | null | undefined) {
+  CONTACT = contact || null
+}
+
+export const contact = () => CONTACT
 
 /** Clerk's components in Knightly's tokens, so they follow the light and dark themes. */
 const appearance = {
@@ -83,6 +94,9 @@ export function SignInScreen({ form = <SignIn withSignUp routing="hash" /> }: { 
     <main className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-background px-4 py-10">
       <SignInHeader />
       {form}
+      <Link to="/privacy" className="text-sm font-bold text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
+        Privacy
+      </Link>
     </main>
   )
 }
@@ -119,6 +133,77 @@ function SignedInAsRow() {
         <SignOutIcon />
         Sign out
       </Button>
+    </div>
+  )
+}
+
+/**
+ * Delete account (Settings › Your data): asks first (type "delete"), then deletes your data
+ * on the server, then your Clerk account, which signs you out. Nothing without sign-in: on
+ * your own Mac there's no account to delete.
+ */
+export function DeleteAccount({ games }: { games: number }) {
+  return signInEnabled() ? <DeleteAccountRow games={games} /> : null
+}
+
+function DeleteAccountRow({ games }: { games: number }) {
+  const { user } = useUser()
+  const { signOut } = useClerk()
+  const navigate = useNavigate()
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function remove() {
+    setBusy(true)
+    setError(null)
+    try {
+      // Your data first: if this fails, nothing is gone and you can try again.
+      await send('DELETE', '/api/account')
+    } catch (e) {
+      setError(`Couldn't delete your data: ${(e as Error).message}`)
+      setBusy(false)
+      return
+    }
+    try {
+      await user?.delete()
+    } catch {
+      // Your data is gone either way; Clerk's user.deleted webhook isn't needed for that.
+      await signOut()
+    }
+    navigate('/', { replace: true })
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-5 py-3.5">
+      <div className="min-w-0 flex-1 basis-60">
+        <div className="font-extrabold">Delete your account</div>
+        <div className="mt-0.5 text-[13px] text-muted-foreground">Your games, reviews, practice and sign-in, all gone at once.</div>
+      </div>
+      <Button variant="danger" size="sm" onClick={() => setOpen(true)}>
+        Delete account
+      </Button>
+      <ConfirmDialog
+        open={open}
+        title="Delete your account?"
+        confirmLabel="Delete everything"
+        cancelLabel="Keep my account"
+        word="delete"
+        busy={busy}
+        error={error}
+        onConfirm={remove}
+        onClose={() => setOpen(false)}
+      >
+        <p>This deletes, right away and for good:</p>
+        <ul className="flex list-disc flex-col gap-1.5 pl-5 text-foreground">
+          <li>
+            {games.toLocaleString()} game{games === 1 ? '' : 's'} and their analysis
+          </li>
+          <li>Your reviews, practice cards and puzzle history</li>
+          <li>Your sign-in. Your Chess.com and Lichess accounts aren't touched.</li>
+        </ul>
+        <p className="text-sm">Want a copy? Download your data first.</p>
+      </ConfirmDialog>
     </div>
   )
 }

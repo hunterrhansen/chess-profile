@@ -251,8 +251,72 @@ export interface Settings {
   nodes: number
   /** The review deck's FSRS scheduler: default parameters, or tuned to your answers. */
   fsrs: { personal: boolean; reviews: number; needed: number; tuned_at: string | null; tuned_reviews: number | null }
-  database: { path: string; bytes: number; games: number; analysed: number }
-  backups: { dir: string; count: number; keep: number }
+  /** Yours alone: what Download your data and Delete account act on. */
+  your_data: { games: number; analysed: number; first_game: string | null; approx_bytes: number }
+  limits: Limits
+  /** The whole database and its backups: only without sign-in (your own Mac). */
+  database: { path: string; bytes: number; games: number; analysed: number } | null
+  backups: { dir: string; count: number; keep: number } | null
+}
+
+/** What one person can use of a shared server (limits.py); null = no limit. */
+export interface Limits {
+  history_months: number | null
+  max_analysed: number | null
+  max_accounts: number
+}
+
+/** /api/me: whether to show the admin page. */
+export interface Me {
+  admin: boolean
+  limits: Limits
+}
+
+export interface AdminJob {
+  id: number
+  kind: 'update' | 'backfill'
+  status: 'queued' | 'running' | 'done' | 'failed'
+  priority: number
+  attempts: number
+  error: string | null
+  created_at: string
+  run_after: string
+  locked_by: string | null
+  locked_at: string | null
+  finished_at: string | null
+  clerk_id: string
+}
+
+/** /api/admin: the job queue and everyone's usage. */
+export interface AdminOverview {
+  queued: AdminJob[]
+  running: AdminJob[]
+  failed: AdminJob[]
+  last_day: { done: number; failed: number }
+  database_bytes: number
+  users: {
+    id: number
+    clerk_id: string
+    created_at: string
+    accounts: string | null
+    games: number
+    analysed: number
+    last_update: string | null
+    approx_bytes: number
+  }[]
+}
+
+/** GET a file from the API (with the session token) and save it, under the server's name. */
+export async function download(url: string, fallbackName: string): Promise<void> {
+  const res = await apiFetch(url)
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
+  const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? fallbackName
+  const href = URL.createObjectURL(await res.blob())
+  const a = Object.assign(document.createElement('a'), { href, download: name })
+  document.body.append(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(href), 60_000)
 }
 
 export type Classification =

@@ -668,7 +668,8 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             return run
 
         counts = query("""SELECT (SELECT count(*) FROM games) AS games,
-                                 (SELECT count(*) FROM game_analysis) AS analysed""")[0]
+                                 (SELECT count(*) FROM game_analysis) AS analysed,
+                                 (SELECT min(played_at) FROM games) AS first_game""")[0]
         with read() as conn:
             fsrs = deck.tuning(conn)
             nodes = db.analysis_nodes(conn)
@@ -689,13 +690,19 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             "running": bool(current) or bool(waiting),
             "engine": engine_name(),
             "nodes": nodes,
-            "database": {
+            # Yours alone: what Download your data and Delete account act on.
+            "your_data": {**dict(counts), "approx_bytes": counts["games"] * jobs.GAME_BYTES
+                          + counts["analysed"] * jobs.ANALYSED_BYTES},
+            "limits": limits.describe(),
+            # The whole database and its backups: only without sign-in (your own Mac). On a
+            # server they're everyone's, and where the database lives isn't anyone's business.
+            "database": None if clerk else {
                 **dict(query("""SELECT current_database() || ' on ' || coalesce(host(inet_server_addr()), 'this Mac')
                                          AS path, pg_database_size(current_database()) AS bytes""")[0]),
-                **dict(counts),
+                "games": counts["games"], "analysed": counts["analysed"],
             },
-            "backups": {"dir": str(update.backup_dir()), "count": len(backups),
-                        "keep": update.KEEP_BACKUPS},
+            "backups": None if clerk else {"dir": str(update.backup_dir()), "count": len(backups),
+                                           "keep": update.KEEP_BACKUPS},
         }
 
     @api.get("/api/status")
@@ -1023,8 +1030,9 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
     @app.get("/api/config", include_in_schema=False)
     def app_config():
         """What the web app needs before it renders: whether to sign in with Clerk, and with
-        which (public) key. Read at runtime, so one build serves staging and production."""
-        return {"clerk_publishable_key": os.environ.get("CLERK_PUBLISHABLE_KEY") if clerk else None}
+        which (public) key, and who to write to. Read at runtime, so one build serves staging and production."""
+        return {"clerk_publishable_key": os.environ.get("CLERK_PUBLISHABLE_KEY") if clerk else None,
+                "contact": os.environ.get("KNIGHTLY_CONTACT")}  # the privacy page's "Questions"
 
     @app.get("/api/health", include_in_schema=False)
     def health():

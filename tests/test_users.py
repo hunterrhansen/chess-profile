@@ -96,7 +96,7 @@ def test_nobody_sees_anyone_elses_data(two):
     alice = as_user("user_alice")
     assert {g["id"] for g in client.get("/api/games", headers=alice).json()["games"]} == {100, 101, 102}
     assert client.get("/api/overview?range=all", headers=alice).json()["games_played"] == 3
-    assert client.get("/api/settings", headers=alice).json()["database"]["games"] == 3
+    assert client.get("/api/settings", headers=alice).json()["your_data"]["games"] == 3
 
 
 def test_nobody_can_open_or_change_anyone_elses_games(two):

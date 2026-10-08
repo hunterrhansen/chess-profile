@@ -19,6 +19,7 @@
     --color-surface-muted: var(--surface-muted);
     --color-line: var(--line);
     --color-lip: var(--lip);
+    --color-scrim: var(--scrim);
     --color-ink: var(--ink);
     --color-ink-muted: var(--ink-muted);
     --color-brand: var(--brand);

@@ -1,4 +1,4 @@
-import { CheckIcon, CircleIcon, CircleNotchIcon, PlayIcon, PlusIcon, XIcon } from '@phosphor-icons/react'
+import { CheckIcon, CircleIcon, CircleNotchIcon, DownloadSimpleIcon, PlayIcon, PlusIcon, XIcon } from '@phosphor-icons/react'
 import { type ReactNode, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { LoadingBlock } from '@/components/empty-state'
@@ -7,11 +7,11 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import { type RunProgress, send, type Settings, useApi } from '@/lib/api'
-import { SignedInAs } from '@/lib/auth'
+import { download, type Me, type RunProgress, send, type Settings, useApi } from '@/lib/api'
+import { DeleteAccount, SignedInAs } from '@/lib/auth'
 import { BOARDS, type Preferences, usePreferences } from '@/lib/preferences'
 import { playSound, setSoundEnabled } from '@/lib/sound'
-import { cn } from '@/lib/utils'
+import { cn, megabytes } from '@/lib/utils'
 
 const SOURCE_LABEL: Record<string, string> = { chesscom: 'Chess.com', lichess: 'Lichess' }
 /** Positions Stockfish searches per move: Standard is 500k (`knightly bench`: ~0.65 CPU-minutes
@@ -45,7 +45,9 @@ export function SettingsPage() {
           <AccountsSection settings={data} reload={reload} />
           <UpdateSection settings={data} reload={reload} />
           <AnalysisSection settings={data} reload={reload} />
-          <DataSection settings={data} />
+          <YourDataSection settings={data} />
+          {data.database && data.backups && <DataSection database={data.database} backups={data.backups} />}
+          <AdminCard />
         </>
       )}
       <Link to="/styleguide" className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
@@ -632,8 +634,94 @@ function AnalysisSection({ settings, reload }: { settings: Settings; reload: () 
   )
 }
 
-function DataSection({ settings }: { settings: Settings }) {
-  const { database: db, backups } = settings
+/** What Knightly keeps about you: how much, how far back, a copy of it all, and deleting it. */
+function YourDataSection({ settings }: { settings: Settings }) {
+  const { your_data: mine, limits } = settings
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const since = mine.first_game
+    ? new Date(mine.first_game).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
+    : null
+  const sources = settings.accounts.map((a) => SOURCE_LABEL[a.source] ?? a.source)
+  const reach = [
+    limits.history_months && `brings in your last ${limits.history_months >= 24 && limits.history_months % 12 === 0 ? `${limits.history_months / 12} years` : `${limits.history_months} months`}`,
+    limits.max_analysed && `analyses up to ${limits.max_analysed.toLocaleString()} of them`,
+  ].filter(Boolean)
+
+  return (
+    <Section title="Your data" glyph="notes" description="What Knightly keeps about you, and how to take it with you or delete it.">
+      <Row
+        label="Your games"
+        hint={[since && `Since ${since}`, sources.length > 0 && `from ${[...new Set(sources)].join(' and ')}`].filter(Boolean).join(', ') || 'None yet'}
+      >
+        <span className="text-right font-extrabold text-muted-foreground">
+          {mine.games.toLocaleString()} games · {mine.analysed.toLocaleString()} analysed · about {megabytes(mine.approx_bytes)}
+        </span>
+      </Row>
+      {reach.length > 0 && (
+        <Row label="How far back" hint={`Knightly ${reach.join(' and ')}. Every new game is analysed.`}>
+          {mine.games > 0 && mine.analysed >= mine.games ? (
+            <OkPill>All analysed</OkPill>
+          ) : (
+            <span className="font-extrabold text-muted-foreground">
+              {mine.analysed.toLocaleString()} of {mine.games.toLocaleString()} analysed
+            </span>
+          )}
+        </Row>
+      )}
+      <Row label="Download your data" hint="One zip: your games as PGN, and everything else as spreadsheets (CSV).">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true)
+            setError(null)
+            try {
+              await download('/api/export', 'knightly-export.zip')
+            } catch (e) {
+              setError(`Couldn't make the download: ${(e as Error).message}`)
+            } finally {
+              setBusy(false)
+            }
+          }}
+        >
+          {busy ? <CircleNotchIcon className="animate-spin" /> : <DownloadSimpleIcon />}
+          {busy ? 'Preparing…' : 'Download'}
+        </Button>
+      </Row>
+      <ErrorText>{error}</ErrorText>
+      <Row label="Privacy" hint="What Knightly keeps, who handles it for us, and for how long.">
+        <Button variant="ghost" size="sm" asChild>
+          <Link to="/privacy">Read it</Link>
+        </Button>
+      </Row>
+      <DeleteAccount games={mine.games} />
+    </Section>
+  )
+}
+
+/** Admins only (KNIGHTLY_ADMINS, or anyone without sign-in): the way to the admin page. */
+function AdminCard() {
+  const { data } = useApi<Me>('/api/me')
+  if (!data?.admin) return null
+  return (
+    <section className="panel flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-5 py-4">
+      <div className="flex min-w-0 flex-1 basis-60 items-center gap-3.5">
+        <KnIcon glyph="engine" className="size-[34px]" />
+        <div className="min-w-0">
+          <h2 className="font-heading text-xl font-semibold">Admin</h2>
+          <p className="text-sm text-muted-foreground">Only admins see this. The job queue and everyone's usage.</p>
+        </div>
+      </div>
+      <Button variant="outline" size="sm" asChild>
+        <Link to="/settings/admin">Open</Link>
+      </Button>
+    </section>
+  )
+}
+
+function DataSection({ database: db, backups }: { database: NonNullable<Settings['database']>; backups: NonNullable<Settings['backups']> }) {
   const mb = (db.bytes / 1024 / 1024).toFixed(1)
   return (
     <Section title="Data" glyph="notes" description="Everything lives in one Postgres database.">
