@@ -119,20 +119,14 @@ export function AppShell() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b-2 bg-card px-3 md:hidden">
-          <LogoMark className="size-7" />
-          <span className="font-display text-xl font-bold text-brand-text">Knightly</span>
+        <PhoneTopBar
+          className="sticky top-0 z-20 md:hidden"
+          settingsTo={target(SETTINGS.section, SETTINGS.root)}
+          settingsActive={here.includes('settings')}
+        >
           {/* Pages can put a little here (Home: today's goal counters). */}
-          <div id={PHONE_HEADER_SLOT} className="ml-auto flex items-center" />
-          <Link
-            to={target(SETTINGS.section, SETTINGS.root)}
-            aria-label="Settings"
-            aria-current={here.includes('settings') ? 'page' : undefined}
-            className="grid size-11 place-items-center rounded-md aria-[current=page]:bg-sky/15"
-          >
-            <KnIcon glyph="settings" className="size-[26px]" />
-          </Link>
-        </header>
+          <div id={PHONE_HEADER_SLOT} className="flex items-center" />
+        </PhoneTopBar>
 
         <main className="min-w-0 flex-1 pb-24 md:pb-0">
           <div className="mx-auto max-w-6xl px-4 py-6 md:px-8">
@@ -144,26 +138,66 @@ export function AppShell() {
           aria-label="Main"
           className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 gap-1 border-t-2 bg-card px-2 pt-1.5 pb-[max(10px,env(safe-area-inset-bottom))] md:hidden"
         >
-          {NAV.map((item) => {
-            const active = here.includes(item.section)
-            return (
-              <Link
-                key={item.section}
-                to={target(item.section, item.root)}
-                aria-current={active ? 'page' : undefined}
-                className={cn(
-                  'flex flex-col items-center gap-0.5 rounded-md py-1.5 text-[11px] font-extrabold tracking-[.05em] text-muted-foreground uppercase',
-                  active && 'bg-sky/14 text-foreground shadow-[inset_0_0_0_2px_var(--sky)]',
-                )}
-              >
-                <KnIcon glyph={item.glyph} className="size-[30px]" />
-                {item.label}
-              </Link>
-            )
-          })}
+          {NAV.map((item) => (
+            <PhoneTab
+              key={item.section}
+              to={target(item.section, item.root)}
+              active={here.includes(item.section)}
+              label={item.label}
+              glyph={item.glyph}
+            />
+          ))}
         </nav>
       </div>
     </div>
+  )
+}
+
+/** The phone's top bar: the brand, whatever the page puts in `children` (Home's goal
+ * counters), and Settings. */
+export function PhoneTopBar({
+  settingsTo,
+  settingsActive,
+  children,
+  className,
+}: {
+  settingsTo: string
+  settingsActive: boolean
+  children?: React.ReactNode
+  className?: string
+}) {
+  return (
+    <header className={cn('flex h-14 items-center gap-2 border-b-2 bg-card px-3', className)}>
+      <LogoMark className="size-7" />
+      <span className="font-display text-xl font-bold text-brand-text">Knightly</span>
+      <div className="ml-auto flex items-center">{children}</div>
+      <Link
+        to={settingsTo}
+        aria-label="Settings"
+        aria-current={settingsActive ? 'page' : undefined}
+        className="grid size-11 place-items-center rounded-md aria-[current=page]:bg-sky/15"
+      >
+        <KnIcon glyph="settings" className="size-[26px]" />
+      </Link>
+    </header>
+  )
+}
+
+/** A tab in the phone's bottom bar: the icon over an uppercase label, the current one outlined
+ * in sky. */
+export function PhoneTab({ to, active, label, glyph }: { to: string; active: boolean; label: string; glyph: Glyph }) {
+  return (
+    <Link
+      to={to}
+      aria-current={active ? 'page' : undefined}
+      className={cn(
+        'flex flex-col items-center gap-0.5 rounded-md py-1.5 text-[11px] font-extrabold tracking-[.05em] text-muted-foreground uppercase',
+        active && 'bg-sky/14 text-foreground shadow-[inset_0_0_0_2px_var(--sky)]',
+      )}
+    >
+      <KnIcon glyph={glyph} className="size-[30px]" />
+      {label}
+    </Link>
   )
 }
 

@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router'
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts'
 import { EmptyState, LoadingBlock } from '@/components/empty-state'
 import { ColorDot, ResultBadge } from '@/components/game-bits'
+import { UnitCard } from '@/components/unit-card'
 import { KnIcon } from '@/components/kn-icon'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -248,48 +249,29 @@ function OverviewBody({
             const lead = i === 0
             return (
               <li key={u.id}>
-                <Link
-                  to={gamesLink({ kpi: c.link.kpi })}
-                  className={cn(
-                    'panel panel-link flex h-full flex-col gap-2 p-5',
-                    lead && 'border-brand-lip bg-brand text-on-brand shadow-[0_4px_0_var(--brand-lip)]',
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className={cn('text-xs font-extrabold tracking-[.06em] uppercase', !lead && 'text-muted-foreground')}>
-                      Unit {i + 1}
-                      {lead ? ' · Now' : u.done ? ' · Done' : ''}
-                    </span>
-                    {!lead && !u.done && <KnIcon glyph="lock" className="size-6" />}
-                    {u.done && <KnIcon glyph="check" className="size-6" />}
-                  </div>
-                  <h3 className="font-heading text-lg font-semibold">{u.title}</h3>
-                  <p className="font-heading text-3xl font-bold">
-                    <CountUpText text={c.value(kpis)} />
-                    <span className={cn('font-sans text-base font-semibold', !lead && 'text-muted-foreground')}> {c.suffix}</span>
-                  </p>
-                  <p className="text-sm font-extrabold">
-                    {delta && delta !== 'none' && delta.value !== 0 && (
-                      <span className={cn(!lead && (delta.better ? 'text-brand-text' : 'text-danger-text'))}>
-                        {delta.value > 0 ? '▲' : '▼'} {delta.text}{' '}
-                      </span>
-                    )}
-                    <span className={cn('font-semibold', !lead && 'text-muted-foreground')}>
-                      {lead ? `target ${unitCopy(u).target}` : c.context(kpis)}
-                    </span>
-                  </p>
-                  {lead && (
+                <UnitCard
+                  n={i + 1}
+                  title={u.title}
+                  lead={lead}
+                  done={u.done}
+                  value={<CountUpText text={c.value(kpis)} />}
+                  suffix={c.suffix}
+                  line={
                     <>
-                      <div className="mt-1 h-3 overflow-hidden rounded-full bg-brand-lip">
-                        <div className="h-full rounded-full bg-on-brand" style={{ width: `${Math.max(4, (u.check.hits / u.check.size) * 100)}%` }} />
-                      </div>
-                      <p className="text-[13px] font-extrabold">Unit check: {unitCopy(u).checkProgress}</p>
+                      {delta && delta !== 'none' && delta.value !== 0 && (
+                        <span className={cn(!lead && (delta.better ? 'text-brand-text' : 'text-danger-text'))}>
+                          {delta.value > 0 ? '▲' : '▼'} {delta.text}{' '}
+                        </span>
+                      )}
+                      <span className={cn('font-semibold', !lead && 'text-muted-foreground')}>
+                        {lead ? `target ${unitCopy(u).target}` : c.context(kpis)}
+                      </span>
                     </>
-                  )}
-                  <span className={cn('mt-auto flex items-center gap-1 pt-1 text-xs', lead ? 'font-bold' : 'text-muted-foreground')}>
-                    {c.link.text} <ArrowRightIcon className="size-3" />
-                  </span>
-                </Link>
+                  }
+                  check={{ progress: u.check.hits / u.check.size, text: unitCopy(u).checkProgress }}
+                  to={gamesLink({ kpi: c.link.kpi })}
+                  linkText={c.link.text}
+                />
               </li>
             )
           })}

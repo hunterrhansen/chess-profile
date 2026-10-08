@@ -12,7 +12,7 @@ const SITE: Record<string, { name: string; initial: string; tag: string }> = {
 }
 const STEP: Record<string, string> = { analyze: 'analysing', patterns: 'tagging tactics', backup: 'backing up' }
 
-type Tone = 'ok' | 'running' | 'idle' | 'partial' | 'failed'
+export type Tone = 'ok' | 'running' | 'idle' | 'partial' | 'failed'
 const DOT: Record<Tone, string> = {
   ok: 'bg-brand',
   running: 'bg-sky animate-pulse',
@@ -106,19 +106,9 @@ export function AccountStatus({ collapsed }: { collapsed: boolean }) {
             collapsed && 'justify-center px-0',
           )}
         >
-          <Avatar initial={name[0]} sources={data.accounts.map((a) => a.source)} dot={collapsed ? s.tone : null} />
-          {!collapsed && (
-            <>
-              <span className="min-w-0 flex-1 leading-tight">
-                <span className="block truncate font-extrabold">{name}</span>
-                <span className={cn('flex items-center gap-1.5 text-xs', TEXT[s.tone])}>
-                  <span className={cn('size-2 shrink-0 rounded-full', DOT[s.tone])} />
-                  <span className="truncate">{s.short}</span>
-                </span>
-              </span>
-              {open ? <CaretUpIcon className="size-3.5 text-muted-foreground" /> : <CaretDownIcon className="size-3.5 text-muted-foreground" />}
-            </>
-          )}
+          <AccountRow name={name} sources={data.accounts.map((a) => a.source)} tone={s.tone} line={s.short} collapsed={collapsed} />
+          {!collapsed &&
+            (open ? <CaretUpIcon className="size-3.5 text-muted-foreground" /> : <CaretDownIcon className="size-3.5 text-muted-foreground" />)}
         </button>
       </PopoverTrigger>
       <PopoverContent side={collapsed ? 'right' : 'top'} align={collapsed ? 'end' : 'start'} className="panel w-72 gap-1 p-2">
@@ -161,6 +151,37 @@ export function AccountStatus({ collapsed }: { collapsed: boolean }) {
         </Link>
       </PopoverContent>
     </Popover>
+  )
+}
+
+/** You and the daily update: the avatar wearing a tag per site, your name, and the update's
+ * status as a dot and a short line. Collapsed (the icon rail), only the avatar, the dot on it. */
+export function AccountRow({
+  name,
+  sources,
+  tone,
+  line,
+  collapsed,
+}: {
+  name: string
+  sources: string[]
+  tone: Tone
+  line: string
+  collapsed?: boolean
+}) {
+  return (
+    <>
+      <Avatar initial={name[0]} sources={sources} dot={collapsed ? tone : null} />
+      {!collapsed && (
+        <span className="min-w-0 flex-1 leading-tight">
+          <span className="block truncate font-extrabold">{name}</span>
+          <span className={cn('flex items-center gap-1.5 text-xs', TEXT[tone])}>
+            <span className={cn('size-2 shrink-0 rounded-full', DOT[tone])} />
+            <span className="truncate">{line}</span>
+          </span>
+        </span>
+      )}
+    </>
   )
 }
 

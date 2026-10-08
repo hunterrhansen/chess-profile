@@ -3,6 +3,7 @@ import { Link, useLocation, useParams } from 'react-router'
 import { Confetti } from '@/components/confetti'
 import { LogoLoader } from '@/components/logo'
 import { KnIcon } from '@/components/kn-icon'
+import { MarkRow } from '@/components/mark-row'
 import { MoveBadge } from '@/components/move-badge'
 import { MoveText } from '@/components/move-text'
 import { Button } from '@/components/ui/button'
@@ -11,7 +12,7 @@ import { CountUp } from '@/components/ui/count-up'
 import { Progress } from '@/components/ui/progress'
 import { StatLabel, StatValue } from '@/components/ui/stat'
 import { type GameDetail, type Home, useApi } from '@/lib/api'
-import { type StepMark, bestMoment, keyMoments, moveLabel } from '@/lib/key-moments'
+import { bestMoment, keyMoments, moveLabel } from '@/lib/key-moments'
 import { timeControl } from '@/lib/format'
 import { useWide } from '@/lib/motion'
 import { unitCopy } from '@/lib/units'
@@ -22,15 +23,6 @@ const TILE = {
   brand: 'bg-brand text-on-brand shadow-[0_4px_0_var(--brand-lip)]',
   gold: 'bg-gold text-on-gold shadow-[0_4px_0_var(--gold-lip)]',
   danger: 'bg-danger text-on-danger shadow-[0_4px_0_var(--danger-lip)]',
-}
-
-const MARK: Record<StepMark, { className: string; label: string }> = {
-  found: { className: 'bg-brand', label: 'found' },
-  good: { className: 'bg-[color-mix(in_srgb,var(--brand)_50%,var(--card))]', label: 'a good move' },
-  helped: { className: 'bg-sky', label: 'found with help' },
-  missed: { className: 'bg-danger', label: 'missed' },
-  praise: { className: 'bg-gold', label: 'a great move' },
-  seen: { className: 'bg-foreground/25', label: 'looked at' },
 }
 
 /**
@@ -66,6 +58,7 @@ export function ReviewDonePage() {
   const { best, fix, inDeck, marks } = summary
   const asked = marks.filter((m) => m.mark !== 'praise' && m.mark !== 'seen')
   const missed = asked.filter((m) => m.mark === 'missed' || m.mark === 'helped')
+  const rowMarks = marks.map((m) => ({ key: m.ply, mark: m.mark, name: moveLabel(m.ply, m.san) }))
   const rise = (order: number) => ({ animationDelay: `calc(var(--duration-celebrate) * 0.5 + ${order} * 80ms)` })
 
   // On a phone, one screen with no scrolling, like the end of a Duolingo lesson: the trophy,
@@ -113,16 +106,7 @@ export function ReviewDonePage() {
                   </span>
                 )}
               </div>
-              <div className="flex gap-1.5">
-                {marks.map((m) => (
-                  <span
-                    key={m.ply}
-                    role="img"
-                    aria-label={`${moveLabel(m.ply, m.san)}: ${MARK[m.mark].label}`}
-                    className={cn('h-3 flex-1 rounded-full', MARK[m.mark].className)}
-                  />
-                ))}
-              </div>
+              <MarkRow marks={rowMarks} barClassName="h-3" />
             </div>
           )}
         </main>
@@ -166,16 +150,7 @@ export function ReviewDonePage() {
               </span>
             )}
           </div>
-          <div className="flex gap-1.5">
-            {marks.map((m) => (
-              <span
-                key={m.ply}
-                role="img"
-                aria-label={`${moveLabel(m.ply, m.san)}: ${MARK[m.mark].label}`}
-                className={cn('h-3.5 flex-1 rounded-full', MARK[m.mark].className)}
-              />
-            ))}
-          </div>
+          <MarkRow marks={rowMarks} />
           {asked.length > 0 && (
             <p className="text-sm text-muted-foreground">
               {missed.length

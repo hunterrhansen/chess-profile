@@ -16,8 +16,12 @@ import {
   XIcon,
 } from '@phosphor-icons/react'
 import { type ReactNode, useState } from 'react'
-import { Avatar } from '@/components/account-status'
-import { NavItem } from '@/components/app-shell'
+import { AccountRow, type Tone } from '@/components/account-status'
+import { NavItem, PhoneTab, PhoneTopBar } from '@/components/app-shell'
+import { FilterPill } from '@/components/filter-pill'
+import { GoalCard, GoalDone, LessonCard, PhoneCounter, UnitBanner, UnitComplete } from '@/components/home-cards'
+import { MarkRow } from '@/components/mark-row'
+import { UnitCard } from '@/components/unit-card'
 import { Board, type BoardArrow } from '@/components/board'
 import { Confetti } from '@/components/confetti'
 import { EmptyState, LoadingBlock } from '@/components/empty-state'
@@ -42,6 +46,7 @@ import type { Classification, DeckAnswer, Game } from '@/lib/api'
 import { CLASSIFICATION } from '@/lib/classification'
 import type { FindMove } from '@/lib/find-move'
 import type { KeyMoment } from '@/lib/key-moments'
+import { MARKS, type Mark } from '@/lib/marks'
 import { BOARDS } from '@/lib/preferences'
 import type { Replay } from '@/lib/replay'
 import { playSound, type SoundName } from '@/lib/sound'
@@ -664,7 +669,7 @@ function Row({ children }: { children: ReactNode }) {
 
 /* ---------------------------------------------------------------------------------------
  * The app's patterns: real components with static example props (no API calls). Where a
- * pattern is laid out inline in its page, the demo copies its markup and says so.
+ * demo needs live data, its note says so.
  * ------------------------------------------------------------------------------------- */
 
 const SPACES = [1, 2, 3, 4, 6, 8, 12] as const
@@ -710,14 +715,14 @@ function SpacingBlock() {
   )
 }
 
-// The same dot and line colors as components/account-status.tsx.
-const SYNC = [
-  ['ok', 'Synced 6:15 AM', 'bg-brand', 'text-muted-foreground'],
-  ['running', 'Updating…', 'bg-sky animate-pulse', 'text-muted-foreground'],
-  ['idle', 'Synced yesterday', 'bg-border', 'text-muted-foreground'],
-  ['partial', 'Synced, with problems', 'bg-gold', 'text-gold-text'],
-  ['failed', 'Update failed', 'bg-danger', 'text-danger-text'],
-] as const
+// The five states of the daily update, as AccountRow shows them.
+const SYNC: [Tone, string][] = [
+  ['ok', 'Synced 6:15 AM'],
+  ['running', 'Updating…'],
+  ['idle', 'Synced yesterday'],
+  ['partial', 'Synced, with problems'],
+  ['failed', 'Update failed'],
+]
 
 /** The sidebar tabs, the phone's bars, and the account row. */
 function NavigationBlock() {
@@ -739,36 +744,20 @@ function NavigationBlock() {
           <NavItem to="/styleguide" active={false} label="Settings" glyph="settings" labelClass="hidden" />
         </div>
         <div className="flex w-full max-w-sm flex-col gap-4">
-          {/* Copies the phone bars' markup in app-shell.tsx and home.tsx. */}
-          <div className="panel flex h-14 items-center gap-2 px-3">
-            <LogoMark className="size-7" />
-            <span className="font-display text-xl font-bold text-brand-text">Knightly</span>
-            <span className="ml-auto flex h-11 items-center gap-1 px-2 text-[15px] font-extrabold tabular-nums">
-              <KnIcon glyph="review" className="size-[26px]" />
+          <PhoneTopBar settingsTo="/styleguide" settingsActive={false} className="panel border-b-2">
+            <PhoneCounter to="/styleguide" glyph="review" label="Today's game: not reviewed yet">
               0/1
-            </span>
-            <span className="flex h-11 items-center gap-1 px-2 text-[15px] font-extrabold tabular-nums">
-              <KnIcon glyph="drill" className="size-6" />
+            </PhoneCounter>
+            <PhoneCounter to="/styleguide" glyph="drill" label="Positions to review: 3 of 10 done">
               3/10
-            </span>
-            <span className="grid size-11 place-items-center">
-              <KnIcon glyph="settings" className="size-[26px]" />
-            </span>
-          </div>
-          <div className="panel grid grid-cols-4 gap-1 px-2 py-1.5">
-            {(['home', 'games', 'play', 'progress'] as const).map((g, i) => (
-              <span
-                key={g}
-                className={cn(
-                  'flex flex-col items-center gap-0.5 rounded-md py-1.5 text-[11px] font-extrabold tracking-[.05em] text-muted-foreground uppercase',
-                  i === 0 && 'bg-sky/14 text-foreground shadow-[inset_0_0_0_2px_var(--sky)]',
-                )}
-              >
-                <KnIcon glyph={g} className="size-[30px]" />
-                {g}
-              </span>
-            ))}
-          </div>
+            </PhoneCounter>
+          </PhoneTopBar>
+          <nav aria-label="Phone tabs (example)" className="panel grid grid-cols-4 gap-1 px-2 py-1.5">
+            <PhoneTab to="/styleguide" active label="Home" glyph="home" />
+            <PhoneTab to="/styleguide" active={false} label="Games" glyph="games" />
+            <PhoneTab to="/styleguide" active={false} label="Play" glyph="play" />
+            <PhoneTab to="/styleguide" active={false} label="Progress" glyph="progress" />
+          </nav>
         </div>
       </div>
       <Demo
@@ -776,21 +765,14 @@ function NavigationBlock() {
         note="AccountStatus (components/account-status.tsx), at the foot of the sidebar: your avatar wearing a tag per site, and the daily update as a dot and a short line. Collapsed, the dot sits on the avatar. Its menu (Run now, each account's rating, Manage accounts) needs live data, so it isn't shown."
       >
         <div className="grid gap-x-6 gap-y-1 rounded-lg bg-sidebar p-1 lg:grid-cols-2">
-          {SYNC.map(([tone, line, dot, text]) => (
+          {SYNC.map(([tone, line]) => (
             <div key={tone} className="flex items-center gap-3 px-2.5 py-2">
-              <Avatar initial="h" sources={['chesscom', 'lichess']} dot={null} />
-              <span className="min-w-0 flex-1 leading-tight">
-                <span className="block truncate font-extrabold">hunter</span>
-                <span className={cn('flex items-center gap-1.5 text-xs', text)}>
-                  <span className={cn('size-2 shrink-0 rounded-full', dot)} />
-                  <span className="truncate">{line}</span>
-                </span>
-              </span>
+              <AccountRow name="hunter" sources={['chesscom', 'lichess']} tone={tone} line={line} />
               <code className="font-mono text-xs text-muted-foreground">{tone}</code>
             </div>
           ))}
           <div className="flex items-center gap-3 px-2.5 py-2">
-            <Avatar initial="h" sources={['chesscom']} dot="failed" />
+            <AccountRow name="hunter" sources={['chesscom']} tone="failed" line="Update failed" collapsed />
             <span className="text-sm text-muted-foreground">Collapsed: the dot on the avatar</span>
           </div>
         </div>
@@ -804,62 +786,36 @@ function HomeBlock() {
   return (
     <Block
       title="Home path"
-      note="PathNode (components/path-node.tsx) for each step: done, current (ringed, a sky tag, the only beacon), locked, the unit check. The banner, lesson card and goal cards are laid out in pages/home.tsx; these copy them."
+      note="PathNode (components/path-node.tsx) for each step: done, current (ringed, a sky tag, the only beacon), locked, the unit check. UnitBanner, LessonCard, GoalCard, GoalDone and UnitComplete (components/home-cards.tsx) around it."
     >
       <div className="grid gap-4 md:grid-cols-[1fr_20rem]">
         <div className="flex flex-col gap-5">
-          <div className="rounded-xl bg-brand px-5 py-4 text-on-brand shadow-[0_4px_0_var(--brand-lip)]">
-            <p className="text-[13px] font-extrabold tracking-[.06em] uppercase opacity-80">Unit 1 · Your main focus</p>
-            <h3 className="mt-0.5 font-heading text-2xl font-bold">Stop hanging pieces</h3>
-            <p className="mt-1">2.3 blunders a game. Get it under 1.5.</p>
-            <div className="mt-3 flex items-center gap-2.5">
-              <div className="h-3 flex-1 overflow-hidden rounded-full bg-brand-lip">
-                <div className="h-full w-3/10 rounded-full bg-on-brand" />
-              </div>
-              <span className="text-[13px] font-extrabold">3 of 10 games under 1.5</span>
-            </div>
-          </div>
+          <UnitBanner as="h3" title="Stop hanging pieces" goal="2.3 blunders a game. Get it under 1.5." progress={0.3} progressText="3 of 10 games under 1.5" />
           <div className="panel flex flex-wrap items-end justify-around gap-6 p-5">
             <PathNode state="done" label="Reviewed today's game" />
             <PathNode state="current" glyph="drill" label="Today's positions" tag="7 left" onClick={() => {}} expanded />
             <PathNode state="locked" glyph="play" label="Play the bot" />
             <PathNode state="check" label="Unit check: under 1.5 blunders over 10 games" />
           </div>
-          <Card className="w-full max-w-sm gap-3 self-center border-brand px-5 text-left shadow-[0_4px_0_var(--brand-lip)]">
-            <p className="eyebrow">Your review deck · about 5 minutes</p>
-            <h3 className="font-heading text-xl font-semibold">Review today's positions</h3>
-            <p className="text-muted-foreground">
-              7 positions from your own games are due. Found ones come back later and later; misses come back sooner.
-            </p>
-            <Button size="lg" className="w-full">
-              Start
-            </Button>
-          </Card>
+          <LessonCard
+            className="self-center"
+            eyebrow="Your review deck · about 5 minutes"
+            title="Review today's positions"
+            body="7 positions from your own games are due. Found ones come back later and later; misses come back sooner."
+            cta="Start"
+            to="/styleguide"
+          />
         </div>
         <div className="flex flex-col gap-4">
-          <Card className="gap-3.5 px-5">
-            <div className="flex items-center gap-3">
-              <KnIcon glyph="goal" className="size-9" />
-              <h3 className="font-heading text-xl font-semibold">Today's goal</h3>
-            </div>
+          <GoalCard>
             <Progress label="Today's game" value={100} valueText="1 of 1" />
             <Progress label="Positions to review" tone="sky" value={30} valueText="3 of 10" />
             <Button variant="outline" className="w-full">
               Review positions
             </Button>
-          </Card>
-          <Card className="items-center gap-2.5 border-gold-lip bg-gold px-5 text-center text-on-gold shadow-[0_4px_0_var(--gold-lip)]">
-            <KnIcon glyph="trophy" className="size-16" />
-            <h3 className="font-heading text-2xl font-bold">Today's goal done!</h3>
-            <p className="text-sm">Game reviewed and 10 positions cleared. The next ones come due tomorrow.</p>
-          </Card>
-          <div className="flex items-center gap-4 rounded-xl bg-gold px-5 py-4 text-on-gold shadow-[0_4px_0_var(--gold-lip)]">
-            <KnIcon glyph="trophy" className="size-14" />
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-extrabold tracking-[.06em] uppercase">Unit complete</p>
-              <p className="font-heading text-xl font-bold">Stop hanging pieces</p>
-            </div>
-          </div>
+          </GoalCard>
+          <GoalDone>Game reviewed and 10 positions cleared. The next ones come due tomorrow.</GoalDone>
+          <UnitComplete title="Stop hanging pieces" />
         </div>
       </div>
     </Block>
@@ -1058,36 +1014,24 @@ function LessonBlock() {
   )
 }
 
-// The same marks as pages/review-done.tsx and pages/practice.tsx (Done for today).
-const MARKS = [
-  ['found', 'bg-brand'],
-  ['a good move', 'bg-[color-mix(in_srgb,var(--brand)_50%,var(--card))]'],
-  ['found with help', 'bg-sky'],
-  ['missed', 'bg-danger'],
-  ['a great move', 'bg-gold'],
-] as const
-const MARK_ROW = [0, 0, 1, 3, 0, 4, 2, 0, 3, 0]
+const MARK_ROW: Mark[] = ['found', 'found', 'good', 'missed', 'found', 'praise', 'helped', 'found', 'missed', 'found']
 
 /** The row of marks on Review complete and Done for today. */
 function MarksBlock() {
   return (
     <Block
       title="Marks"
-      note="One mark per position or key moment, on Review complete and Done for today. Each has an aria-label saying how it went, and the line under the row names the misses."
+      note="MarkRow (components/mark-row.tsx): one mark per position or key moment, on Review complete and Done for today. Each has an aria-label saying how it went, and the line under the row names the misses."
     >
       <div className="panel flex flex-col gap-3 p-5">
         <p className="eyebrow">Today, one by one</p>
-        <div className="flex gap-1.5">
-          {MARK_ROW.map((m, i) => (
-            <span key={i} role="img" aria-label={`Position ${i + 1}: ${MARKS[m][0]}`} className={cn('h-3.5 flex-1 rounded-full', MARKS[m][1])} />
-          ))}
-        </div>
+        <MarkRow marks={MARK_ROW.map((mark, i) => ({ key: i, mark, name: `Position ${i + 1}` }))} />
         <p className="text-sm text-muted-foreground">To go over again: 12. Nf5 vs woolcap, 24…Kf8 vs woolcap.</p>
         <div className="flex flex-wrap gap-x-5 gap-y-2 border-t-2 pt-3">
-          {MARKS.map(([label, cls]) => (
-            <span key={label} className="flex items-center gap-2 text-sm">
-              <span className={cn('h-3 w-6 rounded-full', cls)} />
-              {label}
+          {(['found', 'good', 'helped', 'missed', 'praise'] as Mark[]).map((m) => (
+            <span key={m} className="flex items-center gap-2 text-sm">
+              <span className={cn('h-3 w-6 rounded-full', MARKS[m].className)} />
+              {MARKS[m].label}
             </span>
           ))}
         </div>
@@ -1190,25 +1134,15 @@ const GAMES: Game[] = [
 
 /** The quick filters and a game's card. */
 function GamesBlock() {
+  const [pill, setPill] = useState(1)
   return (
     <Block
       title="Games"
-      note="The quick filters with their counts (copied from pages/games.tsx); the chosen one is ink. GameRow: one game as a card that lifts on hover."
+      note="FilterPill (components/filter-pill.tsx): the quick filters with their counts; the chosen one is ink. GameRow: one game as a card that lifts on hover."
     >
-      <div className="flex flex-wrap gap-2">
+      <div role="tablist" aria-label="Quick filters (example)" className="flex flex-wrap gap-2">
         {QUICK_PILLS.map(([label, count], i) => (
-          <span
-            key={label}
-            className={cn(
-              'inline-flex h-10 shrink-0 items-center gap-2 rounded-md px-3.5 text-sm font-extrabold',
-              i === 1 ? 'bg-foreground text-background' : 'bg-card text-foreground shadow-[inset_0_0_0_2px_var(--line),0_2px_0_var(--lip)]',
-            )}
-          >
-            {label}
-            <span className={cn('rounded-sm px-1.5 py-0.5 text-xs tabular-nums', i === 1 ? 'bg-background/20' : 'bg-surface-muted text-muted-foreground')}>
-              {count}
-            </span>
-          </span>
+          <FilterPill key={label} label={label} count={count} on={i === pill} onClick={() => setPill(i)} />
         ))}
       </div>
       <div className="flex flex-col gap-2.5">
@@ -1220,7 +1154,7 @@ function GamesBlock() {
   )
 }
 
-/** Progress's unit cards: the lead one in brand, the rest locked or done (copied from pages/overview.tsx). */
+/** Progress's unit cards (UnitCard): the lead one in brand, the rest locked or done. */
 function UnitCardsBlock() {
   const cards = [
     { n: 1, title: 'Stop hanging pieces', value: '2.3', suffix: 'blunders a game', line: 'target under 1.5', state: 'lead' },
@@ -1231,42 +1165,21 @@ function UnitCardsBlock() {
   return (
     <Block title="Units" note="Progress's unit cards: one per KPI, Unit 1 (your weakest) in brand with its unit check, the rest locked or done. Each links to its games.">
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {cards.map((c) => {
-          const lead = c.state === 'lead'
-          return (
-            <a
-              key={c.n}
-              href="#units"
-              className={cn('panel panel-link flex h-full flex-col gap-2 p-5', lead && 'border-brand-lip bg-brand text-on-brand shadow-[0_4px_0_var(--brand-lip)]')}
-            >
-              <div className="flex items-center justify-between">
-                <span className={cn('text-xs font-extrabold tracking-[.06em] uppercase', !lead && 'text-muted-foreground')}>
-                  Unit {c.n}
-                  {lead ? ' · Now' : c.state === 'done' ? ' · Done' : ''}
-                </span>
-                {c.state === 'locked' && <KnIcon glyph="lock" className="size-6" />}
-                {c.state === 'done' && <KnIcon glyph="check" className="size-6" />}
-              </div>
-              <h3 className="font-heading text-lg font-semibold">{c.title}</h3>
-              <p className="font-heading text-3xl font-bold">
-                {c.value}
-                <span className={cn('font-sans text-base font-semibold', !lead && 'text-muted-foreground')}> {c.suffix}</span>
-              </p>
-              <p className={cn('text-sm font-semibold', !lead && 'text-muted-foreground')}>{c.line}</p>
-              {lead && (
-                <>
-                  <div className="mt-1 h-3 overflow-hidden rounded-full bg-brand-lip">
-                    <div className="h-full w-3/10 rounded-full bg-on-brand" />
-                  </div>
-                  <p className="text-[13px] font-extrabold">Unit check: 3 of 10 games under 1.5</p>
-                </>
-              )}
-              <span className={cn('mt-auto flex items-center gap-1 pt-1 text-xs', lead ? 'font-bold' : 'text-muted-foreground')}>
-                Games <ArrowRightIcon className="size-3" />
-              </span>
-            </a>
-          )
-        })}
+        {cards.map((c) => (
+          <UnitCard
+            key={c.n}
+            n={c.n}
+            title={c.title}
+            lead={c.state === 'lead'}
+            done={c.state === 'done'}
+            value={c.value}
+            suffix={c.suffix}
+            line={<span className={cn('font-semibold', c.state !== 'lead' && 'text-muted-foreground')}>{c.line}</span>}
+            check={{ progress: 0.3, text: '3 of 10 games under 1.5' }}
+            to="/styleguide"
+            linkText="Games"
+          />
+        ))}
       </div>
     </Block>
   )

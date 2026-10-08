@@ -1,6 +1,7 @@
 import { CaretLeftIcon, CaretRightIcon, FunnelIcon, MagnifyingGlassIcon, XIcon } from '@phosphor-icons/react'
 import { CheckIcon } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
+import { FilterPill } from '@/components/filter-pill'
 import { Link, useSearchParams } from 'react-router'
 import { EmptyState } from '@/components/empty-state'
 import { ColorDot, ResultBadge } from '@/components/game-bits'
@@ -108,32 +109,7 @@ export function GamesPage() {
         {QUICK.map((q) => {
           const on = quick?.id === q.id
           const count = data?.counts[q.count]
-          return (
-            <button
-              key={q.id}
-              role="tab"
-              aria-selected={on}
-              onClick={() => pickQuick(q)}
-              className={cn(
-                'inline-flex h-10 shrink-0 items-center gap-2 rounded-md px-3.5 text-sm font-extrabold transition-colors',
-                on
-                  ? 'bg-foreground text-background'
-                  : 'bg-card text-foreground shadow-[inset_0_0_0_2px_var(--line),0_2px_0_var(--lip)] hover:bg-muted',
-              )}
-            >
-              {q.label}
-              {count != null && (
-                <span
-                  className={cn(
-                    'rounded-sm px-1.5 py-0.5 text-xs tabular-nums',
-                    on ? 'bg-background/20' : 'bg-surface-muted text-muted-foreground',
-                  )}
-                >
-                  {count}
-                </span>
-              )}
-            </button>
-          )
+          return <FilterPill key={q.id} label={q.label} count={count} on={on} onClick={() => pickQuick(q)} />
         })}
       </div>
 
