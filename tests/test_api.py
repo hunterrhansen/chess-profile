@@ -147,9 +147,9 @@ def system(monkeypatch):
     calls = {"install": None, "uninstall": 0, "run_now": 0, "spawned": None}
     state = {"schedule": None}
 
-    def install(db_path, hour=6, minute=0, log=print):
+    def install(db_path, hour=6, minute=0, log=print, user="local"):
         calls["install"] = (hour, minute)
-        state["schedule"] = {"hour": hour, "minute": minute, "loaded": True}
+        state["schedule"] = {"hour": hour, "minute": minute, "loaded": True, "user": user}
 
     def uninstall(log=print):
         calls["uninstall"] += 1
@@ -196,7 +196,7 @@ def test_schedule_and_run_now(client, system):
     assert system["spawned"][-3:] == ["update", "--workers", "3"] and system["run_now"] == 0
 
     assert client.put("/api/settings/schedule", json={"enabled": True, "hour": 7, "minute": 30}).json() == {
-        "hour": 7, "minute": 30, "loaded": True}
+        "hour": 7, "minute": 30, "loaded": True, "user": "local"}
     assert system["install"] == (7, 30)
     # Installed: "run now" goes through launchd instead.
     client.post("/api/update/run")

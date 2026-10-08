@@ -12,7 +12,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import config
+from . import config, users
 
 LABEL = "com.knightly.update"
 PLIST = Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
@@ -37,13 +37,14 @@ def _executable() -> str:
     return str(Path(found).resolve())
 
 
-def build_plist(database_url: str, hour: int, minute: int, stockfish: str | None) -> dict:
+def build_plist(database_url: str, hour: int, minute: int, stockfish: str | None,
+                user: str = users.LOCAL) -> dict:
     env = {"PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"}
     if stockfish:
         env["STOCKFISH"] = stockfish
     return {
         "Label": LABEL,
-        "ProgramArguments": [_executable(), "--db", database_url, "update", "--scheduled",
+        "ProgramArguments": [_executable(), "--db", database_url, "--user", user, "update", "--scheduled",
                              "--workers", str(SCHEDULED_WORKERS)],
         "StartCalendarInterval": {"Hour": hour, "Minute": minute},
         "WorkingDirectory": str(config.data_dir().resolve()),  # where backups/ goes
@@ -60,12 +61,12 @@ def _launchctl(*args) -> subprocess.CompletedProcess:
     return subprocess.run(["launchctl", *args], capture_output=True, text=True)
 
 
-def install(database_url: str, hour: int = 6, minute: int = 0, log=print) -> None:
+def install(database_url: str, hour: int = 6, minute: int = 0, log=print, user: str = users.LOCAL) -> None:
     _require_mac()
     stockfish = os.environ.get("STOCKFISH") or shutil.which("stockfish")
     if not stockfish:
         log("warning: Stockfish not found; scheduled runs will sync and back up but not analyse.")
-    plist = build_plist(database_url, hour, minute, stockfish)
+    plist = build_plist(database_url, hour, minute, stockfish, user)
     PLIST.parent.mkdir(parents=True, exist_ok=True)
     LOG.parent.mkdir(parents=True, exist_ok=True)
 
@@ -102,13 +103,15 @@ def run_now(log=print) -> None:
 
 
 def current() -> dict | None:
-    """The installed schedule as {"hour", "minute", "loaded"}, or None if not installed (or
-    not on a Mac)."""
+    """The installed schedule as {"hour", "minute", "loaded", "user"}, or None if not
+    installed (or not on a Mac). `user` is who it updates, "local" for a job from before users."""
     if not config.on_mac() or not PLIST.exists():
         return None
-    when = plistlib.loads(PLIST.read_bytes())["StartCalendarInterval"]
+    plist = plistlib.loads(PLIST.read_bytes())
+    when, args = plist["StartCalendarInterval"], plist["ProgramArguments"]
     loaded = _launchctl("print", f"gui/{os.getuid()}/{LABEL}").returncode == 0
-    return {"hour": when["Hour"], "minute": when["Minute"], "loaded": loaded}
+    user = args[args.index("--user") + 1] if "--user" in args else users.LOCAL
+    return {"hour": when["Hour"], "minute": when["Minute"], "loaded": loaded, "user": user}
 
 
 def status(conn, log=print) -> None:

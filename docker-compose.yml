@@ -24,6 +24,9 @@ services:
     image: knightly
     environment:
       KNIGHTLY_DATABASE_URL: postgresql://knightly:knightly@db/knightly
+      # Local Docker serves one local user. A real server signs people in with Clerk instead:
+      # CLERK_PUBLISHABLE_KEY (and CLERK_WEBHOOK_SECRET), and no KNIGHTLY_AUTH.
+      KNIGHTLY_AUTH: local
     ports:
       - "127.0.0.1:8000:8000"
     volumes:

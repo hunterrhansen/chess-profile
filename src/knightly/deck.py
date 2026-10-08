@@ -140,7 +140,7 @@ def tune(conn, now: datetime | None = None) -> dict:
                        ("fsrs_tuned_reviews", len(logs))):
         conn.execute(
             """INSERT INTO settings (key, value) VALUES (?, ?)
-               ON CONFLICT (key) DO UPDATE SET value = excluded.value""", (key, json.dumps(value)))
+               ON CONFLICT (user_id, key) DO UPDATE SET value = excluded.value""", (key, json.dumps(value)))
     return {**tuning(conn), "tuned": True}
 
 

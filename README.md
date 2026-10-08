@@ -269,6 +269,37 @@ Backups and your own sounds live in the `/data` volume. In the image Knightly ru
 macOS notifications. Settings hides the daily schedule, and Run now logs to the container's
 output. Set `KNIGHTLY_MODE=server` on a Mac to try that behaviour without Docker.
 
+## Users and sign-in
+
+Every row of someone's data carries their `user_id`, and Postgres **row-level security**
+keeps people apart: the app's connections act for one user (they switch to the
+`knightly_app` role and set `app.user_id`), and the database only shows them that user's
+rows. A query that forgets to filter returns nothing, never someone else's games
+([`migrations/0003_users.sql`](src/knightly/migrations/0003_users.sql)).
+
+Who's asking (`KNIGHTLY_AUTH`, [`auth.py`](src/knightly/auth.py)):
+
+- **local** (on your Mac, until Clerk is set up): no sign-in; everything belongs to the
+  `local` user, which is also who owned the data from before Knightly had users.
+- **clerk** (once `CLERK_PUBLISHABLE_KEY` is set): each request carries a Clerk session token
+  (`Authorization: Bearer ...`), checked against Clerk's public keys with no call to Clerk.
+  The first request from a new person creates their user. A server never falls back to
+  local by itself.
+
+Put the keys in a `.env` file (see [`.env.example`](.env.example); it's gitignored) and run
+`uv run --env-file .env knightly serve`. To hand your own history to your Clerk account once
+you've signed in, find your Clerk user id (`user_...`) in Clerk's dashboard, then:
+
+```bash
+uv run knightly users                          # who's here, with their games and accounts
+uv run knightly users link local user_2abc...  # your games, reviews and settings move over
+uv run --env-file .env knightly --user user_2abc... update   # CLI commands act for one user
+```
+
+Deleting an account in Clerk deletes everything of theirs, through a webhook: in Clerk's
+dashboard add one for `user.deleted` pointing at `/api/webhooks/clerk`, and put its signing
+secret in `CLERK_WEBHOOK_SECRET`.
+
 ## Example queries
 
 ```sql
