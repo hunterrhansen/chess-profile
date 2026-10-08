@@ -35,7 +35,8 @@ export function AllMovesPage() {
   const opponent = (me === 'white' ? game?.black : game?.white) ?? 'They'
   const moments = useMemo(() => (replay ? keyMoments(replay.moves, me, opponent) : []), [replay, me, opponent])
   const { prefs } = usePreferences()
-  const wide = useWide()
+  // A tablet held upright gets the phone layout too: the desktop one would stack the moves under the board.
+  const wide = useWide('lg')
   // With the "on request" preference, the best move stays hidden until asked for, per move.
   const [revealedPly, setRevealedPly] = useState<number | null>(null)
   const showBest = prefs.bestArrow === 'auto' || revealedPly === ply
@@ -159,11 +160,13 @@ export function AllMovesPage() {
     />
   )
 
-  // On a phone: the board on top, the move you're on, a strip of moves to scroll sideways,
-  // and the step buttons with Show the line along the bottom, in reach of a thumb.
+  // On a phone or tablet: the board on top, the move you're on, a strip of moves to scroll
+  // sideways, and the step buttons with Show the line along the bottom, in reach of a thumb.
+  // Exactly the window's height: the board takes what the rest leaves. (The negative margins
+  // undo FocusShell's padding.)
   if (!wide) {
     return (
-      <div className="-mx-4 -my-6 flex min-h-svh flex-col">
+      <div className="-mx-4 -my-6 flex h-svh flex-col md:-mx-8">
         <header className="flex items-center gap-2 border-b-2 bg-card px-2 py-2">
           <Button asChild variant="ghost" size="icon" aria-label={hasLesson ? 'Back to the lesson' : 'Back to games'}>
             <Link to={hasLesson ? `/games/${game.id}` : lastLocation('games-list', '/games')}>
@@ -179,14 +182,17 @@ export function AllMovesPage() {
           </div>
         </header>
 
-        <section aria-label="Board" className="flex flex-col px-4 pt-1.5">
-          {theirStrip(false)}
-          <div className="flex">{board}</div>
-          {yourStrip(false)}
-        </section>
+        {/* 72px: the two player strips. */}
+        <div className="min-h-48 flex-1 px-4 pt-1.5 [container-type:size]">
+          <section aria-label="Board" className="mx-auto flex w-[min(100cqw,calc(100cqh-72px))] flex-col">
+            {theirStrip(false)}
+            <div className="flex">{board}</div>
+            {yourStrip(false)}
+          </section>
+        </div>
 
         {linePanel ? (
-          <div className="panel mx-4 mt-1 overflow-hidden">{linePanel}</div>
+          <div className="panel mx-4 mt-1 shrink-0 overflow-hidden">{linePanel}</div>
         ) : (
           <div className="px-4 pt-1">
             {ply && san ? (
@@ -227,8 +233,7 @@ export function AllMovesPage() {
 
         <MoveStrip san={game.san} moves={replay.moves} ply={ply} me={me} dim={inLine} onSelect={setPly} />
 
-        <div className="flex-1" />
-        <footer className="sticky bottom-0 flex gap-2 border-t-2 bg-card px-4 pt-2.5 pb-[max(14px,env(safe-area-inset-bottom))]">
+        <footer className="mt-2 flex gap-2 border-t-2 bg-card px-4 pt-2.5 pb-[max(14px,env(safe-area-inset-bottom))]">
           <NavButton
             label="Previous move"
             onClick={() => (line ? setStep(step - 1) : setPly(Math.max(0, ply - 1)))}
@@ -576,7 +581,7 @@ function MoveStrip({
     <ol
       ref={listRef}
       aria-label="All moves"
-      className={cn('relative mt-2.5 flex gap-1 overflow-x-auto px-4 pb-1 whitespace-nowrap tabular-nums transition-opacity', dim && 'opacity-40')}
+      className={cn('relative mt-2.5 flex shrink-0 gap-1 overflow-x-auto px-4 pb-1 whitespace-nowrap tabular-nums transition-opacity', dim && 'opacity-40')}
     >
       {san.map((s, i) => {
         const p = i + 1
