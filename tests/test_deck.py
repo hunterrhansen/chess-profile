@@ -1,3 +1,4 @@
+import json
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
@@ -247,3 +248,17 @@ def test_a_quick_clean_find_is_easy(conn):
     hinted = deck.answer(conn, 1, 6, "e7e5", seconds=3, hinted=True, today=DAY, now=NOON)
     assert hinted["rating"] == "again"
     assert deck.mark("easy", True) == "found"
+
+
+def test_the_deck_uses_tuned_parameters_once_there_are_enough_reviews(conn):
+    add_game(conn, 1)
+    add_move(conn, 1, 2)
+    deck.sync(conn)
+    deck.answer(conn, 1, 2, "e7e5", today=DAY, now=NOON)
+    assert deck.tune(conn) == {**deck.tuning(conn), "tuned": False}
+    assert deck.tuning(conn)["reviews"] == 1 and not deck.tuning(conn)["personal"]
+    assert deck.scheduler(conn) is deck.SCHEDULER
+    tuned = [round(p * 1.01, 4) for p in deck.SCHEDULER.parameters]
+    conn.execute("INSERT INTO settings (key, value) VALUES ('fsrs_parameters', ?)", (json.dumps(tuned),))
+    assert deck.tuning(conn)["personal"]
+    assert list(deck.scheduler(conn).parameters) == tuned

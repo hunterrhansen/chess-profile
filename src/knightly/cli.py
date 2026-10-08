@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import analyze, db, patterns, puzzles, schedule, update
+from . import analyze, db, deck, patterns, puzzles, schedule, update
 from .sources import pgn_file
 
 
@@ -97,6 +97,20 @@ def cmd_patterns(conn, args) -> None:
     except KeyboardInterrupt:
         sys.exit(130)
     log(f"-> {m} more tagged from the engine's lines")
+
+
+def cmd_fsrs_optimize(conn, args) -> None:
+    try:
+        result = deck.tune(conn)
+    except ImportError:
+        raise SystemExit("The FSRS optimizer isn't installed. Install it with `uv sync --extra optimizer` "
+                         "(it brings PyTorch, a large download), then run this again.") from None
+    conn.commit()
+    if result["tuned"]:
+        log(f"Tuned FSRS to your {result['reviews']} reviews. The review deck uses these from now on.")
+    else:
+        log(f"Not enough reviews to tune yet: {result['reviews']} of {result['needed']}. "
+            "The deck keeps FSRS's default settings, which are fine until then.")
 
 
 def cmd_puzzles(conn, args) -> None:
@@ -215,6 +229,10 @@ def main(argv=None) -> None:
     s.add_argument("--hour", type=int, default=6, help="Hour to run, 0-23 (default: 6)")
     s.add_argument("--minute", type=int, default=0)
     s.set_defaults(func=cmd_schedule)
+
+    s = sub.add_parser("fsrs-optimize", help="Tune the review deck's FSRS scheduler to your own answers, "
+                       "like Anki's Optimize (needs 512+ reviews and `uv sync --extra optimizer`)")
+    s.set_defaults(func=cmd_fsrs_optimize)
 
     s = sub.add_parser("stats", help="Summary of what's in the database")
     s.set_defaults(func=cmd_stats)
