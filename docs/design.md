@@ -84,6 +84,13 @@ which are the same in both themes. Its states, each on `/styleguide`:
 - **Check shows the attack:** the king's square goes solid red (`--check`) and the squares from
   the checking piece to the king are tinted (`--check-path`). A knight has no path: just its own
   square is tinted. Worked out from the position, so every board does it.
+- **Checkmate, "the king falls":** check's red square and path, then the mated king tips onto
+  its side (`animate-topple`, 380 ms after the piece lands, a bounce), a red **#** badge pops on
+  it (820 ms) and the winner's king gets a crown (980 ms), with the `checkmate` sound. It plays
+  once: the first time the mate lands on that board by a move. A reload, a jump or coming back
+  to it shows the last frame. Marks on the top row sit inside the square. In Play the result
+  follows (`MateCard`): a gold card with the trophy and confetti when you mate the bot, a calm
+  card with the # when it mates you; other endings keep a line of text.
 - **Badge:** the move's classification on the square it landed on (`MoveBadge pop`).
 - **Hint:** `glow` puts a gold glow on the piece to move (`animate-hint`, which breathes until
   you move it). The hint's second step is a `best` arrow. See Lessons.
@@ -310,14 +317,15 @@ Rules:
 
 Sounds pair with the motion: a wooden piece on a wooden board when a piece lands, a chime when you're right, a
 fanfare with the confetti. They're made in the browser with the Web Audio API
-(`lib/sound.ts`), with no audio files, and Settings has an on/off switch (on by default).
+(`lib/sound.ts`); recordings in the `sounds/` folder replace some of them (README: Sounds). Settings has an on/off switch (on by default).
 
 | Sound | Plays when | Wired in |
 | --- | --- | --- |
-| `move`, `capture`, `check`, `castle`, `promote` | A board's position changes by one move (one back plays `move`; a jump is silent), as the piece lands: after the slide, or at once for a dragged piece | `useMoveSound` in `Board` |
+| `move`, `capture`, `check`, `checkmate`, `castle`, `promote` | A board's position changes by one move (one back plays `move`; a jump is silent), as the piece lands: after the slide, or at once for a dragged piece | `useMoveSound` in `Board` |
 | `right` / `wrong` | A practice answer is checked, with the square's flash | `practice.tsx` |
 | `brilliant` | A Brilliant or Great badge lands with its ring | `MoveBadge pop` |
-| `win` / `gameOver` | A game against the bot ends (won / lost or drawn) | `play.tsx` |
+| `gameStart` | A game against the bot starts (Play, Rematch) | `play.tsx` |
+| `win` / `gameOver` | A game against the bot ends other than by mate (won / lost or drawn); a mate has `checkmate` already | `play.tsx` |
 | `celebrate` | Confetti fires | `Confetti` (pass `silent` to skip) |
 
 Rules:

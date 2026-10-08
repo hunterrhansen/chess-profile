@@ -341,6 +341,44 @@ const BOARD_STATES: { title: string; note: string; props: Omit<React.ComponentPr
   },
 ]
 
+const BEFORE_MATE = 'r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4'
+const MATE = 'r1bqkb1r/pppp1Qpp/2n2n2/4p3/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 0 4'
+
+/** Checkmate, "the king falls": it plays when the mate lands by a move, so the demo plays it. */
+function CheckmateDemo() {
+  const [fen, setFen] = useState(MATE)
+  // A board plays the fall once, so stepping back sets up a fresh board to play it on.
+  const [round, setRound] = useState(0)
+  const mated = fen === MATE
+  return (
+    <div className="flex flex-col gap-2">
+      <Board
+        key={round}
+        palette={BOARDS.sage}
+        orientation="white"
+        className="flex-none"
+        fen={fen}
+        lastMove={mated ? { from: 'h5', to: 'f7' } : { from: 'g8', to: 'f6' }}
+      />
+      <div className="mt-2">
+        <h3 className="flex items-center gap-2 font-heading text-lg font-semibold">
+          Checkmate
+          <Button size="sm" variant="outline" className="ml-auto" onClick={() => {
+            if (mated) setRound((r) => r + 1)
+            setFen(mated ? BEFORE_MATE : MATE)
+          }}>
+            {mated ? 'Back a move' : 'Play Qxf7#'}
+          </Button>
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          The king falls: check&apos;s red and path, the king tips onto its side, a # lands on it, the winner&apos;s king
+          gets a crown. Once, as the mate lands by a move; otherwise the last frame.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 /** The board in each of its states, with the piece set. */
 function BoardBlock() {
   return (
@@ -358,6 +396,7 @@ function BoardBlock() {
             </div>
           </div>
         ))}
+        <CheckmateDemo />
       </div>
       <div className="panel flex flex-wrap justify-center gap-2 p-4">
         {(['w', 'b'] as const).flatMap((side) =>
@@ -383,7 +422,7 @@ const EASINGS = [
 const SOUND_GROUPS: [string, [SoundName, string][]][] = [
   ['Board', [['move', 'Move'], ['capture', 'Capture'], ['check', 'Check'], ['castle', 'Castle'], ['promote', 'Promote']]],
   ['Answers', [['right', 'Right'], ['wrong', 'Wrong'], ['brilliant', 'Brilliant']]],
-  ['Moments', [['win', 'Game won'], ['gameOver', 'Game over'], ['celebrate', 'Celebrate']]],
+  ['Moments', [['gameStart', 'Game start'], ['checkmate', 'Checkmate'], ['win', 'Game won'], ['gameOver', 'Game over'], ['celebrate', 'Celebrate']]],
 ]
 
 /** The motion tokens and every animation, each one replayable. */

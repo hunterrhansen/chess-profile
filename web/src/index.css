@@ -71,6 +71,7 @@
     --animate-hop: hop 1.2s var(--ease-move) infinite;
     --animate-hint: hint 1.6s ease-in-out infinite;
     --animate-confetti: confetti var(--duration-celebrate) var(--ease-out) both;
+    --animate-topple: topple 620ms var(--ease-bounce) both;
     /* a badge lands: grows past its size, settles */
     @keyframes pop {
         0% { transform: scale(0); opacity: 0; }
@@ -97,6 +98,13 @@
     @keyframes hint {
         0%, 100% { box-shadow: inset 0 0 0 0.7cqw var(--gold), 0 0 0 0 color-mix(in srgb, var(--gold) 55%, transparent); }
         50% { box-shadow: inset 0 0 0 0.7cqw var(--gold), 0 0 0 0.9cqw color-mix(in srgb, var(--gold) 0%, transparent); }
+    }
+    /* checkmate: the mated king tips onto its side, overshoots a little, settles */
+    @keyframes topple {
+        0% { transform: none; filter: none; }
+        55% { transform: rotate(-98deg) translate(6%, 4%); }
+        75% { transform: rotate(-86deg) translate(6%, 4%); }
+        100% { transform: rotate(-90deg) translate(6%, 4%); filter: saturate(0.6); }
     }
     /* a verdict slides up into place */
     @keyframes sheet {

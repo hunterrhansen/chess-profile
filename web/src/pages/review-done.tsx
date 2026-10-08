@@ -8,11 +8,13 @@ import { MoveText } from '@/components/move-text'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader } from '@/components/ui/card'
 import { CountUp } from '@/components/ui/count-up'
+import { Progress } from '@/components/ui/progress'
 import { StatLabel, StatValue } from '@/components/ui/stat'
-import { type GameDetail, useApi } from '@/lib/api'
+import { type GameDetail, type Home, useApi } from '@/lib/api'
 import { type StepMark, bestMoment, keyMoments, moveLabel } from '@/lib/key-moments'
 import { timeControl } from '@/lib/format'
 import { useWide } from '@/lib/motion'
+import { unitCopy } from '@/lib/units'
 import { cn } from '@/lib/utils'
 
 // A tile's colored band: its fill, its text, its ledge.
@@ -42,6 +44,9 @@ export function ReviewDonePage() {
   const celebrate = !!(useLocation().state as { celebrate?: boolean } | null)?.celebrate
   const { data: game, error } = useApi<GameDetail>(`/api/games/${id}`)
   const wide = useWide()
+  // Your current unit, for its bar under the numbers (desktop only).
+  const { data: home } = useApi<Home>('/api/home')
+  const unit = home?.units[0]
   const me = game?.color ?? 'white'
   const opponent = (me === 'white' ? game?.black : game?.white) ?? ''
   const summary = useMemo(() => {
@@ -134,12 +139,13 @@ export function ReviewDonePage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col items-center gap-7 py-6 text-center">
-      <div className="relative grid size-40 place-items-center">
+        // Fits an 800px-tall window without scrolling, unit row and all.
+    <div className="mx-auto flex max-w-2xl flex-col items-center gap-5 text-center">
+      <div className="relative grid size-32 place-items-center">
         <span className="absolute inset-0 rounded-full bg-gold/25" />
         {celebrate && <Confetti />}
         <span className={celebrate ? 'animate-bounce-in' : undefined}>
-          <KnIcon glyph="trophy" className="size-26" />
+          <KnIcon glyph="trophy" className="size-22" />
         </span>
       </div>
 
@@ -235,6 +241,18 @@ export function ReviewDonePage() {
           </CardHeader>
         </Card>
       </div>
+
+      {unit && (
+        <Card className="w-full animate-rise flex-row items-center gap-4 px-5 text-left" style={rise(3)}>
+          <KnIcon glyph="home" className="size-11 shrink-0" />
+          <Progress
+            className="min-w-0 flex-1"
+            label={`Unit 1 · ${unit.title}`}
+            value={(unit.check.hits / unit.check.size) * 100}
+            valueText={unitCopy(unit).checkProgress}
+          />
+        </Card>
+      )}
 
       <div className="flex w-full flex-wrap justify-between gap-3 border-t-2 pt-5">
         <Button asChild variant="outline" size="lg">

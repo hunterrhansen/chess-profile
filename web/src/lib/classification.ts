@@ -1,4 +1,6 @@
-import type { Classification } from './api'
+import type { Classification, MoveRow } from './api'
+import type { Side } from './replay'
+import { cn } from './utils'
 
 /** Badge look for each move classification (thresholds live in analyze.py). Colors are the
  * --move-* tokens in styles/tokens.css; use them in CSS (style), not SVG attributes. */
@@ -19,4 +21,18 @@ export const SOUND: Classification[] = ['brilliant', 'great', 'best', 'excellent
 
 export function isSound(c: Classification | null) {
   return c == null || SOUND.includes(c)
+}
+
+const MARKED: Classification[] = ['brilliant', 'great', 'miss', 'mistake', 'blunder']
+
+/** How a move reads in a move list: the badge it carries (the standout ones only) and its
+ * text color, your bad moves in red and the opponent's greyed. Without `me`, moves stay plain. */
+export function moveLook(ply: number, move: MoveRow | undefined, me?: Side) {
+  const kind = move?.classification
+  const yours = me ? (ply % 2 === 1) === (me === 'white') : true
+  const bad = !!me && yours && (kind === 'mistake' || kind === 'blunder' || kind === 'miss')
+  return {
+    badge: kind && MARKED.includes(kind) ? kind : null,
+    className: cn(!yours && 'text-muted-foreground', bad && 'font-extrabold text-danger-text'),
+  }
 }

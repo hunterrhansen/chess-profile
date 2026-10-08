@@ -1,16 +1,18 @@
-import { CheckIcon, CircleNotchIcon, XIcon } from '@phosphor-icons/react'
+import { CircleNotchIcon, XIcon } from '@phosphor-icons/react'
 import { KnIcon } from '@/components/kn-icon'
 import { LessonBar, LessonVerdict } from '@/components/lesson-bar'
 import { Button } from '@/components/ui/button'
 import type { FindMove } from '@/lib/find-move'
 
 const PIECE: Record<string, string> = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' }
+const REDO_NOTE = "This go is for learning: it won't change when the position comes back."
 
 /**
  * The bottom bar while you find a move: Hint and Show me with a line of help (red after a
  * miss: "Not quite"), then the verdict. Found and a good move are green, found with help is
  * green too (you did find it), Show me is red. `children` is the why, `when` says when the
- * position comes back.
+ * position comes back. `redo` (Practice's end-of-session one more go) says up front that this
+ * try doesn't count.
  */
 export function FindBar({
   find,
@@ -18,6 +20,7 @@ export function FindBar({
   when,
   next = 'Continue',
   busy = false,
+  redo = false,
   onNext,
   onLine,
 }: {
@@ -26,6 +29,7 @@ export function FindBar({
   when?: React.ReactNode
   next?: string
   busy?: boolean
+  redo?: boolean
   onNext: () => void
   onLine?: () => void
 }) {
@@ -47,6 +51,8 @@ export function FindBar({
               : 'Tap a piece, then where it goes. Or drag it.'
     return (
       <LessonBar tone={notQuite ? 'retry' : 'idle'}>
+        {/* On a phone the note leads, above the buttons; from md up it sits under the help. */}
+        {redo && <p className="text-sm text-muted-foreground md:hidden">{REDO_NOTE}</p>}
         <div className="flex shrink-0 gap-2">
           {find.nextHint && (
             <Button variant="outline" onClick={find.askHint} disabled={!find.hintReady || find.checking}>
@@ -58,9 +64,12 @@ export function FindBar({
             Show me
           </Button>
         </div>
-        <p className={notQuite ? 'text-sm font-extrabold text-danger-text' : find.hints ? 'text-sm font-extrabold text-gold-text' : 'text-sm text-muted-foreground'}>
-          {find.error ?? help}
-        </p>
+        <div>
+          <p className={notQuite ? 'text-sm font-extrabold text-danger-text' : find.hints ? 'text-sm font-extrabold text-gold-text' : 'text-sm text-muted-foreground'}>
+            {find.error ?? help}
+          </p>
+          {redo && <p className="hidden text-sm text-muted-foreground md:block">{REDO_NOTE}</p>}
+        </div>
       </LessonBar>
     )
   }
@@ -79,7 +88,7 @@ export function FindBar({
     <LessonBar tone={right ? 'right' : 'wrong'}>
       <LessonVerdict
         tone={right ? 'right' : 'wrong'}
-        icon={right ? <CheckIcon /> : <XIcon />}
+        icon={right ? <KnIcon glyph="check" className="size-12" /> : <XIcon />}
         title={title}
         actions={
           <>
