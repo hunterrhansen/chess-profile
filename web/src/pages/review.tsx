@@ -15,6 +15,7 @@ import { CLASSIFICATION } from '@/lib/classification'
 import { nextTime, shortDate } from '@/lib/format'
 import { type LessonStep, type StepMark, keyMoments, lessonSteps, moveLabel } from '@/lib/key-moments'
 import { lastLocation } from '@/lib/last-location'
+import { tacticHint } from '@/lib/patterns'
 import { type FindOutcome, useFindMove } from '@/lib/find-move'
 import { BOARDS, usePreferences } from '@/lib/preferences'
 import { type Replay, type Side, useEngineLines, useLineView, useReplay } from '@/lib/replay'
@@ -151,7 +152,12 @@ function Step({
   const find = step.type === 'find'
   // Find steps work like Practice: try again after a miss, Hint, Show me; the first try is
   // that position's graded answer for the day (deck.py).
-  const fm = useFindMove({ gameId: game.id, ply, fen: replay.fens[ply - 1] })
+  const fm = useFindMove({
+    gameId: game.id,
+    ply,
+    fen: replay.fens[ply - 1],
+    tactic: tacticHint(move.pattern, step.kind === 'miss' || step.short.startsWith('Missed') ? 'chance' : 'threat'),
+  })
   const answered = !find || !!fm.outcome
   useEffect(() => {
     if (find && fm.outcome) onMark(FIND_MARK[fm.outcome])

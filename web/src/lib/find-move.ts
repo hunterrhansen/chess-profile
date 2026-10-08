@@ -13,20 +13,41 @@ const HINT_DELAY_MS = 2000
  * wasn't the best, found with help (after a miss or a hint), or shown. */
 export type FindOutcome = 'found' | 'good' | 'helped' | 'shown'
 
+/** Hint's rungs, one per tap: the tactic in words (when the position has one), the piece to
+ * move, then the move as an arrow. */
+export type HintRung = 'tactic' | 'piece' | 'move'
+const NEXT_LABEL = (rung: HintRung, first: boolean) =>
+  rung === 'move' ? 'Show the move' : rung === 'piece' && !first ? 'Show the piece' : 'Hint'
+
 /**
  * "Find a better move" for one review-deck position (Practice, and the review lesson's find
- * steps). A wrong move slides back and you try again; Hint lights up the piece, then shows
- * the move as an arrow; Show me gives the answer. Only the first try is graded (deck.py:
+ * steps). A wrong move slides back and you try again; Hint names the tactic (`tactic`, when
+ * there is one), then lights up the piece, then shows the move as an arrow; Show me gives the
+ * answer. Only the first try is graded (deck.py:
  * Anki's grades, scheduled by FSRS); the rest is for learning. `redo` is the end-of-session
  * go at a position you missed, which the server never grades.
  */
-export function useFindMove({ gameId, ply, fen, redo = false }: { gameId: number; ply: number; fen: string; redo?: boolean }) {
+export function useFindMove({
+  gameId,
+  ply,
+  fen,
+  tactic = null,
+  redo = false,
+}: {
+  gameId: number
+  ply: number
+  fen: string
+  tactic?: string | null
+  redo?: boolean
+}) {
   const before = useMemo(() => new Chess(fen), [fen])
   const [selected, setSelected] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
   const [misses, setMisses] = useState(0)
   const [wrongSquare, setWrongSquare] = useState<string | null>(null)
-  const [hints, setHints] = useState(0) // 1: the piece is lit; 2: the arrow is shown
+  const rungs: HintRung[] = tactic ? ['tactic', 'piece', 'move'] : ['piece', 'move']
+  const [hints, setHints] = useState(0) // rungs taken so far
+  const rung = hints ? rungs[hints - 1] : null
   const [hintMove, setHintMove] = useState<string | null>(null)
   const [hintReady, setHintReady] = useState(false)
   const [first, setFirst] = useState<DeckAnswer | null>(null) // the graded first answer
@@ -79,12 +100,14 @@ export function useFindMove({ gameId, ply, fen, redo = false }: { gameId: number
   }
 
   const askHint = () => {
-    if (hints >= 1) return setHints(2)
+    const next = rungs[hints]
+    if (!next) return
+    setWrongSquare(null)
+    if (next !== 'piece' || hintMove) return setHints(hints + 1)
     send<{ best_uci: string }>('POST', '/api/deck/hint', { game_id: gameId, ply })
       .then((r) => {
         setHintMove(r.best_uci)
-        setHints(1)
-        setWrongSquare(null)
+        setHints(hints + 1)
       })
       .catch((e: Error) => setError(`Couldn't get a hint. ${e.message}`))
   }
@@ -114,6 +137,10 @@ export function useFindMove({ gameId, ply, fen, redo = false }: { gameId: number
     checking,
     misses,
     hints,
+    rung,
+    tactic,
+    /** The Hint button's label for the next rung, or null when there are none left. */
+    nextHint: hints < rungs.length ? NEXT_LABEL(rungs[hints], hints === 0) : null,
     hintReady,
     hintPiece: hintPiece && hintMove ? { square: hintMove.slice(0, 2), type: hintPiece.type } : null,
     first,
@@ -128,8 +155,8 @@ export function useFindMove({ gameId, ply, fen, redo = false }: { gameId: number
     /** Board props for the current state. */
     board: {
       lastMove: played ? { from: played.slice(0, 2), to: played.slice(2, 4) } : undefined,
-      hint: hints >= 2 && !outcome ? hintMove : outcome === 'shown' ? (first?.best_uci ?? null) : null,
-      glow: hints === 1 && !outcome && hintMove ? hintMove.slice(0, 2) : null,
+      hint: rung === 'move' && !outcome ? hintMove : outcome === 'shown' ? (first?.best_uci ?? null) : null,
+      glow: rung === 'piece' && !outcome && hintMove ? hintMove.slice(0, 2) : null,
       flash: played
         ? { square: played.slice(2, 4), tone: 'right' as const }
         : wrongSquare && !outcome
