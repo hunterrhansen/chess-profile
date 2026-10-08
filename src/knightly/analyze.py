@@ -18,7 +18,7 @@ import chess
 import chess.engine
 import chess.pgn
 
-from . import brilliance, positions
+from . import brilliance, db, positions
 
 MATE_CP = 10000   # mate-in-N stored as +/-(MATE_CP - N)
 CLAMP_CP = 1000   # evals clamped to this for cp_loss / win% so mates don't dominate averages
@@ -40,7 +40,7 @@ MOVE_COLUMNS = [
     "eval_second",
 ]
 SUMMARY_COLUMNS = [
-    "game_id", "engine", "depth", "user_acpl", "opponent_acpl", "user_accuracy",
+    "game_id", "engine", "depth", "nodes", "user_acpl", "opponent_acpl", "user_accuracy",
     "opponent_accuracy", "user_inaccuracies", "user_mistakes", "user_blunders", "opponent_blunders",
 ]
 
@@ -128,7 +128,7 @@ def _evaluate(engine, board: chess.Board, depth: int | chess.engine.Limit) -> di
 
 
 def analyze_game(engine, game_id: int, pgn: str, user_color: str | None,
-                 time_control: str | None, depth: int, evaluate_all=None) -> list[dict]:
+                 time_control: str | None, depth: int | chess.engine.Limit, evaluate_all=None) -> list[dict]:
     """Evaluate every position in the game and return one dict per half-move.
     `evaluate_all(boards) -> evals` replaces the one-engine loop, e.g. to spread the
     positions over several engines."""
@@ -197,12 +197,22 @@ def analyze_game(engine, game_id: int, pgn: str, user_color: str | None,
     return rows
 
 
-def summarize(game_id: int, rows: list[dict], engine_name: str, depth: int) -> dict:
+def budget(depth: int | None = None, nodes: int | None = None) -> chess.engine.Limit:
+    """How hard to look at each position: a fixed depth when given, else a node budget."""
+    return chess.engine.Limit(depth=depth) if depth else chess.engine.Limit(nodes=nodes or db.DEFAULT_NODES)
+
+
+def describe(limit: chess.engine.Limit) -> str:
+    return f"{limit.nodes / 1000:g}k nodes a move" if limit.nodes else f"depth {limit.depth}"
+
+
+def summarize(game_id: int, rows: list[dict], engine_name: str, depth: int | chess.engine.Limit) -> dict:
     def side(user: int):
         mine = [r for r in rows if r["is_user"] == user]
         return mine, (lambda f: round(sum(f(r) for r in mine) / len(mine), 1) if mine else None)
 
-    summary = {"game_id": game_id, "engine": engine_name, "depth": depth}
+    limit = depth if isinstance(depth, chess.engine.Limit) else chess.engine.Limit(depth=depth)
+    summary = {"game_id": game_id, "engine": engine_name, "depth": limit.depth, "nodes": limit.nodes}
     if not rows or rows[0]["is_user"] is None:
         return summary  # owner unknown: per-move rows are still useful, per-side stats aren't
     me, my_avg = side(1)
@@ -283,10 +293,14 @@ def unanalysed(conn) -> int:
                            AND id NOT IN (SELECT game_id FROM game_analysis)""").fetchone()[0]
 
 
-def run(conn, depth: int = 18, workers: int | None = None, engine_path: str | None = None,
-        force: bool = False, limit: int | None = None, log=print, on_progress=None) -> int:
-    """Analyse games that haven't been analysed yet (or all with force). Returns games analysed.
-    `on_progress(done, total)` is called before the first game and after each one."""
+def run(conn, depth: int | None = None, workers: int | None = None, engine_path: str | None = None,
+        force: bool = False, limit: int | None = None, log=print, on_progress=None,
+        nodes: int | None = None) -> int:
+    """Analyse games that haven't been analysed yet (or all with force), newest first, at
+    most `limit` of them. Each position gets `nodes` (default DEFAULT_NODES), or a fixed
+    `depth` when that's given. Returns games analysed. `on_progress(done, total)` is called
+    before the first game and after each one."""
+    search = budget(depth, nodes)
     engine_path = find_engine(engine_path)
     workers = workers or max(1, (os.cpu_count() or 2) - 1)
     sql = """SELECT id, pgn, user_color, time_control FROM games
@@ -313,10 +327,10 @@ def run(conn, depth: int = 18, workers: int | None = None, engine_path: str | No
 
     def work(game_id, pgn, user_color, time_control):
         engine = get_engine()
-        rows = analyze_game(engine, game_id, pgn, user_color, time_control, depth)
-        return game_id, rows, summarize(game_id, rows, engine.id.get("name", "unknown"), depth)
+        rows = analyze_game(engine, game_id, pgn, user_color, time_control, search)
+        return game_id, rows, summarize(game_id, rows, engine.id.get("name", "unknown"), search)
 
-    log(f"Analysing {len(todo)} games at depth {depth} with {workers} Stockfish workers...")
+    log(f"Analysing {len(todo)} games at {describe(search)} with {workers} Stockfish workers...")
     done, failed, started = 0, 0, time.monotonic()
     pool = ThreadPoolExecutor(max_workers=workers)
     try:

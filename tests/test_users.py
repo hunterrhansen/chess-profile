@@ -116,11 +116,11 @@ def test_nobody_can_open_or_change_anyone_elses_games(two):
 def test_writes_land_on_the_signed_in_user(two, db_url):
     client, a, b = two
     client.post("/api/accounts", headers=as_user("user_bob"), json={"source": "lichess", "handle": "bobby"})
-    client.put("/api/settings/analysis", headers=as_user("user_alice"), json={"depth": 22})
+    client.put("/api/settings/analysis", headers=as_user("user_alice"), json={"nodes": 1_000_000})
     with db.connect(db_url) as owner:
         assert owner.execute("SELECT user_id FROM accounts WHERE handle = 'bobby'").fetchone()[0] == b
-        assert owner.execute("SELECT user_id, value FROM settings").fetchall() == [(a, "22")]
-    assert client.get("/api/settings", headers=as_user("user_bob")).json()["depth"] == 18
+        assert owner.execute("SELECT user_id, value FROM settings").fetchall() == [(a, "1000000")]
+    assert client.get("/api/settings", headers=as_user("user_bob")).json()["nodes"] == 500_000
 
 
 def test_two_people_can_both_have_the_game_they_played_each_other(two, db_url):

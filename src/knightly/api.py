@@ -4,7 +4,7 @@ Every number on the overview is computed from one row per game (GAME_FACTS), and
 games list filters on the same rows, so a KPI and the games it links to always agree.
 
 The only writes are the Settings page's (accounts, the
-analysis depth, and the daily-update schedule, which goes through launchd), cached engine
+analysis budget, and the daily-update schedule, which goes through launchd), cached engine
 lines, games played against the bot, finished game reviews, and the review deck's
 cards and answers.
 """
@@ -269,7 +269,7 @@ class ReviewIn(BaseModel):
 
 
 class AnalysisIn(BaseModel):
-    depth: int = Field(ge=8, le=30)
+    nodes: int = Field(ge=50_000, le=5_000_000)  # positions Stockfish searches per move
 
 
 
@@ -449,9 +449,8 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
     @api.get("/api/games/{game_id}/lines/{ply}")
     def engine_lines(game_id: int, ply: int):
         """The "Why" and "Best line" for one move. Computed with Stockfish the first time
-        (about a second) at the Settings depth, then served from the engine_lines table."""
-        depth_row = query("SELECT value FROM settings WHERE key = 'analysis_depth'")
-        depth = int(depth_row[0]["value"]) if depth_row else db.DEFAULT_DEPTH
+        (about a second, at depth 18), then served from the engine_lines table."""
+        depth = db.DEFAULT_DEPTH
         cached = query("SELECT data FROM engine_lines WHERE game_id = ? AND ply = ? AND depth = ?",
                        (game_id, ply, depth))
         if cached:
@@ -530,12 +529,12 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
 
     @api.post("/api/play/games/{game_id}/analysis")
     def analyse_played(game_id: int):
-        """Engine analysis of one game right away (several seconds), at the Settings depth."""
+        """Engine analysis of one game right away (several seconds), at the Settings budget."""
         with write() as conn:
             if not conn.execute("SELECT 1 FROM games WHERE id = ?", (game_id,)).fetchone():
                 raise HTTPException(404, "game not found")
             try:
-                play.analyse_saved(conn, game_id, play.default_depth(conn))
+                play.analyse_saved(conn, game_id, db.analysis_nodes(conn))
             except SystemExit as e:
                 raise HTTPException(503, str(e)) from None
         return {"analysed": True}
@@ -609,9 +608,9 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
 
         counts = query("""SELECT (SELECT count(*) FROM games) AS games,
                                  (SELECT count(*) FROM game_analysis) AS analysed""")[0]
-        depth = query("SELECT value FROM settings WHERE key = 'analysis_depth'")
         with read() as conn:
             fsrs = deck.tuning(conn)
+            nodes = db.analysis_nodes(conn)
             waiting = jobs.pending(conn)
         return {
             "fsrs": fsrs,
@@ -628,7 +627,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             "current_run": run_json(current[0]) if current else None,
             "running": bool(current) or bool(waiting),
             "engine": engine_name(),
-            "depth": int(depth[0]["value"]) if depth else db.DEFAULT_DEPTH,
+            "nodes": nodes,
             "database": {
                 **dict(query("""SELECT current_database() || ' on ' || coalesce(host(inet_server_addr()), 'this Mac')
                                          AS path, pg_database_size(current_database()) AS bytes""")[0]),
@@ -669,8 +668,8 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
     @api.put("/api/settings/analysis")
     def set_analysis(body: AnalysisIn):
         with write() as conn, conn:
-            db.set_setting(conn, "analysis_depth", body.depth)
-        return {"depth": body.depth}
+            db.set_setting(conn, "analysis_nodes", body.nodes)
+        return {"nodes": body.nodes}
 
     @api.put("/api/settings/schedule")
     def set_schedule(body: ScheduleIn):

@@ -136,8 +136,11 @@ move the project or recreate the virtualenv.
 ## Engine analysis
 
 `knightly analyze` runs [Stockfish](https://stockfishchess.org/) (`brew install stockfish`)
-over every game that doesn't have analysis yet, at depth 18 by default, with one
-single-threaded engine per CPU core. It saves one game at a time, so you can stop it with
+over every game that doesn't have analysis yet, newest first, searching 500,000 positions
+(nodes) per move by default, with one single-threaded engine per CPU core. A node budget makes
+every move cost about the same, and it's cheaper than the old fixed depth 18 for much the same
+labels (`knightly bench`: about 0.65 against 0.9 CPU-minutes a game). `--nodes` changes the
+budget, `--depth` uses a fixed depth instead, and `game_analysis` records which was used. It saves one game at a time, so you can stop it with
 Ctrl-C and re-run it to continue. Run it after each `sync` to analyse new games.
 
 Moves are classified with Chess.com's bands, by how many points the mover's win chance
@@ -235,7 +238,7 @@ uv run knightly fsrs-optimize
 For any move worse than Good, **Why** and **Best line** play an engine line on the board
 (drawn in blue, so it never looks like the real game): how the move gets punished, or what
 should have been played. Lines come from Stockfish on the first click (about a second, at
-the Settings depth), are cached in `engine_lines`, and come with a one-line explanation
+depth 18), are cached in `engine_lines`, and come with a one-line explanation
 written from what the line actually does: mate, material won or lost, or the swing in win
 chance ([`lines.py`](src/knightly/lines.py)). ← → step through the line, Esc returns.
 
@@ -258,8 +261,9 @@ of the overview's stats, and analysed straight away (spread over every core, abo
 - *Daily update*: turn the launchd job on or off, change its time, see the last run, and
   run it now. A running update shows each step live (sync per account, analysis "3 of 5
   games", backup); it runs outside the browser, so closing or reloading the page is fine.
-- *Analysis*: Stockfish depth (stored in the `settings` table; `analyze` and `update` use it
-  unless `--depth` is passed).
+- *Analysis*: how many positions Stockfish searches per move: Fast 200k, Standard 500k, Deep
+  1M (stored in the `settings` table; `analyze`, `update` and the worker use it unless
+  `--nodes` or `--depth` is passed).
 - *Data*: database and backup locations and sizes.
 
 These, cached engine lines, games played on Play, finished reviews and the review deck are the app's only writes to the

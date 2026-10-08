@@ -97,7 +97,8 @@ def fake_update(monkeypatch):
     game_analysis row, and records how it was called."""
     calls = []
 
-    def run(conn, token, workers=None, depth=18, log=print, trigger="manual", analyse_limit=None, sync=True):
+    def run(conn, token, workers=None, depth=None, log=print, trigger="manual", analyse_limit=None, sync=True,
+            nodes=None):
         calls.append({"trigger": trigger, "limit": analyse_limit, "sync": sync})
         todo = conn.execute("""SELECT id FROM games WHERE id NOT IN (SELECT game_id FROM game_analysis)
                                ORDER BY played_at DESC LIMIT ?""", (analyse_limit,)).fetchall()
