@@ -4,7 +4,7 @@
 #
 #   ./apply.sh [minutes to keep trying, default 20]
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit
 
 deadline=$(( $(date +%s) + ${1:-20} * 60 ))
 while :; do
