@@ -1,12 +1,13 @@
 import { Chess, type Square } from 'chess.js'
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { type Arrow, Chessboard } from 'react-chessboard'
+import { KnIcon } from '@/components/kn-icon'
 import { MoveBadge } from '@/components/move-badge'
 import { BOARD_PIECES } from '@/components/pieces'
 import type { Classification } from '@/lib/api'
 import { useMoveMs } from '@/lib/motion'
 import { BOARDS } from '@/lib/preferences'
-import { useMoveSound } from '@/lib/sound'
+import { soundBetween, useMoveSound } from '@/lib/sound'
 import { token } from '@/lib/tokens'
 import { cn } from '@/lib/utils'
 
@@ -55,11 +56,23 @@ export function checkSquares(fen: string): { king: string; path: string[] } | nu
   return { king, path }
 }
 
+/** A checkmate on the board: the mated king's square and the winner's king's. */
+function mateSquares(chess: Chess | null): { mated: string; winner: string } | null {
+  if (!chess?.isCheckmate()) return null
+  const loser = chess.turn()
+  const mated = chess.findPiece({ type: 'k', color: loser })[0]
+  const winner = chess.findPiece({ type: 'k', color: loser === 'w' ? 'b' : 'w' })[0]
+  return mated && winner ? { mated, winner } : null
+}
+
 /**
  * The board, everywhere: Knightly's pieces on a rounded board sitting on its ledge, with the
  * states from the design canvas. Last move in yellow (blue in an engine line), the picked-up
  * piece ringed in sky with its legal moves as dots and rings, arrows, a classification badge,
  * and check shown as the attack: the king's square red and the checker's path tinted.
+ * Checkmate adds "the king falls": the mated king lies on its side with a # badge, and the
+ * winner's king gets a crown. It plays once, the first time the mate lands here by a move;
+ * any other way of arriving (a reload, a jump, coming back to it) shows the last frame.
  *
  * Pass `onMove` to make it playable (click or drag); without it the board is for looking.
  */
@@ -119,6 +132,20 @@ export function Board({
       return null
     }
   }, [fen])
+  const mate = useMemo(() => mateSquares(occupied), [occupied])
+  // Whether the mate falls now: it arrived by one move, for the first time on this board.
+  // (Previous-position state, React's pattern for reacting to a prop change during render.)
+  const [shown, setShown] = useState({ fen, fall: false, seen: mate ? [fen] : ([] as string[]) })
+  if (shown.fen !== fen) {
+    const fall = !!mate && !shown.seen.includes(fen) && soundBetween(shown.fen, fen) === 'checkmate'
+    setShown({ fen, fall, seen: mate && !shown.seen.includes(fen) ? [...shown.seen, fen] : shown.seen })
+  }
+  const fall = shown.fen === fen && shown.fall
+  // After the piece slides in: the king falls, then the # lands, then the crown.
+  // A mark on the top row sits inside its square, so the board's edge doesn't cut it off.
+  const corner = (sq: string) => (sq[1] === (orientation === 'white' ? '8' : '1') ? 'top-0.5 right-0.5' : '-top-2 -right-2')
+  const after = (ms: number): React.CSSProperties =>
+    fall ? { animationDelay: `calc(var(--duration-move) + ${ms}ms)`, animationTimingFunction: 'var(--ease-bounce)' } : { animation: 'none' }
 
   const highlight = (sq: string) =>
     isLightSquare(sq) ? (inLine ? 'var(--line-highlight-light)' : palette.lightHl) : inLine ? 'var(--line-highlight-dark)' : palette.darkHl
@@ -177,7 +204,12 @@ export function Board({
             <div className="relative size-full" style={styles[square]}>
               {check?.path.includes(square) && <span className="pointer-events-none absolute inset-0 bg-check-path" />}
               {check?.king === square && <span className="pointer-events-none absolute inset-0 bg-check" />}
-              <div className="relative size-full">{children}</div>
+              <div
+                className={cn('relative size-full', mate?.mated === square && 'z-[1] [transform:rotate(-90deg)_translate(6%,4%)] [filter:saturate(.6)]', mate?.mated === square && fall && 'animate-topple')}
+                style={mate?.mated === square ? after(380) : undefined}
+              >
+                {children}
+              </div>
               {targets?.has(square) &&
                 (occupied?.get(square as Square) ? (
                   <span className="pointer-events-none absolute inset-[4%] rounded-full shadow-[inset_0_0_0_0.9cqw_var(--move-hint)]" />
@@ -192,6 +224,30 @@ export function Board({
                     flash.tone === 'right' ? 'bg-brand/70' : 'bg-danger/70',
                   )}
                 />
+              )}
+              {mate?.mated === square && (
+                <span
+                  aria-label="Checkmate"
+                  className={cn(
+                    'pointer-events-none absolute z-10 grid size-[38%] max-h-7 max-w-7 animate-pop place-items-center rounded-full bg-danger text-[clamp(11px,1.8vw,16px)] font-black text-on-danger shadow-[inset_0_-2px_0_var(--move-shade),0_0_0_2px_var(--surface)]',
+                    corner(square),
+                  )}
+                  style={after(820)}
+                >
+                  #
+                </span>
+              )}
+              {mate?.winner === square && (
+                <span
+                  aria-label="Winner"
+                  className={cn(
+                    'pointer-events-none absolute z-10 grid size-[42%] max-h-8 max-w-8 animate-pop place-items-center rounded-full bg-card shadow-[0_2px_0_var(--gold-lip),0_0_0_2px_var(--gold)]',
+                    corner(square),
+                  )}
+                  style={after(980)}
+                >
+                  <KnIcon glyph="crown" className="size-[78%]" />
+                </span>
               )}
               {badge?.square === square && (
                 <MoveBadge

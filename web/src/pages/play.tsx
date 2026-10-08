@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { KnIcon } from '@/components/kn-icon'
 import { Board, type Palette } from '@/components/board'
+import { Confetti } from '@/components/confetti'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { send, useApi } from '@/lib/api'
@@ -252,6 +253,7 @@ export function PlayPage() {
     setError(null)
     setAnalysis(null)
     setHeld(null)
+    playSound('gameStart')
     setState({ elo: setup.elo, color, moves: [], startedAt: new Date().toISOString(), blunderCheck: setup.blunderCheck })
   }
 
@@ -295,18 +297,21 @@ export function PlayPage() {
   const result = over && state ? resultText(chess, me, state.resigned) : null
   const elo = state?.elo ?? setup.elo
 
-  // The game ending gets its sound once the last move has landed; a finished game you come
-  // back to stays quiet.
-  const endedBefore = useRef(over)
+  // A game that ends while you watch gets its moment; a finished game you come back to (a
+  // reload) is shown as it ended, quietly.
+  const [cameBack, setCameBack] = useState(over)
+  if (cameBack && !over) setCameBack(false)
+  const live = over && !cameBack
+  // The ending's sound once the last move has landed. A mate needs none: the board plays the
+  // checkmate sound as it lands.
   const outcome = result?.outcome
+  const mate = chess.isCheckmate()
   useEffect(() => {
-    if (!outcome) {
-      endedBefore.current = false
-      return
-    }
-    if (endedBefore.current) return
+    if (!outcome || !live || mate) return
     return playSound(outcome === 'win' ? 'win' : 'gameOver', durationMs('--duration-move') + 150)
-  }, [outcome])
+  }, [outcome, live, mate])
+  // After a mate the result waits for the king to fall (board.tsx); otherwise it comes at once.
+  const resultDelay = { animationDelay: live && mate ? 'calc(var(--duration-move) + 1000ms)' : '0ms' }
 
   return (
     <div className="flex flex-col gap-3">
@@ -380,32 +385,45 @@ export function PlayPage() {
                   </div>
                 )}
                 {result && (
-                  <div className="flex flex-col gap-2 border-b px-3 py-3 text-sm">
-                    <p
-                      className={cn(
-                        'text-base font-semibold',
-                        result.outcome === 'win' ? 'text-win' : result.outcome === 'loss' ? 'text-loss' : 'text-draw',
-                      )}
-                    >
-                      {result.text}
-                    </p>
-                    <div className="flex gap-2">
+                  <div className="relative flex flex-col gap-3 border-b px-3 py-3 text-sm">
+                    {mate ? (
+                      <MateCard
+                        won={result.outcome === 'win'}
+                        bot={botName(state.elo)}
+                        san={san[san.length - 1]}
+                        moveNumber={Math.ceil(san.length / 2)}
+                        live={live}
+                        style={resultDelay}
+                      />
+                    ) : (
+                      <p
+                        className={cn(
+                          'text-base font-semibold',
+                          result.outcome === 'win' ? 'text-win' : result.outcome === 'loss' ? 'text-loss' : 'text-draw',
+                        )}
+                      >
+                        {result.text}
+                      </p>
+                    )}
+                    <div className="flex animate-rise flex-col gap-2" style={resultDelay}>
                       {state.savedId &&
                         (analysis === 'running' ? (
-                          <Button size="sm" disabled>
+                          <Button size="lg" disabled>
                             <CircleNotchIcon className="animate-spin" /> Analysing…
                           </Button>
                         ) : (
-                          <Button size="sm" asChild>
+                          <Button size="lg" asChild>
                             <Link to={`/games/${state.savedId}`}>Review game</Link>
                           </Button>
                         ))}
-                      <Button size="sm" variant="outline" onClick={() => setState(null)}>
-                        New game
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={start}>
-                        Rematch
-                      </Button>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button variant="outline" onClick={start}>
+                          Rematch
+                        </Button>
+                        <Button variant="outline" onClick={() => setState(null)}>
+                          New game
+                        </Button>
+                      </div>
                     </div>
                     {analysis === 'failed' && (
                       <p className="text-muted-foreground">Saved, but the analysis didn't run. `knightly analyze` will pick it up.</p>
@@ -627,5 +645,58 @@ export function PlayBoard({
       onMove={onMove}
       onSelect={onSelect}
     />
+  )
+}
+
+/**
+ * The result after a checkmate, once the king has fallen: a gold card with a trophy and
+ * confetti when you mated the bot, a calm one with the # mark when it mated you.
+ */
+function MateCard({
+  won,
+  bot,
+  san,
+  moveNumber,
+  live,
+  style,
+}: {
+  won: boolean
+  bot: string
+  san: string
+  moveNumber: number
+  live: boolean
+  style: React.CSSProperties
+}) {
+  if (!won) {
+    return (
+      <div className="flex animate-rise flex-col gap-1.5 rounded-xl border-2 bg-card p-3.5" style={style}>
+        <div className="flex items-center gap-2.5">
+          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-danger text-xl font-black text-on-danger shadow-[inset_0_-3px_0_var(--move-shade)]">
+            #
+          </span>
+          <span className="font-heading text-xl font-bold">Checkmated</span>
+        </div>
+        <p className="text-[15px]">
+          {bot} mated you with {san} on move {moveNumber}. The review shows where it turned.
+        </p>
+      </div>
+    )
+  }
+  return (
+    <div
+      className="relative flex animate-rise flex-col items-center gap-1.5 rounded-xl border-2 border-gold-lip bg-gold p-4 text-center text-on-gold shadow-[0_4px_0_var(--gold-lip)]"
+      style={style}
+    >
+      {/* Silent: the checkmate sound is this moment's sound. */}
+      {live && <Confetti silent delay="calc(var(--duration-move) + 1150ms)" />}
+      <span className="grid size-18 animate-bounce-in place-items-center rounded-full bg-card shadow-[0_3px_0_var(--gold-lip)]" style={style}>
+        <KnIcon glyph="trophy" className="size-12" />
+      </span>
+      <span className="text-sm font-extrabold tracking-[.06em] uppercase">Checkmate</span>
+      <span className="font-heading text-xl leading-tight font-bold text-balance">You beat {bot}!</span>
+      <span className="text-sm">
+        {san} on move {moveNumber}. Saved as unrated, so you can review it.
+      </span>
+    </div>
   )
 }
