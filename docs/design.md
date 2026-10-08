@@ -212,6 +212,13 @@ with help, red missed, gold a great move (review only). Each mark is a rounded b
   move loses a lot: a card on a gold ledge with a gold "!" mark, "Blunder check", what the
   reply wins and how your chance drops, then Take it back (`default`) and Play it anyway
   (`ghost`). The board shows the reply as a `danger` arrow.
+- **Sign-in** (`lib/auth.tsx`, once Clerk is set up): full screen on the page color, the
+  `Logo`, "Turn your games into practice" and one line on what Knightly does, then Clerk's
+  sign-in-or-up form themed in our tokens (`appearance`): a panel on its ledge, inputs and
+  the Google button with 2px `line` borders and ledges, Continue in `brand` with `on-brand`
+  letters on its ledge. Clerk's styles win on specificity, so those classes carry `!`. While
+  Clerk loads: `LogoLoader` ("Opening Knightly…"). Signed in: the account's email and Sign
+  out at the top of Settings › Accounts.
 - **Settings** (`pages/settings.tsx`): each section is a `panel` with its KnIcon, title and a
   line of what it's for, then rows: the name and a hint on the left, the control on the
   right. Choices are `Segmented` (the options on a sunken `surface-muted` track, the chosen one

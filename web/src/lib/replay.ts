@@ -1,6 +1,6 @@
 import { Chess } from 'chess.js'
 import { useEffect, useMemo, useState } from 'react'
-import type { EngineLines, GameDetail, LineKind, MoveRow } from '@/lib/api'
+import { apiFetch, type EngineLines, type GameDetail, type LineKind, type MoveRow } from '@/lib/api'
 
 export type Side = 'white' | 'black'
 
@@ -41,7 +41,7 @@ export function useEngineLines(gameId: string | number | undefined, ply: number 
   useEffect(() => {
     if (ply == null || entry) return
     const ctrl = new AbortController()
-    fetch(`/api/games/${gameId}/lines/${ply}`, { signal: ctrl.signal })
+    apiFetch(`/api/games/${gameId}/lines/${ply}`, { signal: ctrl.signal })
       .then(async (res) => {
         const body = await res.json()
         if (!res.ok) throw new Error(body.detail ?? res.status)

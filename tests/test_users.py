@@ -216,3 +216,14 @@ def test_auth_settings(monkeypatch):
     monkeypatch.setenv("KNIGHTLY_MODE", "mac")
     monkeypatch.delenv("KNIGHTLY_AUTH")
     assert auth.from_env() is None  # your own Mac: no sign-in until Clerk is set up
+
+
+def test_linking_takes_effect_on_a_running_server(db_url, clerk):
+    with db.connect(db_url) as owner:  # the local user's history: one game
+        owner.execute("INSERT INTO games (source, source_id, pgn, rated) VALUES ('otb', 'x', '', 1)")
+    client = TestClient(api.create_app(db_url))
+    me = as_user("user_me")
+    assert client.get("/api/games", headers=me).json()["total"] == 0  # signed up: a new, empty user
+    with db.connect(db_url) as owner:
+        users.link(owner, users.LOCAL, "user_me")  # while the server runs
+    assert client.get("/api/games", headers=me).json()["total"] == 1  # the next request sees it

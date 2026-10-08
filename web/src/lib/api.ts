@@ -131,6 +131,23 @@ export interface GamesPage {
   games: Game[]
 }
 
+/** Where the signed-in user's session token comes from (Clerk's getToken), or null when
+ * there's no sign-in (the local user, on your own Mac). Set by `AuthGate`. */
+let tokenSource: (() => Promise<string | null>) | null = null
+
+export function setTokenSource(source: typeof tokenSource) {
+  tokenSource = source
+}
+
+/** fetch() for the API: adds the session token, so the server knows whose data to serve. */
+export async function apiFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const token = tokenSource ? await tokenSource() : null
+  if (!token) return fetch(url, init)
+  const headers = new Headers(init.headers)
+  headers.set('Authorization', `Bearer ${token}`)
+  return fetch(url, { ...init, headers })
+}
+
 /** GET a JSON endpoint, refetching whenever `url` changes. Keeps the previous data while loading. */
 export function useApi<T>(url: string) {
   const [data, setData] = useState<T | null>(null)
@@ -141,7 +158,7 @@ export function useApi<T>(url: string) {
   useEffect(() => {
     const ctrl = new AbortController()
     setLoading(true)
-    fetch(url, { signal: ctrl.signal })
+    apiFetch(url, { signal: ctrl.signal })
       .then(async (res) => {
         if (!res.ok) throw new Error(`${res.status} ${await res.text()}`)
         return res.json() as Promise<T>
@@ -165,7 +182,7 @@ export function useApi<T>(url: string) {
 
 /** POST / PUT / DELETE a JSON body; throws with the server's message on failure. */
 export async function send<T = unknown>(method: 'POST' | 'PUT' | 'DELETE', url: string, body?: unknown): Promise<T> {
-  const res = await fetch(url, {
+  const res = await apiFetch(url, {
     method,
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
