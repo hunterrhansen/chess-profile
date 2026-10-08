@@ -14,7 +14,6 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 from contextlib import closing
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -31,7 +30,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from . import auth, config, db, deck, lines, patterns, play, positions, puzzles, schedule, units, update, users
+from . import auth, config, db, deck, jobs, lines, patterns, play, positions, puzzles, schedule, units, update, users
 from .analyze import THRESHOLDS, find_engine
 
 # A position counts as "winning" once the user's win chance reaches this after one of
@@ -403,6 +402,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             raise HTTPException(400, "That doesn't look like a username.")
         with write() as conn, conn:
             db.add_account(conn, body.source, body.handle)
+            jobs.enqueue(conn, "update", {"trigger": "account"})  # bring its games in now
         return {"source": body.source, "handle": body.handle}
 
     @api.delete("/api/accounts/{source}/{handle}", status_code=204)
@@ -577,6 +577,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
         depth = query("SELECT value FROM settings WHERE key = 'analysis_depth'")
         with read() as conn:
             fsrs = deck.tuning(conn)
+            waiting = jobs.pending(conn)
         return {
             "fsrs": fsrs,
             "accounts": [
@@ -590,7 +591,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             # The runs before it, for the history under it (without their step lists).
             "earlier_runs": [{k: v for k, v in run_json(r).items() if k != "progress"} for r in last[1:]],
             "current_run": run_json(current[0]) if current else None,
-            "running": bool(current),
+            "running": bool(current) or bool(waiting),
             "engine": engine_name(),
             "depth": int(depth[0]["value"]) if depth else db.DEFAULT_DEPTH,
             "database": {
@@ -617,8 +618,12 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
                               AND kind IN ('stats', 'profile') ORDER BY taken_at DESC LIMIT 1""",
                          (a["source"], a["handle"]))
             accounts.append({**dict(a), **_headline_rating(a["source"], json.loads(snap[0]["data"]) if snap else None)})
+        with read() as conn:
+            waiting = jobs.pending(conn)
         return {
             "accounts": accounts,
+            # Jobs queued but not started yet (update, backfill): "Waiting to start".
+            "queued": [] if current else waiting,
             "current_run": {"started_at": current[0]["started_at"],
                             "progress": json.loads(current[0]["progress"]) if current[0]["progress"] else None}
             if current else None,
@@ -646,27 +651,11 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
 
     @api.post("/api/update/run", status_code=202)
     def run_update():
-        """Start the update pipeline in the background: via launchd when the daily job is
-        installed (same low priority and log), else as a detached `knightly update`. In
-        server mode its output joins the server's own (the container's log)."""
-        me = current_user.get()
-        installed = schedule.current()
-        if installed and installed["user"] == me.clerk_id:
-            try:
-                schedule.run_now(log=lambda _: None)
-            except SystemExit as e:
-                raise HTTPException(400, str(e)) from None
-            return {"started": True}
-        command = [str(Path(sys.executable).parent / "knightly"), "--db", database_url,
-                   "--user", me.clerk_id, "update", "--workers", str(schedule.SCHEDULED_WORKERS)]
-        options = {"stdin": subprocess.DEVNULL, "cwd": str(config.data_dir()), "start_new_session": True}
-        if config.on_mac():
-            schedule.LOG.parent.mkdir(parents=True, exist_ok=True)
-            with open(schedule.LOG, "a") as log_file:
-                subprocess.Popen(command, stdout=log_file, stderr=log_file, **options)
-        else:
-            subprocess.Popen(command, **options)
-        return {"started": True}
+        """Queue an update (jobs.py); a worker picks it up within seconds. Asking while one
+        is waiting or running changes nothing."""
+        with write() as conn:
+            queued = jobs.enqueue(conn, "update", {"trigger": "manual"})
+        return {"started": True, "queued": queued}
 
     @api.get("/api/home")
     def home():

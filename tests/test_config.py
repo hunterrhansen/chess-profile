@@ -59,9 +59,9 @@ def test_server_mode_settings_and_run_now(db_url, server, monkeypatch, tmp_path)
     assert s["schedule"] is None and s["schedule_available"] is False and s["lichess_token"] is False
     assert client.put("/api/settings/schedule", json={"enabled": True, "hour": 6, "minute": 0}).status_code == 400
 
-    # Run now still starts `knightly update`, logging to the server's own output, not a Mac log file.
-    assert client.post("/api/update/run").status_code == 202
-    assert spawned["args"][-3:] == ["update", "--workers", "3"] and "stdout" not in spawned["kw"]
+    # Run now queues a job for the worker, as on a Mac: nothing is started from the web server.
+    assert client.post("/api/update/run").json()["queued"] is True
+    assert spawned == {}
 
 
 @pytest.mark.skipif(not shutil.which("stockfish"), reason="stockfish not installed")

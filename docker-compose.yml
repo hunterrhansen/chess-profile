@@ -1,4 +1,4 @@
-# Runs the server image and a Postgres for it locally -> http://localhost:8000
+# Runs the server image (web + worker) and a Postgres for it locally -> http://localhost:8000
 #   docker compose up --build
 # To start from your own data (a SQLite chess.db from before Postgres):
 #   docker compose run --rm -v "$PWD:/import:ro" web knightly import-sqlite /import/chess.db
@@ -34,6 +34,20 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    restart: unless-stopped
+
+  # Runs queued jobs (syncing accounts, analysing games) and queues each user's daily update.
+  # More of them, or on other machines, share the queue safely.
+  worker:
+    image: knightly
+    command: ["knightly", "worker"]
+    environment:
+      KNIGHTLY_DATABASE_URL: postgresql://knightly:knightly@db/knightly
+    volumes:
+      - ${KNIGHTLY_DATA:-knightly-data}:/data
+    depends_on:
+      web:
+        condition: service_started  # web applies the migrations first
     restart: unless-stopped
 
 volumes:
