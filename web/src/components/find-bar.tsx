@@ -99,7 +99,12 @@ export function FindBar({
           <p className="text-sm">The engine's first choice was {best}, by a hair.</p>
         )}
         {children}
-        {when && <p className="mt-0.5 text-[13px] text-muted-foreground">{when}</p>}
+        {when && (
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
+            {first?.rating === 'easy' && <span className="font-extrabold text-brand-text">Quick and sure: easy. </span>}
+            {when}
+          </p>
+        )}
       </LessonVerdict>
     </LessonBar>
   )

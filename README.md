@@ -176,8 +176,8 @@ through the game, Home / End jump to the ends. Finish review saves a mark per st
 **Practice** (`/practice`) is spaced repetition over positions from your own games
 ([`deck.py`](src/knightly/deck.py)), inspired by Anki (decided Oct 2026): it schedules
 with FSRS, the scheduler Anki uses by default, and grades your *first* try of the day
-with Anki's buttons. The best move, or one within 2 points of win chance of it (judged by
-Stockfish), or any mate, is Good; within 5 points ("Good move! Best was …") is Hard;
+with Anki's buttons. The engine's move within 10 seconds (no hint) is Easy; the best move,
+or one within 2 points of win chance of it (judged by Stockfish), or any mate, is Good; within 5 points ("Good move! Best was …") is Hard;
 anything else, a hint first, or Show me is Again. A wrong move slides back so you can try
 again; **Hint** lights up the piece to move, then shows the move as an arrow. Positions
 you didn't get first time come back once more at the end of the session (Duolingo's redo,

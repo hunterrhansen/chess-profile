@@ -7,6 +7,7 @@ Scheduling is inspired by Anki, the go-to for learning a lot and keeping it (dec
 2026): it uses FSRS, the scheduler Anki uses by default, and grades each answer with Anki's
 buttons, which the app presses for you from your FIRST try of the day:
 
+- Easy: the engine's own move, found within EASY_SECONDS with no hint: you clearly know it.
 - Good: the best move, or one within GOOD_DROP points of win chance of it, or any mate.
 - Hard: within HARD_DROP points ("Good move! Best was ...").
 - Again: anything else, a hint before answering, or Show me. Anki's manual is clear that a
@@ -41,6 +42,8 @@ CLEAR_GAP = GREAT_GAP
 GOOD_DROP = 2
 HARD_DROP = 5
 JUDGE_DEPTH = 14
+# A first try of the engine's move this quick (no hint) is Easy: it spaces out faster.
+EASY_SECONDS = 10
 # "Mastered" for the counts on Progress and Done: FSRS expects you to remember it for two
 # months or more. Mastered cards still come back, just rarely.
 MASTERED_DAYS = 60
@@ -48,7 +51,7 @@ SKIP = "0000"  # Show me (or Skip): no move
 
 # No learning or relearning steps: the session's end-of-lesson redo does that job.
 SCHEDULER = Scheduler(learning_steps=(), relearning_steps=())
-RATING = {"again": Rating.Again, "hard": Rating.Hard, "good": Rating.Good}
+RATING = {"again": Rating.Again, "hard": Rating.Hard, "good": Rating.Good, "easy": Rating.Easy}
 
 
 def clear_best(color: str, eval_best: int | None, eval_second: int | None) -> bool:
@@ -166,7 +169,7 @@ def stats(conn, today: date | None = None) -> dict:
 def mark(rating: str | None, solved: bool) -> str:
     """How a position went, for the marks on the done screens: found, good move, found with
     help (a retry or a hint), or missed."""
-    if rating == "good":
+    if rating in ("good", "easy"):
         return "found"
     if rating == "hard":
         return "good"
@@ -230,9 +233,10 @@ def judge(fen: str, uci: str, best_uci: str, eval_best: int | None) -> str:
 
 
 def answer(conn, game_id: int, ply: int, uci: str, *, hinted: bool = False, redo: bool = False,
-           today: date | None = None, now: datetime | None = None) -> dict:
+           seconds: float | None = None, today: date | None = None, now: datetime | None = None) -> dict:
     """Check an answer. The first answer of the day grades the card (Again / Hard / Good) and
-    FSRS schedules it; a hint before it makes it Again. Later answers that day (a retry, or
+    FSRS schedules it; a hint before it makes it Again, and the engine's move within
+    EASY_SECONDS (`seconds`: from the position appearing to the answer) makes it Easy. Later answers that day (a retry, or
     the end-of-session redo with `redo`) only say how good they are, and a retry that finds
     it records the position as found with help."""
     today = today or date.today()
@@ -258,8 +262,11 @@ def answer(conn, game_id: int, ply: int, uci: str, *, hinted: bool = False, redo
     rating = None
     if (game_id, ply) not in _reviewed_today(conn, today):
         rating = "again" if hinted or not passed else "hard" if quality == "good" else "good"
+        if rating == "good" and quality == "best" and seconds is not None and seconds <= EASY_SECONDS:
+            rating = "easy"
         when = now or datetime.now(timezone.utc)
-        state, _ = SCHEDULER.review_card(state, RATING[rating], when)
+        duration = round(seconds * 1000) if seconds is not None else None
+        state, _ = SCHEDULER.review_card(state, RATING[rating], when, review_duration=duration)
         stamp = when.strftime("%Y-%m-%dT%H:%M:%SZ")
         conn.execute(
             """UPDATE cards SET fsrs = ?, due = ?, reviews = reviews + 1, lapses = lapses + ?,
