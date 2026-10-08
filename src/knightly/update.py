@@ -14,7 +14,7 @@ from pathlib import Path
 
 from psycopg.conninfo import make_conninfo
 
-from . import analyze, config, patterns
+from . import analyze, config, limits, patterns
 from .sources import chesscom, lichess
 
 KEEP_BACKUPS = 7
@@ -199,7 +199,10 @@ def _run_locked(conn, token, workers, depth, engine_path, backup_dir, keep, trig
     steps = ["analyze", "patterns"] + (["backup"] if backs_up else [])
     progress = Progress(conn, run_id, [f"sync:{s}:{u}" for s, u in targets] + steps)
     try:
-        games, puzzles, sync_errors = sync_accounts(conn, targets, token, log=log, progress=progress)
+        # On a server a first import reaches back limits.history_months(); later ones carry on
+        # from where the last left off.
+        games, puzzles, sync_errors = sync_accounts(conn, targets, token, since=limits.history_since(),
+                                                    log=log, progress=progress)
         counts.update(new_games=games, new_puzzles=puzzles)
         errors += sync_errors
 

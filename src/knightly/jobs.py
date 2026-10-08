@@ -20,7 +20,7 @@ import threading
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 
-from . import analyze, config, db, monitoring, update
+from . import analyze, config, db, limits, monitoring, update
 
 FIRST_BATCH = 50   # games an update analyses: the newest first
 BATCH = 50         # games a backfill job analyses
@@ -87,6 +87,53 @@ def reclaim(conn, now: datetime | None = None) -> int:
                            WHERE status = 'running' AND locked_at < ?""", (cutoff,)).rowcount
 
 
+def retry(conn, job_id: int) -> bool:
+    """Queue a failed job again, from scratch (the admin page). False if it isn't a failed
+    job, or its user already has one of that kind waiting."""
+    return conn.execute(
+        """UPDATE jobs j SET status = 'queued', attempts = 0, error = NULL, run_after = ?,
+                             locked_by = NULL, locked_at = NULL, finished_at = NULL
+           WHERE id = ? AND status = 'failed' AND NOT EXISTS (
+               SELECT 1 FROM jobs o WHERE o.user_id = j.user_id AND o.kind = j.kind
+                 AND o.status IN ('queued', 'running'))""",
+        (_iso(datetime.now(timezone.utc)), job_id)).rowcount == 1
+
+
+# Measured on a real account: about 3 KB per game kept, 11 KB more once analysed.
+GAME_BYTES, ANALYSED_BYTES = 3_200, 11_000
+
+
+def overview(conn, now: datetime | None = None) -> dict:
+    """The admin page: what's queued, running and failed, how much got done in the last
+    day, and each user's size. Owner's connection."""
+    day_ago = _iso((now or datetime.now(timezone.utc)) - timedelta(days=1))
+    job = """SELECT j.id, j.kind, j.status, j.priority, j.attempts, j.error, j.created_at,
+                    j.run_after, j.locked_by, j.locked_at, j.finished_at, u.clerk_id
+             FROM jobs j JOIN users u ON u.id = j.user_id"""
+    rows = lambda sql, params=(): [dict(r) for r in conn.execute(sql, params).fetchall()]
+    users = rows(
+        """SELECT u.id, u.clerk_id, u.created_at,
+                  (SELECT string_agg(a.source || ':' || a.handle, ', ' ORDER BY a.source) FROM accounts a
+                   WHERE a.user_id = u.id) AS accounts,
+                  (SELECT count(*) FROM games g WHERE g.user_id = u.id) AS games,
+                  (SELECT count(*) FROM game_analysis a WHERE a.user_id = u.id) AS analysed,
+                  (SELECT max(r.started_at) FROM runs r WHERE r.user_id = u.id) AS last_update
+           FROM users u ORDER BY u.id""")
+    for u in users:
+        u["approx_bytes"] = u["games"] * GAME_BYTES + u["analysed"] * ANALYSED_BYTES
+    return {
+        "queued": rows(job + " WHERE j.status = 'queued' ORDER BY j.priority DESC, j.id LIMIT 50"),
+        "running": rows(job + " WHERE j.status = 'running' ORDER BY j.locked_at"),
+        "failed": rows(job + " WHERE j.status = 'failed' ORDER BY j.finished_at DESC LIMIT 20"),
+        "last_day": dict(conn.execute(
+            """SELECT count(*) FILTER (WHERE status = 'done') AS done,
+                      count(*) FILTER (WHERE status = 'failed') AS failed
+               FROM jobs WHERE finished_at >= ?""", (day_ago,)).fetchone()),
+        "database_bytes": conn.execute("SELECT pg_database_size(current_database())").fetchone()[0],
+        "users": users,
+    }
+
+
 def schedule_due(conn, now: datetime | None = None) -> int:
     """Queue the daily update of everyone with an account whose last update started more
     than DAILY ago (or never ran). Owner's connection. Returns how many were queued."""
@@ -119,11 +166,21 @@ def run(url: str, job, workers: int | None = None, log=print) -> list[tuple[str,
             update.run(conn, _token(), workers=workers, nodes=nodes, log=log,
                        trigger=payload.get("trigger", "manual"), analyse_limit=FIRST_BATCH)
         elif job["kind"] == "backfill":
-            update.run(conn, None, workers=workers, nodes=nodes, log=log,
-                       trigger="backfill", analyse_limit=BATCH, sync=False)
+            room = backfill_room(conn)
+            if room != 0:
+                update.run(conn, None, workers=workers, nodes=nodes, log=log, trigger="backfill",
+                           analyse_limit=BATCH if room is None else min(BATCH, room), sync=False)
         else:
             raise ValueError(f"unknown job kind {job['kind']!r}")
-        return [("backfill", BACKFILL_PRIORITY)] if analyze.unanalysed(conn) else []
+        more = analyze.unanalysed(conn) and backfill_room(conn) != 0
+        return [("backfill", BACKFILL_PRIORITY)] if more else []
+
+
+def backfill_room(conn) -> int | None:
+    """How many more old games this user's backfills may analyse (limits.max_analysed);
+    None when there's no limit. New games are analysed by updates whatever this says."""
+    analysed = conn.execute("SELECT count(*) FROM game_analysis").fetchone()[0]
+    return limits.backfill_room(analysed)
 
 
 def work(url: str, stop: threading.Event | None = None, workers: int | None = None,
