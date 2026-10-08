@@ -17,6 +17,7 @@ import { ReviewDonePage } from '@/pages/review-done'
 import { AllMovesPage } from '@/pages/review-moves'
 import { SettingsPage } from '@/pages/settings'
 import { StyleguidePage } from '@/pages/styleguide'
+import { WelcomePage } from '@/pages/welcome'
 import './index.css'
 
 // The app was called "chessprofile" until October 2026: move this browser's saved settings
@@ -55,6 +56,7 @@ createRoot(document.getElementById('root')!).render(
                   <Route path="games/:id" element={<ReviewPage />} />
                   <Route path="games/:id/moves" element={<AllMovesPage />} />
                   <Route path="games/:id/done" element={<ReviewDonePage />} />
+                  <Route path="welcome" element={<WelcomePage />} />
                 </Route>
               </Routes>
             </AuthProvider>

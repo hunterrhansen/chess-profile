@@ -358,3 +358,38 @@ export interface PuzzleNext {
   session: number
   available: boolean
 }
+
+/** A public Chess.com / Lichess account, before it's added (the welcome flow's "Is this you?"). */
+export interface LookupAccount {
+  source: 'chesscom' | 'lichess'
+  handle: string
+  rating: number | null
+  rating_kind: string | null
+  /** Rated games. */
+  games: number
+  /** The month of the first game, "2026-01"; null with no games. */
+  since: string | null
+}
+
+/** The welcome flow's import screen: the first update's progress and what it has found. */
+export interface Onboarding {
+  accounts: { source: string; handle: string }[]
+  games: number
+  analysed: number
+  /** How many games the first update analyses (the newest); the rest come later. */
+  target: number
+  /** An update is waiting or running. */
+  working: boolean
+  /** The step it's on: "sync:chesscom:gghansen", "analyze", "patterns". */
+  step: string | null
+  findings: {
+    opponent: string | null
+    played_at: string | null
+    move_number: number
+    color: 'white' | 'black'
+    san: string
+    best_san: string
+    classification: Classification
+  }[]
+  summary: { blunders: number; mistakes: number; misses: number; positions: number; pattern: string | null }
+}
