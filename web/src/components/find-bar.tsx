@@ -1,4 +1,5 @@
-import { CheckIcon, CircleNotchIcon, LightbulbIcon, XIcon } from '@phosphor-icons/react'
+import { CheckIcon, CircleNotchIcon, XIcon } from '@phosphor-icons/react'
+import { KnIcon } from '@/components/kn-icon'
 import { LessonBar, LessonVerdict } from '@/components/lesson-bar'
 import { Button } from '@/components/ui/button'
 import type { FindMove } from '@/lib/find-move'
@@ -49,7 +50,7 @@ export function FindBar({
         <div className="flex shrink-0 gap-2">
           {find.nextHint && (
             <Button variant="outline" onClick={find.askHint} disabled={!find.hintReady || find.checking}>
-              <LightbulbIcon weight="fill" className="text-gold" />
+              <KnIcon glyph="hint" className="size-5" />
               {find.nextHint}
             </Button>
           )}
