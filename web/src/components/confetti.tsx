@@ -14,6 +14,7 @@ export function Confetti({
   spread = 1,
   seed = 1,
   silent,
+  delay = '0ms',
   className,
 }: {
   pieces?: number
@@ -21,6 +22,8 @@ export function Confetti({
   /** Change it for a different-looking burst. */
   seed?: number
   silent?: boolean
+  /** Waits this long (a CSS time) before bursting, to land with something else. */
+  delay?: string
   className?: string
 }) {
   const reduced = useReducedMotion()
@@ -62,7 +65,7 @@ export function Confetti({
               '--fall': `${b.fall}px`,
               '--spin': `${b.spin}deg`,
               animationDuration: `${b.ms}ms`,
-              animationDelay: `${b.delay}ms`,
+              animationDelay: `calc(${delay} + ${b.delay}ms)`,
             } as React.CSSProperties
           }
         />

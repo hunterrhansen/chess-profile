@@ -76,6 +76,13 @@ which are the same in both themes. Its states, each on `/styleguide`:
 - **Check shows the attack:** the king's square goes solid red (`--check`) and the squares from
   the checking piece to the king are tinted (`--check-path`). A knight has no path: just its own
   square is tinted. Worked out from the position, so every board does it.
+- **Checkmate, "the king falls":** check's red square and path, then the mated king tips onto
+  its side (`animate-topple`, 380 ms after the piece lands, a bounce), a red **#** badge pops on
+  it (820 ms) and the winner's king gets a crown (980 ms), with the `checkmate` sound. It plays
+  once: the first time the mate lands on that board by a move. A reload, a jump or coming back
+  to it shows the last frame. Marks on the top row sit inside the square. In Play the result
+  follows (`MateCard`): a gold card with the trophy and confetti when you mate the bot, a calm
+  card with the # when it mates you; other endings keep a line of text.
 - **Badge:** the move's classification on the square it landed on (`MoveBadge pop`).
 
 `PlayBoard` (`pages/play.tsx`) wraps it for making moves (Play, Practice).
