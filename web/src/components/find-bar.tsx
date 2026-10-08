@@ -35,20 +35,22 @@ export function FindBar({
       ? 'Checking…'
       : find.selected
         ? 'Now pick where it goes.'
-        : find.hints === 1 && find.hintPiece
-          ? `Hint: move the ${PIECE[find.hintPiece.type]} on ${find.hintPiece.square}.`
-          : find.hints >= 2
-            ? 'The arrow shows the move. Play it.'
+        : find.rung === 'tactic'
+          ? `Hint: ${find.tactic}`
+          : find.rung === 'piece' && find.hintPiece
+            ? `Hint: move the ${PIECE[find.hintPiece.type]} on ${find.hintPiece.square}.`
+            : find.rung === 'move'
+              ? 'The arrow shows the move. Play it.'
             : notQuite
               ? 'Not quite. Try again, or use a hint.'
               : 'Tap a piece, then where it goes. Or drag it.'
     return (
       <LessonBar tone={notQuite ? 'retry' : 'idle'}>
         <div className="flex shrink-0 gap-2">
-          {find.hints < 2 && (
+          {find.nextHint && (
             <Button variant="outline" onClick={find.askHint} disabled={!find.hintReady || find.checking}>
               <LightbulbIcon weight="fill" className="text-gold" />
-              {find.hints === 0 ? 'Hint' : 'Show the move'}
+              {find.nextHint}
             </Button>
           )}
           <Button variant="ghost" onClick={find.showMe} disabled={find.checking}>

@@ -253,6 +253,7 @@ export interface MoveRow {
   classification: Classification | null
   clock_left: number | null
   time_spent: number | null
+  pattern: string | null // the tactic behind it (patterns.py), for Hint's first rung
 }
 
 export type LineKind = 'why' | 'best'

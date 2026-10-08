@@ -847,7 +847,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
         review = query("SELECT marks FROM game_reviews WHERE game_id = ?", (game_id,))
         moves = query("""SELECT ply, color, is_user, san, uci, best_san, best_uci, eval_after,
                                 mate_after, win_pct_before, win_pct_after, classification,
-                                clock_left, time_spent
+                                clock_left, time_spent, pattern
                          FROM moves WHERE game_id = ? ORDER BY ply""", (game_id,))
         return {
             **_game_json(rows[0]),

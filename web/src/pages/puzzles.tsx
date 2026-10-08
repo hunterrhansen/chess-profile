@@ -11,7 +11,7 @@ import { Card } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { type Puzzle, type PuzzleNext, send } from '@/lib/api'
 import { durationMs } from '@/lib/motion'
-import { patternOf } from '@/lib/patterns'
+import { patternOf, tacticHint } from '@/lib/patterns'
 import { BOARDS, usePreferences } from '@/lib/preferences'
 import { playSound } from '@/lib/sound'
 import { cn } from '@/lib/utils'
@@ -91,6 +91,7 @@ export function PuzzlesPage() {
           key={next.puzzle.id}
           puzzle={next.puzzle}
           label={pattern?.one ?? theme}
+          tactic={tacticHint(theme, 'chance')}
           onDone={(outcome) => setResults((r) => [...r, outcome])}
           onNext={load}
           last={results.length + 1 >= session}
@@ -107,12 +108,15 @@ function Column({ children }: { children: React.ReactNode }) {
 function PuzzleBoard({
   puzzle,
   label,
+  tactic,
   onDone,
   onNext,
   last,
 }: {
   puzzle: Puzzle
   label: string
+  /** Hint's first rung: the theme in words. */
+  tactic: string | null
   onDone: (outcome: PuzzleOutcome) => void
   onNext: () => void
   last: boolean
@@ -125,7 +129,10 @@ function PuzzleBoard({
   // shows the move. Only a clean first try counts as solved (Lichess's rule for its ratings).
   const [helped, setHelped] = useState(false)
   const [notQuite, setNotQuite] = useState<string | null>(null) // the square of a wrong try
+  // Hint's rungs, one per tap: the theme in words, the piece, then the move as an arrow.
+  const rungs = tactic ? (['tactic', 'piece', 'move'] as const) : (['piece', 'move'] as const)
   const [hints, setHints] = useState(0)
+  const rung = hints ? rungs[hints - 1] : null
   const [hintReady, setHintReady] = useState(false)
   useEffect(() => {
     const t = setTimeout(() => setHintReady(true), 2000)
@@ -203,8 +210,8 @@ function PuzzleBoard({
           chess={chess}
           orientation={me}
           lastMove={lastUci ? toMove(lastUci) : undefined}
-          hint={result === 'missed' || (hints >= 2 && yourTurn) ? puzzle.moves[played] : null}
-          glow={hints === 1 && yourTurn ? puzzle.moves[played].slice(0, 2) : null}
+          hint={result === 'missed' || (rung === 'move' && yourTurn) ? puzzle.moves[played] : null}
+          glow={rung === 'piece' && yourTurn ? puzzle.moves[played].slice(0, 2) : null}
           selected={selected}
           interactive={yourTurn}
           palette={BOARDS[prefs.board]}
@@ -247,7 +254,7 @@ function PuzzleBoard({
       ) : (
         <LessonBar tone={notQuite && !selected && !hints ? 'retry' : 'idle'}>
           <div className="flex shrink-0 gap-2">
-            {hints < 2 && (
+            {hints < rungs.length && (
               <Button
                 variant="outline"
                 onClick={() => {
@@ -258,7 +265,7 @@ function PuzzleBoard({
                 disabled={!yourTurn || !hintReady}
               >
                 <LightbulbIcon weight="fill" className="text-gold" />
-                {hints === 0 ? 'Hint' : 'Show the move'}
+                {rungs[hints] === 'move' ? 'Show the move' : rungs[hints] === 'piece' && hints > 0 ? 'Show the piece' : 'Hint'}
               </Button>
             )}
             <Button variant="ghost" onClick={() => finish('missed')} disabled={!yourTurn}>
@@ -270,10 +277,12 @@ function PuzzleBoard({
               ? 'Their move first.'
               : selected
                 ? 'Now pick where it goes.'
-                : hints === 1
-                  ? `Hint: move the ${PIECE[chess.get(puzzle.moves[played].slice(0, 2) as never)?.type ?? 'p']} on ${puzzle.moves[played].slice(0, 2)}.`
-                  : hints >= 2
-                    ? 'The arrow shows the move. Play it.'
+                : rung === 'tactic'
+                  ? `Hint: ${tactic}`
+                  : rung === 'piece'
+                    ? `Hint: move the ${PIECE[chess.get(puzzle.moves[played].slice(0, 2) as never)?.type ?? 'p']} on ${puzzle.moves[played].slice(0, 2)}.`
+                    : rung === 'move'
+                      ? 'The arrow shows the move. Play it.'
                     : notQuite
                       ? 'Not quite. Try again, or use a hint.'
                       : 'Tap a piece, then where it goes. Or drag it.'}

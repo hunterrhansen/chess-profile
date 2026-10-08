@@ -18,7 +18,7 @@ import { CLASSIFICATION } from '@/lib/classification'
 import { nextTime, shortDate } from '@/lib/format'
 import { type FindOutcome, useFindMove } from '@/lib/find-move'
 import { moveLabel } from '@/lib/key-moments'
-import { PATTERNS, patternOf } from '@/lib/patterns'
+import { PATTERNS, patternOf, tacticHint } from '@/lib/patterns'
 import { BOARDS, usePreferences } from '@/lib/preferences'
 import { cn } from '@/lib/utils'
 import { PlayBoard } from '@/pages/play'
@@ -115,7 +115,10 @@ function Position({
   onNext: (outcome: FindOutcome) => void
 }) {
   const { prefs } = usePreferences()
-  const find = useFindMove({ gameId: card.game_id, ply: card.ply, fen: card.fen_before, redo })
+  // A miss is tagged with what your move would have done to them; a mistake or blunder with
+  // what their reply does to you.
+  const tactic = tacticHint(card.pattern, card.classification === 'miss' ? 'chance' : 'threat')
+  const find = useFindMove({ gameId: card.game_id, ply: card.ply, fen: card.fen_before, tactic, redo })
   const [why, setWhy] = useState<string | null | undefined>(undefined) // undefined: loading
 
   // Once it's over, ask for the engine's explanation of the best line (cached after the
