@@ -249,7 +249,8 @@ function groupByDay(games: Game[]): [string, Game[]][] {
 const ENDED: Record<string, string> = { Resigned: 'resignation', Time: 'on time', Checkmate: 'checkmate', Abandoned: 'abandoned' }
 
 /** One game as a card: result, opponent, when and how it ended, opening, accuracy, its
- * blunders and mistakes (or Clean), and whether you've reviewed it. */
+ * blunders and mistakes (or Clean), and whether you've reviewed it. On a phone: the opening
+ * under the opponent, and accuracy over the review status on the right. */
 function GameRow({ game: g }: { game: Game }) {
   const badges = [
     ...Array<'blunder'>(Math.min(g.blunders ?? 0, 3)).fill('blunder'),
@@ -269,9 +270,10 @@ function GameRow({ game: g }: { game: Game }) {
           <span className="truncate">{g.opponent}</span>
           <span className="font-semibold text-muted-foreground">{g.opponent_rating}</span>
         </div>
-        <div className="truncate text-[13px] text-muted-foreground">
+        <div className="hidden truncate text-[13px] text-muted-foreground md:block">
           {[time, timeControl(g.time_control), ended].filter(Boolean).join(' · ')}
         </div>
+        <div className="truncate text-xs text-muted-foreground md:hidden">{openingLabel(g.opening, g.eco)}</div>
       </div>
       <div className="hidden min-w-0 truncate text-sm text-muted-foreground md:block">{openingLabel(g.opening, g.eco)}</div>
       <div className="hidden text-right md:block">
@@ -287,7 +289,13 @@ function GameRow({ game: g }: { game: Game }) {
           <span className="text-[13px] font-extrabold text-brand-text">Clean</span>
         )}
       </div>
-      <div className="flex justify-end">
+      <div className="text-right md:hidden">
+        <div className="font-heading text-[17px] font-bold tabular-nums">{num(g.accuracy, 1)}</div>
+        <div className={cn('text-[11px] font-extrabold tracking-[.04em] uppercase', g.reviewed_at ? 'text-brand-text' : 'text-muted-foreground')}>
+          {g.reviewed_at ? 'Reviewed' : g.analysed ? 'To review' : 'Not analysed'}
+        </div>
+      </div>
+      <div className="hidden justify-end md:flex">
         {g.reviewed_at ? (
           <span className="inline-flex items-center gap-1.5 text-[13px] font-extrabold text-brand-text">
             <CheckIcon className="size-4" /> Reviewed

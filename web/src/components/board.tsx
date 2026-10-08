@@ -93,7 +93,7 @@ export function Board({
   badge?: { square: string; kind: Classification } | null
   /** Lights a square up once after the piece lands: green for a right answer, red for wrong. */
   flash?: { square: string; tone: 'right' | 'wrong' }
-  /** Hint: a gold glow on the piece to move. */
+  /** Hint: a gold glow on the piece to move, with a bulb on its corner. */
   glow?: string | null
   /** Which side's pieces can be picked up ('w' or 'b'); omit to allow none. */
   movable?: 'w' | 'b'
@@ -138,6 +138,11 @@ export function Board({
     const piece = occupied?.get(square as Square)
     onSelect?.(piece && piece.color === movable && square !== selected ? square : null)
   }
+
+  // The hint's bulb sits on the square's top-right corner like a move badge, pulled inside
+  // the square on the top row and the right-hand file so the board's edge doesn't clip it.
+  const topEdge = glow?.[1] === (orientation === 'white' ? '8' : '1')
+  const rightEdge = glow?.[0] === (orientation === 'white' ? 'h' : 'a')
 
   const notation = { fontSize: 'clamp(8px, 2.1cqw, 12px)', fontWeight: 800 }
 
@@ -184,7 +189,24 @@ export function Board({
                 ) : (
                   <span className="pointer-events-none absolute inset-[35%] rounded-full bg-move-hint" />
                 ))}
-              {glow === square && <span className="pointer-events-none absolute inset-0 z-[1] animate-hint" />}
+              {glow === square && (
+                <>
+                  <span className="pointer-events-none absolute inset-0 z-[1] animate-hint" />
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'pointer-events-none absolute z-10 grid size-[38%] max-h-[22px] max-w-[22px] place-items-center rounded-full bg-gold shadow-[0_2px_0_var(--gold-lip),0_0_0_2px_var(--surface)]',
+                      topEdge ? 'top-1' : '-top-2',
+                      rightEdge ? 'right-1' : '-right-2',
+                    )}
+                  >
+                    <svg viewBox="0 0 24 24" className="size-[70%] fill-on-gold">
+                      <path d="M9 18h6v1.5a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 19.5z" />
+                      <path d="M12 2.5a7 7 0 0 0-4.2 12.6c.7.5 1.2 1.3 1.2 2.2V17h6v-.7c0-.9.5-1.7 1.2-2.2A7 7 0 0 0 12 2.5z" />
+                    </svg>
+                  </span>
+                </>
+              )}
               {flash?.square === square && (
                 <span
                   className={cn(

@@ -1,12 +1,13 @@
-import { ArrowUUpLeftIcon, CircleNotchIcon } from '@phosphor-icons/react'
+import { ArrowUUpLeftIcon, CaretLeftIcon, CaretRightIcon, CircleNotchIcon } from '@phosphor-icons/react'
 import { useLayoutEffect, useRef } from 'react'
 import { Board, type BoardArrow, type Palette } from '@/components/board'
 import { EvalBar as EvalBarView } from '@/components/eval-bar'
+import { MoveBadge } from '@/components/move-badge'
 import { MarkedText, MoveText } from '@/components/move-text'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { Classification, EngineLine, LineKind, MoveRow } from '@/lib/api'
-import { CLASSIFICATION, isSound } from '@/lib/classification'
+import { CLASSIFICATION, isSound, moveLook } from '@/lib/classification'
 import { clock, thinkTime } from '@/lib/format'
 import type { Side } from '@/lib/replay'
 import { cn } from '@/lib/utils'
@@ -130,7 +131,8 @@ function ClockChip({ seconds, className }: { seconds: number; className?: string
   )
 }
 
-/** An engine line in place of the move panel: title, the moves as steps, why it matters. */
+/** An engine line in place of the move panel: title, the moves as steps, why it matters.
+ * `stepButtons` adds previous/next buttons, where nothing else around it steps the line. */
 export function LinePanel({
   kind,
   view,
@@ -145,6 +147,7 @@ export function LinePanel({
   onBack,
   backLabel = 'Back to game',
   onSwitch,
+  stepButtons,
 }: {
   kind: LineKind
   view: { data: EngineLine; firstPly: number; squares: unknown[] } | null
@@ -159,6 +162,7 @@ export function LinePanel({
   onBack: () => void
   backLabel?: string
   onSwitch: () => void
+  stepButtons?: boolean
 }) {
   const label = classification ? CLASSIFICATION[classification].label.toLowerCase() : 'move'
   const article = /^[aeiou]/.test(label) ? 'an' : 'a'
@@ -226,7 +230,25 @@ export function LinePanel({
           )}
         </>
       )}
-      <div className="mt-2.5 flex gap-2">
+      <div className="mt-2.5 flex flex-wrap gap-2">
+        {stepButtons && view && (
+          <>
+            <NavButton
+              label="Previous move"
+              onClick={() => onStep(step - 1)}
+              disabled={step <= 1}
+              icon={<CaretLeftIcon />}
+              className="h-8 w-10 [&_svg]:size-4"
+            />
+            <NavButton
+              label="Next move"
+              onClick={() => onStep(step + 1)}
+              disabled={step >= view.squares.length}
+              icon={<CaretRightIcon />}
+              className="h-8 w-10 [&_svg]:size-4"
+            />
+          </>
+        )}
         <Button size="sm" onClick={onBack}>
           <ArrowUUpLeftIcon /> {backLabel}
         </Button>
@@ -238,15 +260,19 @@ export function LinePanel({
   )
 }
 
+/** The move list, two moves to a row with thinking-time bars. Pass `me` to mark the moves
+ * as All moves does: badges, your bad moves in red, the opponent's greyed. */
 export function MoveList({
   san,
   moves,
   ply,
+  me,
   onSelect,
 }: {
   san: string[]
   moves: MoveRow[]
   ply: number
+  me?: Side
   onSelect: (ply: number) => void
 }) {
   const listRef = useRef<HTMLDivElement>(null)
@@ -269,8 +295,10 @@ export function MoveList({
           className="group grid h-8 grid-cols-[2.25rem_1fr_1fr_3rem] items-center px-3 text-sm even:bg-muted/40"
         >
           <span className="text-muted-foreground">{i / 2 + 1}.</span>
-          {[i, i + 1].map((j) =>
-            j < san.length ? (
+          {[i, i + 1].map((j) => {
+            if (j >= san.length) return <span key={j} />
+            const look = moveLook(j + 1, moves[j], me)
+            return (
               <button
                 key={j}
                 data-selected={j + 1 === ply}
@@ -278,14 +306,14 @@ export function MoveList({
                 className={cn(
                   'flex w-fit items-center gap-1 rounded px-1.5 py-0.5 text-left hover:bg-foreground/10',
                   j + 1 === ply && 'bg-foreground/15 font-medium',
+                  look.className,
                 )}
               >
                 <MoveText ply={j + 1} san={san[j]} />
+                {look.badge && <MoveBadge kind={look.badge} />}
               </button>
-            ) : (
-              <span key={j} />
-            ),
-          )}
+            )
+          })}
           <TimeCell white={moves[i]?.time_spent} black={moves[i + 1]?.time_spent} />
         </div>
       ))}
@@ -324,16 +352,18 @@ export function NavButton({
   onClick,
   icon,
   disabled,
+  className,
 }: {
   label: string
   onClick: () => void
   icon: React.ReactNode
   disabled?: boolean
+  className?: string
 }) {
   return (
     <Button
       variant="secondary"
-      className="h-10 [&_svg]:size-5"
+      className={cn('h-10 [&_svg]:size-5', className)}
       aria-label={label}
       title={label}
       onClick={onClick}

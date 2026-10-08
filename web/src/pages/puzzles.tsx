@@ -232,7 +232,7 @@ function PuzzleBoard({
         <LessonBar tone={result === 'missed' ? 'wrong' : 'right'}>
           <LessonVerdict
             tone={result === 'missed' ? 'wrong' : 'right'}
-            icon={result === 'missed' ? <XIcon /> : <CheckIcon />}
+            icon={result === 'missed' ? <XIcon /> : <KnIcon glyph="check" className="size-12" />}
             title={result === 'solved' ? 'Solved!' : result === 'helped' ? 'Solved, with help' : 'Not this time'}
             actions={
               <Button size="lg" variant={result === 'missed' ? 'danger' : 'default'} onClick={onNext}>

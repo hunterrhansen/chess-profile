@@ -53,9 +53,10 @@ export function LessonBar({ tone, children }: { tone: Tone; children: React.Reac
   )
 }
 
+// The right and gold marks bring their own round shape (KnIcon's check, a move badge).
 const MARK: Record<Exclude<Tone, 'idle' | 'retry'>, string> = {
-  right: 'animate-bounce-in bg-brand text-on-brand',
-  wrong: 'animate-shake bg-danger text-on-danger',
+  right: 'animate-bounce-in',
+  wrong: 'animate-shake bg-danger text-on-danger shadow-[inset_0_-3px_0_var(--move-shade)] [&_svg]:size-6',
   gold: '',
 }
 const TITLE: Record<Exclude<Tone, 'idle' | 'retry'>, string> = {
@@ -84,7 +85,7 @@ export function LessonVerdict({
       <div className="flex min-w-0 flex-1 items-start gap-3.5">
         <span
           className={cn(
-            'grid size-12 shrink-0 place-items-center rounded-full shadow-[inset_0_-3px_0_var(--move-shade)] [animation-delay:calc(var(--duration-sheet)*0.6)] [&_svg]:size-6',
+            'grid size-12 shrink-0 place-items-center rounded-full [animation-delay:calc(var(--duration-sheet)*0.6)]',
             MARK[tone],
           )}
         >
