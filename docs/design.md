@@ -43,6 +43,9 @@ The mark also carries the waits and the gaps:
   `win`/`loss`/`draw` result colors are too light to read as small text.
 - One `brand` (default) button per view. `gold` is the reward: at most one gold moment per
   view (a personal best, a Brilliant move).
+- **State is never color alone.** Every colored state also says it in words, a mark or a
+  shape: the verdict's ✓ / ✕ and title, `W`/`L`/`D` on result badges, the sync line beside its
+  dot, an `aria-label` on each mark in a marks row. Don't add a state that's only a color.
 - Move classifications use `--move-*`; `CLASSIFICATION[kind].color` is `var(--move-…)`, so
   use it in `style` (CSS), not as an SVG attribute.
 - A library that only takes a color string for an SVG attribute (the board's arrows) gets
@@ -58,7 +61,12 @@ The mark also carries the waits and the gaps:
   radius, 2px `lip` ledge). A panel that is a link adds `panel-link` (lifts on hover).
 - No soft drop shadows. Depth is always a solid ledge.
 - Radii: `rounded-sm` 8px (swatches), the board 10px, `rounded-md` 12px (pills, rows),
-  `rounded-lg` 16px (buttons), `rounded-xl` 24px (cards).
+  `rounded-lg` 16px (buttons), `rounded-xl` 24px (cards), `rounded-full` for bars, dots and
+  avatars. They're set in `index.css`.
+- Spacing: Tailwind's 4px steps. The scale is 1, 2, 3, 4, 6, 8, 12 (4, 8, 12, 16, 24, 32,
+  48px): `gap-2` inside a row of chips, `gap-4` between cards, `p-5` inside a card, `gap-10`
+  between page sections. Half steps (`gap-2.5`, `py-3.5`) are fine for tight rows; don't
+  invent pixel values (`gap-[13px]`).
 
 ## Board
 
@@ -84,6 +92,8 @@ which are the same in both themes. Its states, each on `/styleguide`:
   follows (`MateCard`): a gold card with the trophy and confetti when you mate the bot, a calm
   card with the # when it mates you; other endings keep a line of text.
 - **Badge:** the move's classification on the square it landed on (`MoveBadge pop`).
+- **Hint:** `glow` puts a gold glow on the piece to move (`animate-hint`, which breathes until
+  you move it). The hint's second step is a `best` arrow. See Lessons.
 
 `PlayBoard` (`pages/play.tsx`) wraps it for making moves (Play, Practice).
 
@@ -91,18 +101,31 @@ which are the same in both themes. Its states, each on `/styleguide`:
 
 - **KnIcon** (`components/kn-icon.tsx`): Knightly's own two-tone icons on a ledge (home, games,
   play, progress, settings, goal, drill, review, trophy, notes, engine, lock, check, star,
-  crown). For navigation, the path and the big moments. They use the theme tokens, so they
-  follow light and dark.
+  crown, hint). For navigation, the path, settings sections, the big moments, and `hint` (the
+  gold bulb) on every Hint button. They use the theme tokens, so they follow light and dark.
 - **Phosphor** (`@phosphor-icons/react`) for everything else: buttons, inline controls,
   status. `bold` by default (set in `main.tsx`); `weight="fill"` for objects (robot, flag,
-  lightbulb, star, play). Use the `…Icon` names (`CheckIcon`).
+  star, play). Use the `…Icon` names (`CheckIcon`). Not for Hint: that's `KnIcon hint`.
 - Figurine notation (`MoveText`) draws the piece shapes in the text color (`PieceGlyph`).
 
 ## Navigation
 
-From `md` up, a sidebar: the brand, then the tabs (KnIcon and an uppercase label; the current
-one outlined in sky), collapsible to an icon rail. On a phone: a top bar with the Settings gear
-and a tab bar along the bottom. The tabs are Home · Games · Play · Progress · Settings.
+From `md` up, a sidebar: the brand, then the tabs (`NavItem`: KnIcon and an uppercase label;
+the current one outlined in sky on a light sky fill), collapsible to an icon rail (⌘B). On a
+phone: a top bar with the Settings gear and a tab bar along the bottom (the same sky outline
+on the current tab). The tabs are Home · Games · Play · Progress · Settings
+(`components/app-shell.tsx`).
+
+- **Goal counters:** on a phone, Home puts today's goal in the top bar through `PhoneHeader`:
+  `KnIcon review` with `0/1` (today's game) and `KnIcon drill` with `3/10` (positions), each a
+  link. Other pages leave the slot empty.
+- **Account status** (`components/account-status.tsx`), at the foot of the sidebar: your
+  initial on a brand disc wearing a small tag per site (Chess.com ink, Lichess sky), your name,
+  and the daily update as a dot and a short line. Five states: `ok` green ("Synced 6:15 AM"),
+  `running` sky and pulsing ("Updating…"), `idle` grey ("Synced yesterday", "Not synced yet"),
+  `partial` gold, `failed` red (their lines in `gold-text` / `danger-text`). Collapsed to the
+  rail, the dot sits on the avatar. Click it for a menu: the update with Run now, each account
+  with its rating, Manage accounts.
 
 Practice isn't a tab: it's a lesson, started from Home's path or Today's goal (or Progress),
 shown full screen without navigation (`FocusShell`). Its ✕ goes back Home.
@@ -113,8 +136,87 @@ Today's goal and the path (`pages/home.tsx`, data from `/api/home` and `units.py
 the weakest of the four KPIs; its path is today's lessons in order (review today's game,
 today's positions, play the bot), then the unit check. `PathNode` (`components/path-node.tsx`)
 draws each step: done, current (ringed, with a sky tag and the only `animate-beacon`), locked,
-and the unit check's crown. The current step opens its lesson card. Gold appears once at
-most: the finished goal, or the "Unit complete" banner (shown once per unit).
+and the unit check's crown. Above the path, Unit 1's banner in brand with its unit check as a
+bar. The current step opens its lesson card (brand border and ledge, one `default` button, or
+`outline` for the optional bot game). Beside it, Today's goal: a `brand` bar for today's game
+and a `sky` bar for positions. Gold appears once at most: the finished goal, or the "Unit
+complete" banner (shown once per unit).
+
+## Lessons
+
+A lesson (Practice, Puzzles, a game's review) is full screen in `FocusShell`, laid out like
+Duolingo's: exactly the window's height, never scrolling (`LessonScreen` in
+`components/lesson-bar.tsx`). On top, ✕ (back Home), the progress bar and its count ("3 of
+10", `animate-bump`); then the prompt; then the board, as big as the space left
+(`LessonBoard`); then the bar along the bottom edge (`LessonBar`).
+
+**The bar's states** (`LessonBar tone`). The band spans the window; only the verdicts slide up.
+
+| Tone | Band | When |
+| --- | --- | --- |
+| `idle` | the page | Before you answer: the controls and a line of help |
+| `retry` | light red, "Not quite" in `danger-text` | After a miss, until you find it or take a hint |
+| `right` | green, ✓ bounces in | Found it, a good move, found with help |
+| `wrong` | red, ✕ shakes once | Show me ("The move was…") |
+| `gold` | gold, the move's badge as the mark | A review step praising your move (Great, Brilliant) |
+
+`LessonVerdict` lays a verdict out: the round mark, the title in `brand-text` / `danger-text`
+/ `gold-text`, a line or two of why, and the buttons (Continue, `default` when right and
+`danger` when wrong; Show the line as `outline`). `FindBar` (`components/find-bar.tsx`) is the
+bar while you find a move, built on these.
+
+**Hint.** One quiet `outline` button with `KnIcon hint`, live two seconds after the position
+appears (no accidental taps). Two steps: Hint lights the piece to move with the gold glow
+(`glow`, `animate-hint`), then the button becomes Show the move and draws it as a green arrow.
+In Practice, when the position has a tactic, a first step names it in words ("Hint: Look for
+a fork: one move that hits two pieces."), so the piece's step is labelled Show the piece. The help line turns `gold-text` once you've taken a
+hint. Show me (`ghost`) stays separate and gives the answer.
+
+**Answers and grades.** Only the first try is graded (`lib/find-move.ts`, `deck.py`: FSRS
+with Anki's buttons, pressed for you). Trying again after a miss is for learning.
+
+| Outcome | Verdict title | Band | Grade |
+| --- | --- | --- | --- |
+| `found` | Found it: Ra8# | green | Good; Easy if it was the engine's move inside 10s |
+| `good` | Good move! Best was Ra8# | green | Hard |
+| `helped` | Found it, with help: Ra8# | green | Again (a hint, or not on the first try) |
+| `shown` | The move was Ra8# | red | Again |
+
+Under the why, when it comes back ("Back in 9 days."). A missed position comes back once at the
+end of the session with a sky **One more go** pill; a position you've never seen has a sky
+**New** pill. Both are `Badge variant="sky"`.
+
+**Marks.** Review complete and Done for today end with a row of marks, one per key moment or
+position: green found, pale green (`brand` mixed 50% into the card) a good move, sky found
+with help, red missed, gold a great move (review only). Each mark is a rounded bar with an
+`aria-label` ("12. Nf5: missed"), and the line under the row names the ones to go over again.
+
+## Screens
+
+- **Progress** (`pages/overview.tsx`): a unit card per KPI, in the order of Home's units. Unit 1
+  (your weakest) is filled `brand` with its unit check as a bar; the others are plain panels
+  with a lock, or a check once done. The number is big Fredoka with its unit beside it, a
+  ▲/▼ change in `brand-text` / `danger-text`, and a link to the games behind it. Each card is a
+  `panel-link`.
+- **Games** (`pages/games.tsx`): quick-filter pills along the top (All, To review, Wins,
+  Losses, Had a blunder, Thrown wins), each with its count in a small chip. The chosen one is
+  ink (`bg-foreground text-background`); the others are cards on a 2px ledge. Then `GameRow`:
+  one game per card (`panel-link`): `ResultBadge`, the color dot, opponent and rating, when and
+  how it ended, the opening, accuracy, up to three blunder/mistake badges (or "Clean"), and
+  Reviewed (green check) or a Review chip.
+- **All moves** (`pages/review-moves.tsx`): `WinGraph`, your winning chance over the game as a
+  green line and fill, the lesson's key moments as `MoveBadge`s on the line (tap one to jump),
+  and a sky line where you are.
+- **Play** (`pages/play.tsx`): `BotSays`, the bot's avatar and a speech bubble (a spinner and
+  "Thinking…" while it thinks, `danger-text` on an error). `BlunderWarning`, once a game when a
+  move loses a lot: a card on a gold ledge with a gold "!" mark, "Blunder check", what the
+  reply wins and how your chance drops, then Take it back (`default`) and Play it anyway
+  (`ghost`). The board shows the reply as a `danger` arrow.
+- **Settings** (`pages/settings.tsx`): each section is a `panel` with its KnIcon, title and a
+  line of what it's for, then rows: the name and a hint on the left, the control on the
+  right. Choices are `Segmented` (the options on a sunken `surface-muted` track, the chosen one
+  raised on a ledge); on/off is `Switch` (`components/ui/switch.tsx`: grey off, green on its
+  ledge).
 
 ## Type
 
@@ -131,7 +233,7 @@ most: the finished goal, or the "Unit complete" banner (shown once per unit).
 | Button | `components/ui/button.tsx` | `default` main action, `outline` alternative, `gold` reward, `sky` helper, `danger` destructive, `ghost`/`link` low stakes |
 | Badge (the brand book's Pill) | `components/ui/badge.tsx` | Tags and states; `win`/`loss`/`draw` for results |
 | Card | `components/ui/card.tsx` | Every panel of content |
-| Progress | `components/ui/progress.tsx` | Anything out of a whole; always labelled |
+| Progress | `components/ui/progress.tsx` | Anything out of a whole; always labelled. `tone`: `brand` (default), `sky` for counts toward a goal, `gold` for a record or a finished goal |
 | StatLabel / StatValue / StatDelta | `components/ui/stat.tsx` | Stat tiles inside a Card |
 | MoveBadge | `components/move-badge.tsx` | Move classifications; `pop` on the board |
 | EvalBar | `components/eval-bar.tsx` | The engine bar beside the board |
@@ -139,6 +241,11 @@ most: the finished goal, or the "Unit complete" banner (shown once per unit).
 | Piece / PieceGlyph | `components/pieces.tsx` | A piece on its own; a piece in the text color for notation |
 | KnIcon | `components/kn-icon.tsx` | Brand icons: navigation, the path, big moments |
 | PathNode | `components/path-node.tsx` | A step on Home's path |
+| LessonScreen / LessonBoard / LessonBar / LessonVerdict | `components/lesson-bar.tsx` | A lesson's layout, its bottom bar and verdicts (see Lessons) |
+| FindBar | `components/find-bar.tsx` | The bar while you find a move: Hint, Show me, the verdict |
+| MoveText / MarkedText | `components/move-text.tsx` | A move in figurine notation; text with moves tagged in it |
+| Switch | `components/ui/switch.tsx` | On/off settings |
+| AccountStatus | `components/account-status.tsx` | The sidebar's account row and the daily update's status |
 | CountUp / CountUpText | `components/ui/count-up.tsx` | Numbers that count up to their value |
 | LogoMark / Logo | `components/logo.tsx` | The mark, and the mark with the name |
 | LogoLoader / LoadingBlock / EmptyState | `components/logo.tsx`, `components/empty-state.tsx` | Loading a view; nothing to show yet |
@@ -184,6 +291,7 @@ for pieces, `--ease-bounce` for rewards and unlocks, `ease-in` for leaving. Use 
 | `animate-float-up` | A change floating off a number ("+12") |
 | `animate-beacon` | The current step only |
 | `animate-hop` | The logo while a view loads (`LogoLoader`) |
+| `animate-hint` | The gold glow on the piece to move after Hint (`Board glow`), until you move it |
 | `CountUp` / `CountUpText` | Stats and scores counting up when shown or changed |
 | `Confetti` | The big moments only |
 
@@ -197,8 +305,8 @@ Rules:
   personal best or a Brilliant you found: one per view, never on a loop. Ordinary moves stay quiet.
 - **Wrong is firm, not harsh.** Red, a single small shake on the ✕, the right move shown. The
   progress bar still moves forward.
-- **Loops mean "act now" or "wait".** Only `animate-beacon`, on the one thing to do next, and
-  `animate-hop`, on the loader.
+- **Loops mean "act now" or "wait".** Only `animate-beacon`, on the one thing to do next,
+  `animate-hint`, on the piece a hint points at, and `animate-hop`, on the loader.
 - **Nothing waits on an animation.** Buttons work mid-animation, and nothing animates longer
   than `--duration-celebrate`.
 - **Reduced motion.** `prefers-reduced-motion` makes every animation jump to its last frame

@@ -52,7 +52,7 @@ export function SettingsPage() {
 }
 
 /** A settings card: its brand icon, title and what it's for, then its rows. */
-function Section({ title, glyph, description, children }: { title: string; glyph: Glyph; description?: string; children: ReactNode }) {
+export function Section({ title, glyph, description, children }: { title: string; glyph: Glyph; description?: string; children: ReactNode }) {
   return (
     <section className="panel overflow-hidden">
       <header className="flex items-center gap-3.5 border-b-2 px-5 py-4">
@@ -68,7 +68,7 @@ function Section({ title, glyph, description, children }: { title: string; glyph
 }
 
 /** One setting: its name (and a hint) on the left, the control on the right. */
-function Row({ label, hint, children }: { label: ReactNode; hint?: ReactNode; children?: ReactNode }) {
+export function Row({ label, hint, children }: { label: ReactNode; hint?: ReactNode; children?: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-5 py-3.5">
       <div className="min-w-0 flex-1 basis-60">
@@ -81,7 +81,7 @@ function Row({ label, hint, children }: { label: ReactNode; hint?: ReactNode; ch
 }
 
 /** A segmented control: the options on a sunken track, the chosen one raised on its ledge. */
-function Segmented<T extends string>({
+export function Segmented<T extends string>({
   value,
   options,
   onChange,

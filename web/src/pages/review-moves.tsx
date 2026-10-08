@@ -376,7 +376,7 @@ export function AllMovesPage() {
  * Your winning chance over the game (click to jump to a move), with the lesson's key moments
  * on the line as badges and a sky line where you are.
  */
-function WinGraph({
+export function WinGraph({
   replay,
   me,
   ply,
