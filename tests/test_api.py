@@ -35,9 +35,9 @@ def add_game(conn, gid, *, played_at, outcome, rated=1, rating=900, opening="Pir
     before = 50  # mover's win% before each move: the other side's win% after the last one
     for ply, (is_user, win_pct, cls) in enumerate(moves, start=1):
         conn.execute(
-            """INSERT INTO moves (game_id, ply, move_number, color, is_user, phase, fen_before,
+            """INSERT INTO moves (game_id, ply, move_number, color, is_user, phase,
                san, uci, win_pct_before, win_pct_after, classification, eval_after)
-               VALUES (?, ?, ?, ?, ?, 'opening', '', 'e4', 'e2e4', ?, ?, ?, 50)""",
+               VALUES (?, ?, ?, ?, ?, 'opening', 'e4', 'e2e4', ?, ?, ?, 50)""",
             (gid, ply, (ply + 1) // 2, "white" if ply % 2 else "black", is_user, before, win_pct, cls),
         )
         before = 100 - win_pct
@@ -243,8 +243,9 @@ def test_engine_lines_are_computed_once_then_cached(db_url, client, tmp_path, mo
 
     monkeypatch.setattr(api.lines, "Engine", FakeEngine)
     with db.connect(db_url) as conn:
-        conn.execute("UPDATE moves SET fen_before = ?, uci = 'e2e4' WHERE game_id = 2 AND ply = 1",
-                     (chess.STARTING_FEN,))
+        # The position before ply 1 is rebuilt from the game's moves (positions.py).
+        conn.execute("UPDATE games SET moves_san = 'e4 e5' WHERE id = 2")
+        conn.execute("UPDATE moves SET uci = 'e2e4' WHERE game_id = 2 AND ply = 1")
     first = client.get("/api/games/2/lines/1").json()
     assert set(first) == {"best", "why"} and first["why"]["start_fen"].split()[1] == "b"
     assert client.get("/api/games/2/lines/1").json() == first

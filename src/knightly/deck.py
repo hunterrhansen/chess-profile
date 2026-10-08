@@ -28,7 +28,7 @@ import chess
 import chess.engine
 from fsrs import Card, Rating, ReviewLog, Scheduler
 
-from . import db
+from . import db, positions
 from .analyze import find_engine, win_pct
 from .brilliance import GREAT_GAP
 
@@ -294,7 +294,7 @@ def answer(conn, game_id: int, ply: int, uci: str, *, hinted: bool = False, redo
 
     def load():
         return conn.execute(
-            """SELECT c.fsrs, c.due, c.reviews, m.fen_before, m.best_uci, m.best_san, m.eval_before
+            """SELECT c.fsrs, c.due, c.reviews, m.best_uci, m.best_san, m.eval_before
                FROM cards c JOIN moves m ON m.game_id = c.game_id AND m.ply = c.ply
                WHERE c.game_id = ? AND c.ply = ?""",
             (game_id, ply),
@@ -307,7 +307,7 @@ def answer(conn, game_id: int, ply: int, uci: str, *, hinted: bool = False, redo
         card = load()
     if card is None:
         raise KeyError((game_id, ply))
-    quality = judge(card["fen_before"], uci, card["best_uci"], card["eval_before"])  # module-level, so tests can swap it
+    quality = judge(positions.fen_before(conn, game_id, ply), uci, card["best_uci"], card["eval_before"])  # module-level, so tests can swap it
     passed = quality in ("best", "excellent", "good")
     state = Card.from_dict(json.loads(card["fsrs"])) if card["fsrs"] else Card()
     rating = None

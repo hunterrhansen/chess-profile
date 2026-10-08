@@ -18,7 +18,7 @@ import chess
 import chess.engine
 import chess.pgn
 
-from . import brilliance
+from . import brilliance, positions
 
 MATE_CP = 10000   # mate-in-N stored as +/-(MATE_CP - N)
 CLAMP_CP = 1000   # evals clamped to this for cp_loss / win% so mates don't dominate averages
@@ -34,7 +34,7 @@ MISS_DROP = 10
 TOP_DROP = 1
 
 MOVE_COLUMNS = [
-    "game_id", "ply", "move_number", "color", "is_user", "phase", "fen_before", "san", "uci",
+    "game_id", "ply", "move_number", "color", "is_user", "phase", "san", "uci",
     "best_san", "best_uci", "eval_before", "eval_after", "mate_before", "mate_after", "cp_loss",
     "win_pct_before", "win_pct_after", "accuracy", "classification", "clock_left", "time_spent",
     "eval_second",
@@ -174,7 +174,6 @@ def analyze_game(engine, game_id: int, pgn: str, user_color: str | None,
             "color": color,
             "is_user": None if user_color is None else int(color == user_color),
             "phase": phase(before, before.fullmove_number),
-            "fen_before": before.fen(),
             "san": before.san(node.move),
             "uci": node.move.uci(),
             "best_san": before.san(best) if best else None,
@@ -229,9 +228,12 @@ def reclassify(conn, log=print) -> int:
     with conn:
         for game_id in game_ids:
             rows = [dict(r) for r in conn.execute(
-                """SELECT ply, is_user, color, fen_before, uci, best_uci, win_pct_before,
+                """SELECT ply, is_user, color, uci, best_uci, win_pct_before,
                           win_pct_after, cp_loss, accuracy, eval_after, eval_second
                    FROM moves WHERE game_id = ? ORDER BY ply""", (game_id,))]
+            fens = positions.fens(conn, [game_id])
+            if any((game_id, r["ply"]) not in fens for r in rows):
+                continue  # the game's moves don't replay: keep its labels
             prev_drop = None
             for r in rows:
                 wb, wa = r["win_pct_before"], r["win_pct_after"]
@@ -239,7 +241,7 @@ def reclassify(conn, log=print) -> int:
                 move = chess.Move.from_uci(r["uci"])
                 second = r["eval_second"]
                 r["classification"] = classify(wb, wa, r["uci"] == r["best_uci"], prev_drop, special(
-                    chess.Board(r["fen_before"]), move, r["uci"] == r["best_uci"], wb, wa,
+                    chess.Board(fens[(game_id, r["ply"])]), move, r["uci"] == r["best_uci"], wb, wa,
                     sign * r["eval_after"], sign * second if second is not None else None))
                 prev_drop = wb - wa
             conn.executemany("UPDATE moves SET classification = ? WHERE game_id = ? AND ply = ?",

@@ -67,10 +67,13 @@ each later change to the schema is a new numbered file there, applied once per d
   `speed`, and the full original `pgn` (with clock and eval comments).
 - `puzzle_attempts`: one row per attempt (`success`, `fen`, `solution`, `themes` JSON).
 - `snapshots`: point-in-time copies of profile/stats endpoints (rating history).
-- `moves`: one row per half-move of every analysed game: position, your move vs. the
+- `moves`: one row per half-move of every analysed game: your move vs. the
   engine's best, evals before/after, centipawn loss, win% before/after, accuracy,
   `classification` (brilliant / great / best / excellent / good / inaccuracy / mistake / blunder / miss), `phase`, clock left and
   time spent. Filled by `analyze`.
+  The position before each move isn't stored: [`positions.py`](src/knightly/positions.py)
+  rebuilds it from the game's moves, and the table uses small integers and enums, so a
+  row is about 170 bytes.
 - `game_analysis`: per-game engine summary (accuracy, ACPL, blunder/mistake counts).
 - `runs`: one row per `update` (status, counts, errors).
 - `settings`: app settings changed from the web app, e.g. `analysis_depth`.
