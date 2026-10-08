@@ -30,7 +30,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from . import auth, config, db, deck, jobs, lines, patterns, play, positions, puzzles, schedule, units, update, users
+from . import auth, config, db, deck, jobs, lines, lookup, patterns, play, positions, puzzles, schedule, units, update, users
 from .analyze import THRESHOLDS, find_engine
 
 # A position counts as "winning" once the user's win chance reaches this after one of
@@ -216,27 +216,6 @@ def _game_json(r) -> dict:
     }
 
 
-def _headline_rating(source: str, data: dict | None) -> dict:
-    """An account's one number for the sidebar: its rating in the speed you play most,
-    else (a Lichess account used for puzzles only) its puzzle rating."""
-    best = None  # (games, rating, kind)
-    if data and source == "chesscom":
-        for speed in ("rapid", "blitz", "bullet", "daily"):
-            s = data.get(f"chess_{speed}") or {}
-            games = sum((s.get("record") or {}).get(k, 0) for k in ("win", "loss", "draw"))
-            if s.get("last") and (best is None or games > best[0]):
-                best = (games, s["last"]["rating"], speed.capitalize())
-    elif data and source == "lichess":
-        perfs = data.get("perfs") or {}
-        for speed in ("rapid", "blitz", "bullet", "classical", "correspondence"):
-            p = perfs.get(speed) or {}
-            if p.get("games") and (best is None or p["games"] > best[0]):
-                best = (p["games"], p["rating"], speed.capitalize())
-        if best is None and (perfs.get("puzzle") or {}).get("games"):
-            best = (perfs["puzzle"]["games"], perfs["puzzle"]["rating"], "Puzzles")
-    return {"rating": best[1], "rating_kind": best[2]} if best else {"rating": None, "rating_kind": None}
-
-
 SOURCES = ("chesscom", "lichess")
 # Your own recordings in `sounds/` beside the database, if present (README: Sounds)
 LOCAL_SOUNDS = ("move-self.mp3", "capture.mp3", "game-start.mp3", "game-end.mp3")
@@ -404,6 +383,62 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             db.add_account(conn, body.source, body.handle)
             jobs.enqueue(conn, "update", {"trigger": "account"})  # bring its games in now
         return {"source": body.source, "handle": body.handle}
+
+    @api.get("/api/lookup")
+    def lookup_account(source: str, handle: str):
+        """A public account, before adding it: the welcome flow's "Is this you?"."""
+        if source not in SOURCES:
+            raise HTTPException(400, f"source must be one of {', '.join(SOURCES)}")
+        site = "Chess.com" if source == "chesscom" else "Lichess"
+        if not HANDLE.match(handle):
+            raise HTTPException(400, "That doesn't look like a username.")
+        try:
+            found = lookup.account(source, handle)
+        except Exception:
+            raise HTTPException(502, f"Couldn't reach {site} just now. Try again in a moment.") from None
+        if found is None:
+            raise HTTPException(404, f"No {site} account is called {handle}.")
+        return found
+
+    @api.get("/api/onboarding")
+    def onboarding():
+        """The welcome flow's import screen: how far the first update has got, what it has
+        found so far, and (once the newest games are in) the summary for "Your first lesson
+        is ready"."""
+        counts = query("""SELECT (SELECT count(*) FROM games) AS games,
+                                 (SELECT count(*) FROM games WHERE variant = 'standard') AS standard,
+                                 (SELECT count(*) FROM game_analysis) AS analysed""")[0]
+        cutoff = (datetime.now(timezone.utc) - STALE_RUN).strftime("%Y-%m-%dT%H:%M:%SZ")
+        running = query("SELECT progress FROM runs WHERE status = 'running' AND started_at >= ? LIMIT 1", (cutoff,))
+        with read() as conn:
+            waiting = jobs.pending(conn)
+        progress = json.loads(running[0]["progress"]) if running and running[0]["progress"] else None
+        findings = query(
+            """SELECT g.opponent, g.played_at, m.move_number, m.color, m.san, m.best_san, m.classification
+               FROM moves m JOIN games g ON g.id = m.game_id
+               WHERE m.is_user = 1 AND m.classification IN ('blunder', 'mistake', 'miss') AND m.best_san IS NOT NULL
+               ORDER BY g.played_at DESC NULLS LAST, m.ply LIMIT 3""")
+        summary = query(
+            """SELECT count(*) FILTER (WHERE classification = 'blunder') AS blunders,
+                      count(*) FILTER (WHERE classification = 'mistake') AS mistakes,
+                      count(*) FILTER (WHERE classification = 'miss') AS misses
+               FROM moves WHERE is_user = 1""")[0]
+        top = query("""SELECT pattern FROM moves WHERE is_user = 1 AND pattern IS NOT NULL
+                         AND pattern NOT IN (?, ?) GROUP BY pattern ORDER BY count(*) DESC LIMIT 1""",
+                    (patterns.OTHER, patterns.PENDING))
+        with read() as conn:
+            positions_ready = len(deck._qualifying(conn))
+        return {
+            "accounts": [dict(r) for r in query("SELECT source, handle FROM accounts ORDER BY source")],
+            "games": counts["games"],
+            "analysed": counts["analysed"],
+            # The first update analyses the newest FIRST_BATCH; the rest come in backfills.
+            "target": min(jobs.FIRST_BATCH, counts["standard"]),
+            "working": bool(running) or "update" in waiting,
+            "step": progress.get("current") if progress else None,
+            "findings": [dict(f) for f in findings],
+            "summary": {**dict(summary), "positions": positions_ready, "pattern": top[0]["pattern"] if top else None},
+        }
 
     @api.delete("/api/accounts/{source}/{handle}", status_code=204)
     def remove_account(source: str, handle: str):
@@ -617,7 +652,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             snap = query("""SELECT data FROM snapshots WHERE source = ? AND lower(account) = lower(?)
                               AND kind IN ('stats', 'profile') ORDER BY taken_at DESC LIMIT 1""",
                          (a["source"], a["handle"]))
-            accounts.append({**dict(a), **_headline_rating(a["source"], json.loads(snap[0]["data"]) if snap else None)})
+            accounts.append({**dict(a), **lookup.headline_rating(a["source"], json.loads(snap[0]["data"]) if snap else None)})
         with read() as conn:
             waiting = jobs.pending(conn)
         return {

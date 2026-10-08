@@ -219,6 +219,14 @@ with help, red missed, gold a great move (review only). Each mark is a rounded b
   letters on its ledge. Clerk's styles win on specificity, so those classes carry `!`. While
   Clerk loads: `LogoLoader` ("Opening Knightly…"). Signed in: the account's email and Sign
   out at the top of Settings › Accounts.
+- **Welcome** (`pages/welcome.tsx`, canvas: Onboarding › A): a new account's first screens,
+  full screen like a lesson (`LessonScreen`, `LessonBar`), the mark and a sky "Setting up"
+  `Progress` on top. Four steps: *Where do you play?* (`SiteChoice` ×2, outlined in sky once
+  chosen, and the username), *Is this you?* (`AccountCard`: initial on a brand disc, the rated
+  games and since when, the rating), *Bringing in your games* (games found, then a sky bar for
+  the newest 50 and `FindingRow`s as mistakes turn up; "Start with what's ready" once one game
+  is analysed), *Your first lesson is ready* (trophy, the real counts, a gold bar). AppShell
+  sends any account with no Chess.com or Lichess here.
 - **Settings** (`pages/settings.tsx`): each section is a `panel` with its KnIcon, title and a
   line of what it's for, then rows: the name and a hint on the left, the control on the
   right. Choices are `Segmented` (the options on a sunken `surface-muted` track, the chosen one

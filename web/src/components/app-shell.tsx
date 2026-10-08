@@ -1,10 +1,11 @@
 import { SidebarSimpleIcon } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Link, Outlet, useLocation } from 'react-router'
+import { Link, Navigate, Outlet, useLocation } from 'react-router'
 import { AccountStatus } from '@/components/account-status'
 import { type Glyph, KnIcon } from '@/components/kn-icon'
 import { LogoMark } from '@/components/logo'
+import { type AccountStatus as Status, useApi } from '@/lib/api'
 import { lastLocation, rememberLocation, type Section, sectionsOf } from '@/lib/last-location'
 import { usePreferences } from '@/lib/preferences'
 import { cn } from '@/lib/utils'
@@ -68,6 +69,10 @@ export function AppShell() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [collapsed, set])
+
+  // A new account (no Chess.com or Lichess yet) starts at Welcome.
+  const { data: status } = useApi<Status>('/api/status')
+  if (status && !status.accounts.length) return <Navigate to="/welcome" replace />
 
   // Text next to icons unless collapsed to the rail.
   const label = collapsed ? 'hidden' : 'inline'

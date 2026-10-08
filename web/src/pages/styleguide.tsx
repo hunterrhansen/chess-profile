@@ -55,6 +55,7 @@ import { cn } from '@/lib/utils'
 import { GameRow } from '@/pages/games'
 import { BlunderWarning, BotSays } from '@/pages/play'
 import { WinGraph } from '@/pages/review-moves'
+import { AccountCard, FindingRow, SiteChoice } from '@/pages/welcome'
 import { Segmented, Row as SettingRow, Section as SettingsSection } from '@/pages/settings'
 
 /**
@@ -263,6 +264,7 @@ export function StyleguidePage() {
 
       <SettingsBlock />
       <SignInBlock />
+      <WelcomeBlock />
 
       <GamesBlock />
 
@@ -1107,6 +1109,29 @@ function SignInBlock() {
     >
       <div className="panel flex justify-center p-8">
         <SignInHeader />
+      </div>
+    </Block>
+  )
+}
+
+/** Welcome's pieces (pages/welcome.tsx), with gghansen's real account and findings. */
+function WelcomeBlock() {
+  const [site, setSite] = useState<'chesscom' | 'lichess'>('chesscom')
+  return (
+    <Block
+      title="Welcome"
+      note="A new account's first screens (canvas: Onboarding › A): SiteChoice (outlined in sky once chosen), AccountCard for “Is this you?”, and FindingRow for what the first analysis turns up."
+    >
+      <div className="grid max-w-xl grid-cols-2 gap-3">
+        <SiteChoice source="chesscom" chosen={site === 'chesscom'} onChoose={() => setSite('chesscom')} />
+        <SiteChoice source="lichess" chosen={site === 'lichess'} onChoose={() => setSite('lichess')} />
+      </div>
+      <div className="max-w-xl">
+        <AccountCard account={{ source: 'chesscom', handle: 'GGHansen', rating: 914, rating_kind: 'Rapid', games: 583, since: '2026-01' }} />
+      </div>
+      <div className="flex max-w-xl flex-col gap-2.5">
+        <FindingRow finding={{ opponent: 'deathcomesforusall2', played_at: '2026-10-07T18:00:00Z', move_number: 13, color: 'white', san: 'O-O', best_san: 'Bg6+', classification: 'mistake' }} />
+        <FindingRow finding={{ opponent: 'Moazamchess', played_at: '2026-10-07T17:00:00Z', move_number: 6, color: 'black', san: 'h6', best_san: 'Bxb2', classification: 'miss' }} />
       </div>
     </Block>
   )
