@@ -255,9 +255,12 @@ export function AllMovesPage() {
     )
   }
 
+  // From lg up the page is exactly the window's height, never scrolling: the board takes the
+  // height the header leaves, and the move list whatever the graph and current move leave.
+  // (-my-6 / py-6 undo and redo FocusShell's padding.)
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-4">
-      <header className="flex flex-wrap items-center gap-x-3.5 gap-y-2">
+    <div className="mx-auto flex max-w-6xl flex-col gap-4 lg:-my-6 lg:h-svh lg:py-6">
+      <header className="flex shrink-0 flex-wrap items-center gap-x-3.5 gap-y-2">
         {hasLesson ? (
           <Button asChild variant="outline" size="sm">
             <Link to={`/games/${game.id}`}>
@@ -295,8 +298,12 @@ export function AllMovesPage() {
         )}
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
-        <section aria-label="Board" className="mx-auto flex w-full max-w-[calc(100svh-150px)] min-w-72 flex-col gap-1.5">
+      <div className="grid gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:[container-type:size]">
+        {/* 110px: the two player strips, the step buttons and the gaps, less the eval bar beside the board. */}
+        <section
+          aria-label="Board"
+          className="mx-auto flex w-full max-w-[calc(100svh-150px)] min-w-72 flex-col gap-1.5 lg:max-w-[calc(100cqh-110px)]"
+        >
           {theirStrip(true)}
           <div className="flex gap-2">
             {lineView ? (
@@ -328,7 +335,7 @@ export function AllMovesPage() {
           </div>
         </section>
 
-        <aside aria-label="Moves" className="flex min-w-0 flex-col gap-3.5">
+        <aside aria-label="Moves" className="flex min-w-0 flex-col gap-3.5 lg:min-h-0">
           {replay.moves.length > 0 && (
             <WinGraph replay={replay} me={me} ply={ply} moments={moments} onSelect={setPly} />
           )}
@@ -351,7 +358,7 @@ export function AllMovesPage() {
               />
             )}
           </div>
-          <div className={cn('panel flex max-h-80 min-h-48 flex-col overflow-hidden transition-opacity', inLine && 'opacity-40')}>
+          <div className={cn('panel flex max-h-80 min-h-48 flex-col overflow-hidden transition-opacity lg:max-h-none lg:min-h-0 lg:flex-1', inLine && 'opacity-40')}>
             <MoveList san={game.san} moves={replay.moves} ply={ply} onSelect={setPly} />
           </div>
         </aside>
