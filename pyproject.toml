@@ -13,6 +13,10 @@ dependencies = [
     "uvicorn>=0.30",
 ]
 
+[project.optional-dependencies]
+# `knightly fsrs-optimize` (tuning the review deck to your answers) needs PyTorch: large, so opt-in.
+optimizer = ["fsrs[optimizer]>=6.3,<7"]
+
 [project.scripts]
 knightly = "knightly.cli:main"
 

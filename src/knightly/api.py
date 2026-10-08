@@ -535,7 +535,10 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
         counts = query("""SELECT (SELECT count(*) FROM games) AS games,
                                  (SELECT count(*) FROM game_analysis) AS analysed""")[0]
         depth = query("SELECT value FROM settings WHERE key = 'analysis_depth'")
+        with read() as conn:
+            fsrs = deck.tuning(conn)
         return {
+            "fsrs": fsrs,
             "accounts": [
                 {**dict(a), "synced_through": cursors.get((a["source"], a["handle"].lower(), "games"))}
                 for a in query("SELECT source, handle FROM accounts ORDER BY source")

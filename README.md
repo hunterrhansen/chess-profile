@@ -185,6 +185,14 @@ standing in for Anki's relearning steps), and that go doesn't change the grade. 
 positions a day. Puzzles (`/puzzles`, Lichess puzzles for your most common tactic) work
 the same way, without the scheduling.
 
+FSRS starts with its default settings. Once you have 512 graded answers, tune it to your own
+memory, as Anki's Optimize does (Settings › Analysis shows how far along you are):
+
+```bash
+uv sync --extra optimizer        # once: the optimizer needs PyTorch, a large download
+uv run knightly fsrs-optimize
+```
+
 For any move worse than Good, **Why** and **Best line** play an engine line on the board
 (drawn in blue, so it never looks like the real game): how the move gets punished, or what
 should have been played. Lines come from Stockfish on the first click (about a second, at

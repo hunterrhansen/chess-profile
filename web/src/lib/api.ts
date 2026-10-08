@@ -227,6 +227,8 @@ export interface Settings {
   running: boolean
   engine: string | null
   depth: number
+  /** The review deck's FSRS scheduler: default parameters, or tuned to your answers. */
+  fsrs: { personal: boolean; reviews: number; needed: number; tuned_at: string | null; tuned_reviews: number | null }
   database: { path: string; bytes: number; games: number; analysed: number }
   backups: { dir: string; count: number; keep: number }
 }

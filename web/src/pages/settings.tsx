@@ -604,6 +604,18 @@ function AnalysisSection({ settings, reload }: { settings: Settings; reload: () 
       <Row label="Move classification" hint="Chess.com's bands. A move losing 20+ points of win chance is a blunder; Great is the only move that held, Brilliant a sound sacrifice.">
         <span className="font-extrabold">Fixed</span>
       </Row>
+      <Row
+        label="Review deck schedule"
+        hint={
+          settings.fsrs.personal
+            ? `FSRS, as in Anki, tuned to your answers${settings.fsrs.tuned_reviews ? ` (${settings.fsrs.tuned_reviews} reviews)` : ''}. Run knightly fsrs-optimize again now and then.`
+            : `FSRS, as in Anki, with its default settings. At ${settings.fsrs.needed} reviews, knightly fsrs-optimize can tune it to you, like Anki's Optimize.`
+        }
+      >
+        <span className="font-extrabold whitespace-nowrap">
+          {settings.fsrs.personal ? 'Tuned to you' : `${settings.fsrs.reviews} of ${settings.fsrs.needed}`}
+        </span>
+      </Row>
       <ErrorText>{error}</ErrorText>
     </Section>
   )

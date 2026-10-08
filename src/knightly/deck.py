@@ -27,7 +27,7 @@ from datetime import date, datetime, timezone
 
 import chess
 import chess.engine
-from fsrs import Card, Rating, Scheduler
+from fsrs import Card, Rating, ReviewLog, Scheduler
 
 from .analyze import find_engine, win_pct
 from .brilliance import GREAT_GAP
@@ -51,6 +51,9 @@ SKIP = "0000"  # Show me (or Skip): no move
 
 # No learning or relearning steps: the session's end-of-lesson redo does that job.
 SCHEDULER = Scheduler(learning_steps=(), relearning_steps=())
+# Like Anki's "Optimize": once there are this many graded answers, FSRS can be fitted to your
+# own memory (`knightly fsrs-optimize`); with fewer, its optimizer keeps the defaults anyway.
+MIN_TUNE_REVIEWS = 512
 RATING = {"again": Rating.Again, "hard": Rating.Hard, "good": Rating.Good, "easy": Rating.Easy}
 
 
@@ -94,16 +97,63 @@ def sync(conn: sqlite3.Connection) -> int:
     return added
 
 
+def scheduler(conn) -> Scheduler:
+    """FSRS with your own parameters once they've been tuned, else the defaults."""
+    row = conn.execute("SELECT value FROM settings WHERE key = 'fsrs_parameters'").fetchone()
+    if not row:
+        return SCHEDULER
+    return Scheduler(parameters=json.loads(row[0]), learning_steps=(), relearning_steps=())
+
+
+def _review_logs(conn) -> list[ReviewLog]:
+    """Every graded answer (a card's first of the day) as FSRS review logs."""
+    rows = conn.execute(
+        """SELECT game_id, ply, reviewed_at, rating FROM card_reviews
+           WHERE rating IS NOT NULL ORDER BY reviewed_at, id""").fetchall()
+    return [ReviewLog(card_id=r["game_id"] * 1000 + r["ply"], rating=RATING[r["rating"]],
+                      review_datetime=datetime.fromisoformat(r["reviewed_at"].replace("Z", "+00:00")),
+                      review_duration=None) for r in rows]
+
+
+def tuning(conn) -> dict:
+    """Whether the deck runs on your own FSRS parameters, and how many reviews there are."""
+    def setting(key):
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        return json.loads(row[0]) if row else None
+    reviews = conn.execute("SELECT count(*) FROM card_reviews WHERE rating IS NOT NULL").fetchone()[0]
+    return {"personal": setting("fsrs_parameters") is not None, "reviews": reviews,
+            "needed": MIN_TUNE_REVIEWS, "tuned_at": setting("fsrs_tuned_at"),
+            "tuned_reviews": setting("fsrs_tuned_reviews")}
+
+
+def tune(conn, now: datetime | None = None) -> dict:
+    """Fit FSRS to your own answers, as Anki's Optimize does, and use the result from now on.
+    Needs MIN_TUNE_REVIEWS reviews and the optimizer (`uv sync --extra optimizer`, PyTorch)."""
+    logs = _review_logs(conn)
+    if len(logs) < MIN_TUNE_REVIEWS:
+        return {**tuning(conn), "tuned": False}
+    from fsrs import Optimizer  # raises ImportError without the optimizer extra
+    parameters = Optimizer(logs).compute_optimal_parameters()
+    stamp = (now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    for key, value in (("fsrs_parameters", list(parameters)), ("fsrs_tuned_at", stamp),
+                       ("fsrs_tuned_reviews", len(logs))):
+        conn.execute(
+            """INSERT INTO settings (key, value) VALUES (?, ?)
+               ON CONFLICT (key) DO UPDATE SET value = excluded.value""", (key, json.dumps(value)))
+    return {**tuning(conn), "tuned": True}
+
+
 def _replay_history(conn) -> None:
     """Cards answered under the old fixed ladder (3 days, 1 week, ...) have no FSRS state:
     rebuild it by replaying their answers, a right one as Good and a wrong one as Again."""
+    fsrs = scheduler(conn)
     for card in conn.execute("SELECT game_id, ply FROM cards WHERE fsrs IS NULL AND reviews > 0").fetchall():
         state = Card()
         for r in conn.execute(
             """SELECT reviewed_at, correct FROM card_reviews WHERE game_id = ? AND ply = ?
                ORDER BY reviewed_at, id""", (card["game_id"], card["ply"])):
             at = datetime.fromisoformat(r["reviewed_at"].replace("Z", "+00:00"))
-            state, _ = SCHEDULER.review_card(state, Rating.Good if r["correct"] else Rating.Again, at)
+            state, _ = fsrs.review_card(state, Rating.Good if r["correct"] else Rating.Again, at)
             conn.execute(
                 "UPDATE card_reviews SET rating = ? WHERE game_id = ? AND ply = ? AND reviewed_at = ? AND rating IS NULL",
                 ("good" if r["correct"] else "again", card["game_id"], card["ply"], r["reviewed_at"]))
@@ -266,7 +316,7 @@ def answer(conn, game_id: int, ply: int, uci: str, *, hinted: bool = False, redo
             rating = "easy"
         when = now or datetime.now(timezone.utc)
         duration = round(seconds * 1000) if seconds is not None else None
-        state, _ = SCHEDULER.review_card(state, RATING[rating], when, review_duration=duration)
+        state, _ = scheduler(conn).review_card(state, RATING[rating], when, review_duration=duration)
         stamp = when.strftime("%Y-%m-%dT%H:%M:%SZ")
         conn.execute(
             """UPDATE cards SET fsrs = ?, due = ?, reviews = reviews + 1, lapses = lapses + ?,
