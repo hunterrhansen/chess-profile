@@ -17,8 +17,8 @@ def row(pid, rating=1200, popularity=95, plays=1000, themes="fork short"):
     return f"{pid},{FORK},e8d8 b5c7,{rating},75,{popularity},{plays},{themes},https://lichess.org/x,\n"
 
 
-def test_import_keeps_only_good_puzzles_in_our_themes(tmp_path):
-    conn = db.connect(tmp_path / "chess.db")
+def test_import_keeps_only_good_puzzles_in_our_themes(db_url, tmp_path):
+    conn = db.connect(db_url)
     f = write_csv(tmp_path / "p.csv", [
         row("aaaaa"),
         row("bbbbb", popularity=10),            # disliked
@@ -31,8 +31,8 @@ def test_import_keeps_only_good_puzzles_in_our_themes(tmp_path):
     assert [r[0] for r in conn.execute("SELECT puzzle_id FROM lichess_puzzles")] == ["aaaaa"]
 
 
-def test_api_serves_and_records_puzzles(tmp_path):
-    path = tmp_path / "chess.db"
+def test_api_serves_and_records_puzzles(db_url, tmp_path):
+    path = db_url
     with db.connect(path) as conn:
         puzzles.import_file(conn, write_csv(tmp_path / "p.csv", [row("aaaaa"), row("bbbbb")]),
                             log=lambda *a: None)

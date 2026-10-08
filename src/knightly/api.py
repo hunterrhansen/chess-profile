@@ -1,9 +1,9 @@
-"""HTTP API over chess.db for the web frontend (`knightly serve`).
+"""HTTP API over the Postgres database for the web frontend (`knightly serve`).
 
 Every number on the overview is computed from one row per game (GAME_FACTS), and the
 games list filters on the same rows, so a KPI and the games it links to always agree.
 
-Reads use a read-only connection. The only writes are the Settings page's (accounts, the
+The only writes are the Settings page's (accounts, the
 analysis depth, and the daily-update schedule, which goes through launchd), cached engine
 lines, games played against the bot, finished game reviews, and the review deck's
 cards and answers.
@@ -13,11 +13,10 @@ import json
 import os
 import re
 import shutil
-import sqlite3
 import subprocess
 import sys
 from contextlib import closing
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import chess
@@ -52,21 +51,21 @@ WITH peaks AS (
            min(CASE WHEN is_user = 1 THEN win_pct_after END) AS trough,
            -- Blunder-sized moves of yours, whatever their label: a "miss" that throws away
            -- 20+ points is as costly as any other blunder.
-           sum(is_user = 1 AND win_pct_before - win_pct_after >= {BLUNDER_DROP}) AS big_drops
+           count(*) FILTER (WHERE is_user = 1 AND win_pct_before - win_pct_after >= {BLUNDER_DROP}) AS big_drops
     FROM moves GROUP BY game_id
 ), punish AS (
     -- Opponent blunders (by size, since a blunder that answers your own error is labelled
     -- "miss"), and how many the user answered with a best, excellent or good move.
     SELECT o.game_id, count(*) AS opp_blunders,
-           sum(n.classification IN ('brilliant', 'great', 'best', 'excellent', 'good')) AS punished
+           count(*) FILTER (WHERE n.classification IN ('brilliant', 'great', 'best', 'excellent', 'good')) AS punished
     FROM moves o JOIN moves n ON n.game_id = o.game_id AND n.ply = o.ply + 1
     WHERE o.is_user = 0 AND o.win_pct_before - o.win_pct_after >= {BLUNDER_DROP} AND n.is_user = 1
     GROUP BY o.game_id
 ), move10 AS (
     -- Eval after Black's 10th move, from the user's side, clamped like cp_loss.
     SELECT m.game_id,
-           max(-1000, min(1000, CASE WHEN g.user_color = 'white' THEN m.eval_after
-                                     ELSE -m.eval_after END)) AS eval10
+           greatest(-1000, least(1000, CASE WHEN g.user_color = 'white' THEN m.eval_after
+                                            ELSE -m.eval_after END)) AS eval10
     FROM moves m JOIN games g ON g.id = m.game_id WHERE m.ply = 20
 )
 SELECT g.id, g.played_at, g.speed, g.rated, g.time_control, g.url, g.user_color,
@@ -333,31 +332,22 @@ def lichess_token_saved() -> bool:
     return found.returncode == 0
 
 
-def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = None) -> FastAPI:
-    db_path = str(Path(db_path).resolve())
+def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = None) -> FastAPI:
+    db.connect(database_url).close()  # apply any pending migrations once, at startup
     app = FastAPI(title="knightly")
 
-    def query(sql: str, params=()) -> list[sqlite3.Row]:
-        # Read-only, so the API never competes with `sync` or `analyze` for the write lock.
-        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-        conn.row_factory = sqlite3.Row
-        try:
+    def connect():
+        """A short-lived connection; `with connect() as conn, conn:` for a transaction."""
+        return closing(db.connect(database_url, migrate=False))
+
+    def query(sql: str, params=()) -> list[db.Row]:
+        with connect() as conn:
             return conn.execute(sql, params).fetchall()
-        finally:
-            conn.close()
 
-    def read():
-        """A read-only connection, for code (deck.py) that takes a connection."""
-        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-        conn.row_factory = sqlite3.Row
-        return closing(conn)
-
-    def facts(where: str = "1", params=(), order: str = "f.played_at") -> list[sqlite3.Row]:
+    def facts(where: str = "TRUE", params=(), order: str = "f.played_at NULLS FIRST") -> list[db.Row]:
         return query(f"SELECT * FROM ({GAME_FACTS}) f WHERE {where} ORDER BY {order}", params)
 
-    def write():
-        """A short-lived read-write connection, for the Settings page's few writes."""
-        return closing(db.connect(db_path))
+    read = write = connect
 
     @app.get("/api/accounts")
     def accounts():
@@ -405,7 +395,9 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
         except SystemExit as e:  # Stockfish not installed
             raise HTTPException(503, str(e)) from None
         with write() as conn, conn:
-            conn.execute("INSERT OR REPLACE INTO engine_lines (game_id, ply, depth, data) VALUES (?, ?, ?, ?)",
+            conn.execute("""INSERT INTO engine_lines (game_id, ply, depth, data) VALUES (?, ?, ?, ?)
+                            ON CONFLICT (game_id, ply, depth)
+                            DO UPDATE SET data = excluded.data, created_at = iso_now()""",
                          (game_id, ply, depth, json.dumps(data)))
         return data
 
@@ -516,8 +508,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
 
     @app.get("/api/settings")
     def settings():
-        path = Path(db_path)
-        backups = sorted((path.parent / "backups").glob(f"{path.stem}-????-??-??.db"))
+        backups = sorted(update.backup_dir().glob(update.BACKUP_GLOB))
         cursors = {(r["source"], r["account"], r["kind"]): r["cursor"]
                    for r in query("SELECT source, account, kind, cursor FROM sync_state")}
         last = query("""SELECT id, started_at, finished_at, status, trigger, new_games,
@@ -557,11 +548,11 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
             "engine": engine_name(),
             "depth": int(depth[0]["value"]) if depth else db.DEFAULT_DEPTH,
             "database": {
-                "path": str(path),
-                "bytes": sum(p.stat().st_size for p in (path, Path(f"{path}-wal")) if p.exists()),
+                **dict(query("""SELECT current_database() || ' on ' || coalesce(host(inet_server_addr()), 'this Mac')
+                                         AS path, pg_database_size(current_database()) AS bytes""")[0]),
                 **dict(counts),
             },
-            "backups": {"dir": str(path.parent / "backups"), "count": len(backups),
+            "backups": {"dir": str(update.backup_dir()), "count": len(backups),
                         "keep": update.KEEP_BACKUPS},
         }
 
@@ -599,7 +590,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
     def set_schedule(body: ScheduleIn):
         try:
             if body.enabled:
-                schedule.install(Path(db_path), hour=body.hour, minute=body.minute, log=lambda _: None)
+                schedule.install(database_url, hour=body.hour, minute=body.minute, log=lambda _: None)
             else:
                 schedule.uninstall(log=lambda _: None)
         except SystemExit as e:  # schedule.py reports failures this way for the CLI
@@ -617,9 +608,9 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
             except SystemExit as e:
                 raise HTTPException(400, str(e)) from None
             return {"started": True}
-        command = [str(Path(sys.executable).parent / "knightly"), "--db", db_path, "update",
+        command = [str(Path(sys.executable).parent / "knightly"), "--db", database_url, "update",
                    "--workers", str(schedule.SCHEDULED_WORKERS)]
-        options = {"stdin": subprocess.DEVNULL, "cwd": str(Path(db_path).parent), "start_new_session": True}
+        options = {"stdin": subprocess.DEVNULL, "cwd": str(config.data_dir()), "start_new_session": True}
         if config.on_mac():
             schedule.LOG.parent.mkdir(parents=True, exist_ok=True)
             with open(schedule.LOG, "a") as log_file:
@@ -643,12 +634,11 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
                         JOIN games g ON g.id = r.game_id""")[0]["at"]
         since = max(filter(None, [last, _iso(_now() - timedelta(days=NEW_GAME_DAYS))]))
         fresh = facts("f.analysed AND f.reviewed_at IS NULL AND f.played_at > ?", (since,),
-                      order="f.played_at DESC")
+                      order="f.played_at DESC NULLS LAST")
         lead = units.unit(path[0]["id"])
         pick = next((r for r in fresh if lead.review(r)), fresh[0] if fresh else None)
-        reviewed_today = query(
-            """SELECT count(*) AS n FROM game_reviews
-               WHERE date(reviewed_at, 'localtime') = date('now', 'localtime')""")[0]["n"]
+        reviewed_today = query("SELECT count(*) AS n FROM game_reviews WHERE reviewed_at >= ? AND reviewed_at < ?",
+                               db.day_range(date.today()))[0]["n"]
 
         with write() as conn, conn:
             deck.sync(conn)
@@ -690,7 +680,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
         """A Lichess puzzle in `theme` you haven't tried here, near your puzzle rating."""
         if theme not in patterns.THEMES:
             raise HTTPException(400, f"unknown theme {theme!r}")
-        with closing(db.connect(db_path)) as conn:
+        with connect() as conn:
             return {"puzzle": puzzles.next_puzzle(conn, theme), "done_today": puzzles.done_today(conn),
                     "session": puzzles.SESSION, "available": puzzles.available(conn)}
 
@@ -748,9 +738,9 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
                           PARTITION BY eco, user_color ORDER BY count(*) DESC) AS rn
                       FROM g WHERE opening != '' GROUP BY eco, user_color, opening)
             SELECT g.eco, n.opening, g.user_color AS color, count(*) AS games,
-                   avg(g.user_outcome = 'win') AS win_rate
+                   avg((g.user_outcome = 'win')::int) AS win_rate
             FROM g LEFT JOIN names n ON n.eco = g.eco AND n.user_color = g.user_color AND n.rn = 1
-            GROUP BY g.eco, g.user_color ORDER BY games DESC LIMIT 3""", (start,) if start else ())
+            GROUP BY g.eco, g.user_color, n.opening ORDER BY games DESC LIMIT 3""", (start,) if start else ())
 
         return {
             "range": range,
@@ -793,9 +783,9 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
         """The games list. Search and the Filters popover narrow the whole list; the quick
         filters on top (result, kpi, to_review) pick within it, and `counts` gives each quick
         filter's number for the list as narrowed."""
-        where, params = ["1"], []
+        where, params = ["TRUE"], []
         if q:
-            where.append("(f.opponent LIKE ? OR f.opening LIKE ? OR f.eco LIKE ?)")
+            where.append("(f.opponent ILIKE ? OR f.opening ILIKE ? OR f.eco ILIKE ?)")
             params += [f"%{q}%"] * 3
         if speed:
             where.append("f.speed = ?")
@@ -814,7 +804,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
         if kpi and kpi not in KPI_FILTERS:
             raise HTTPException(400, f"unknown kpi {kpi!r}")
 
-        base = facts(" AND ".join(where), params, order="f.played_at DESC")
+        base = facts(" AND ".join(where), params, order="f.played_at DESC NULLS LAST")
         recent = _iso(_now() - timedelta(days=TO_REVIEW_DAYS))
 
         def needs_review(r):
@@ -833,7 +823,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
         if result:
             where.append("f.user_outcome = ?")
             params.append(result)
-        rows = facts(" AND ".join(where), params, order="f.played_at DESC") if kpi or result else base
+        rows = facts(" AND ".join(where), params, order="f.played_at DESC NULLS LAST") if kpi or result else base
         if to_review:
             rows = [r for r in rows if needs_review(r)]
         page_rows = rows[(page - 1) * PAGE_SIZE: page * PAGE_SIZE]
@@ -900,7 +890,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
     @app.get("/api/sounds", include_in_schema=False)
     def sounds():
         """Which of your own sound files are there, so the app only asks for those."""
-        folder = Path(db_path).parent / "sounds"
+        folder = config.data_dir() / "sounds"
         return [n for n in LOCAL_SOUNDS if (folder / n).is_file()]
 
     @app.get("/api/sounds/{name}", include_in_schema=False)
@@ -910,7 +900,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
         its built-in sounds when they're missing."""
         if name not in LOCAL_SOUNDS:
             raise HTTPException(404, "unknown sound")
-        path = Path(db_path).parent / "sounds" / name
+        path = config.data_dir() / "sounds" / name
         if not path.is_file():
             raise HTTPException(404, "not there")
         return FileResponse(path, media_type="audio/mpeg")

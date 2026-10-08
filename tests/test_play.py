@@ -40,8 +40,8 @@ def test_game_row_resignation_and_unfinished():
         play.game_row(["e2e4"], "white", "me", "bot", 800)
 
 
-def test_save_played_game(tmp_path):
-    path = tmp_path / "chess.db"
+def test_save_played_game(db_url, tmp_path):
+    path = db_url
     with db.connect(path) as conn:
         db.add_account(conn, "chesscom", "me")
     client = TestClient(api.create_app(path))
@@ -65,9 +65,9 @@ def _engine_or_skip():
         pytest.skip("Stockfish isn't installed")
 
 
-def test_blunder_check_names_the_reply(tmp_path):
+def test_blunder_check_names_the_reply(db_url, tmp_path):
     _engine_or_skip()
-    client = TestClient(api.create_app(tmp_path / "chess.db"))
+    client = TestClient(api.create_app(db_url))
     fen = "rnbqkbnr/ppp2ppp/8/3pp3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 3"
     hang = client.post("/api/play/check", json={"fen": fen, "uci": "d1g4"}).json()
     assert hang["blunder"] and hang["reply_san"] == "Bxg4" and hang["wins"] == "queen"

@@ -10,18 +10,17 @@ quiet = lambda _: None
 
 
 @pytest.fixture
-def setup(tmp_path, monkeypatch):
-    """A DB with one account per source, and sync/analysis stubbed out."""
-    db_path = tmp_path / "chess.db"
-    conn = db.connect(db_path)
+def setup(db_url, data_dir, monkeypatch):
+    """A DB with one account per source, and sync/analysis stubbed out. Returns the
+    connection and the folder backups go in."""
+    conn = db.connect(db_url)
     db.add_account(conn, "chesscom", "me")
     db.add_account(conn, "lichess", "me")
-    conn.commit()
     monkeypatch.setattr(chesscom, "sync", lambda *a, **k: 3)
     monkeypatch.setattr(lichess, "sync_games", lambda *a, **k: 1)
     monkeypatch.setattr(lichess, "sync_puzzles", lambda *a, **k: 5)
     monkeypatch.setattr(analyze, "run", lambda *a, **k: 4)
-    return conn, db_path
+    return conn, data_dir / "backups"
 
 
 def last_run(conn):
@@ -29,79 +28,80 @@ def last_run(conn):
 
 
 def test_update_records_a_successful_run(setup):
-    conn, db_path = setup
-    assert update.run(conn, db_path, token="t", log=quiet) == "ok"
+    conn, backups = setup
+    assert update.run(conn, token="t", log=quiet) == "ok"
     r = last_run(conn)
     assert (r["status"], r["trigger"], r["new_games"], r["new_puzzles"], r["games_analysed"]) == \
         ("ok", "manual", 4, 5, 4)
     assert r["finished_at"] and r["errors"] is None
-    assert (db_path.parent / "backups").joinpath(r["backup_path"].split("/")[-1]).exists()
+    assert backups.joinpath(r["backup_path"].split("/")[-1]).exists()
 
 
 def test_no_token_skips_puzzles(setup):
-    conn, db_path = setup
-    assert update.run(conn, db_path, token=None, log=quiet) == "ok"
+    conn, backups = setup
+    assert update.run(conn, token=None, log=quiet) == "ok"
     assert last_run(conn)["new_puzzles"] == 0
 
 
 def test_one_failing_step_doesnt_stop_the_rest(setup, monkeypatch):
-    conn, db_path = setup
+    conn, backups = setup
     def boom(*a, **k):
         raise ConnectionError("chess.com down")
     monkeypatch.setattr(chesscom, "sync", boom)
-    assert update.run(conn, db_path, token="t", log=quiet) == "partial"
+    assert update.run(conn, token="t", log=quiet) == "partial"
     r = last_run(conn)
     assert r["new_games"] == 1 and r["games_analysed"] == 4 and r["backup_path"]  # rest still ran
     assert json.loads(r["errors"]) == ["sync chesscom:me: chess.com down"]
 
 
 def test_missing_stockfish_is_a_partial_run(setup, monkeypatch):
-    conn, db_path = setup
+    conn, backups = setup
     def no_engine(*a, **k):
         raise SystemExit("Stockfish not found")
     monkeypatch.setattr(analyze, "run", no_engine)
-    assert update.run(conn, db_path, token="t", log=quiet) == "partial"
+    assert update.run(conn, token="t", log=quiet) == "partial"
     assert "Stockfish not found" in last_run(conn)["errors"]
 
 
 def test_crash_is_recorded_as_failed(setup, monkeypatch):
-    conn, db_path = setup
+    conn, backups = setup
     def interrupted(*a, **k):
         raise KeyboardInterrupt
     monkeypatch.setattr(analyze, "run", interrupted)
     with pytest.raises(KeyboardInterrupt):
-        update.run(conn, db_path, token="t", log=quiet)
+        update.run(conn, token="t", log=quiet)
     r = last_run(conn)
     assert r["status"] == "failed" and r["finished_at"] and r["new_games"] == 4
 
 
-def test_concurrent_run_is_skipped(setup):
-    conn, db_path = setup
-    with update.Lock(db_path.resolve()):
-        assert update.run(conn, db_path, token="t", log=quiet) == "skipped"
+def test_concurrent_run_is_skipped(setup, db_url):
+    conn, backups = setup
+    with update.Lock(db.connect(db_url)):  # another process's update
+        assert update.run(conn, token="t", log=quiet) == "skipped"
     assert last_run(conn) is None  # a skipped run isn't recorded
-    assert update.run(conn, db_path, token="t", log=quiet) == "ok"  # lock released
+    assert update.run(conn, token="t", log=quiet) == "ok"  # lock released
 
 
 def test_backups_are_pruned(setup):
-    conn, db_path = setup
-    backups = db_path.parent / "backups"
+    conn, backups = setup
     backups.mkdir()
     for day in range(1, 10):
-        (backups / f"chess-2026-01-{day:02d}.db").write_bytes(b"")
-    (backups / "unrelated.db").write_bytes(b"")
-    dest = update.backup(conn, db_path, keep=3)
+        (backups / f"knightly-2026-01-{day:02d}.dump").write_bytes(b"")
+    (backups / "unrelated.dump").write_bytes(b"")
+    dest = update.backup(conn, keep=3)
     kept = sorted(p.name for p in backups.iterdir())
-    assert kept == ["chess-2026-01-08.db", "chess-2026-01-09.db", dest.name, "unrelated.db"]
-    # The copy is a real, readable database.
-    assert db.connect(dest).execute("SELECT count(*) FROM accounts").fetchone()[0] == 2
+    assert kept == ["knightly-2026-01-08.dump", "knightly-2026-01-09.dump", dest.name, "unrelated.dump"]
+    # The dump is a real one pg_restore can read.
+    listing = update.subprocess.run([update.pg_dump().replace("pg_dump", "pg_restore"), "--list", str(dest)],
+                                    capture_output=True, text=True, check=True).stdout
+    assert "TABLE public accounts" in listing
 
 
-def test_plist(tmp_path):
-    p = schedule.build_plist(tmp_path / "chess.db", hour=6, minute=30, stockfish="/opt/sf")
+def test_plist():
+    p = schedule.build_plist("postgresql:///knightly", hour=6, minute=30, stockfish="/opt/sf")
     assert p["Label"] == schedule.LABEL
     args = p["ProgramArguments"]
-    assert args[0].endswith("knightly") and args[1:3] == ["--db", str((tmp_path / "chess.db").resolve())]
+    assert args[0].endswith("knightly") and args[1:3] == ["--db", "postgresql:///knightly"]
     assert args[3:5] == ["update", "--scheduled"]
     assert p["StartCalendarInterval"] == {"Hour": 6, "Minute": 30}
     assert p["EnvironmentVariables"]["STOCKFISH"] == "/opt/sf"
@@ -113,7 +113,7 @@ def progress(conn):
 
 
 def test_progress_records_each_step(setup, monkeypatch):
-    conn, db_path = setup
+    conn, backups = setup
     seen = []
 
     def analysing(*a, on_progress=None, **k):  # what the web app polls for mid-run
@@ -124,7 +124,7 @@ def test_progress_records_each_step(setup, monkeypatch):
         return 2
 
     monkeypatch.setattr(analyze, "run", analysing)
-    assert update.run(conn, db_path, token="t", log=quiet) == "ok"
+    assert update.run(conn, token="t", log=quiet) == "ok"
     mid = seen[0]
     assert mid["plan"] == ["sync:chesscom:me", "sync:lichess:me", "analyze", "patterns", "backup"]
     assert (mid["current"], mid["detail"]) == ("analyze", "1 of 2 games")
@@ -140,18 +140,16 @@ def test_progress_records_each_step(setup, monkeypatch):
 
 
 def test_progress_marks_failed_steps(setup, monkeypatch):
-    conn, db_path = setup
+    conn, backups = setup
     monkeypatch.setattr(chesscom, "sync", lambda *a, **k: (_ for _ in ()).throw(ConnectionError("down")))
-    update.run(conn, db_path, token=None, log=quiet)
+    update.run(conn, token=None, log=quiet)
     done = {d["key"]: d for d in progress(conn)["done"]}
     assert done["sync:chesscom:me"]["error"] == "down"
     assert done["sync:lichess:me"]["summary"] == "1 new game (no token, puzzles skipped)"
 
 
-def test_connect_adds_new_columns_to_an_old_database(tmp_path):
-    path = tmp_path / "old.db"
-    old = db.sqlite3.connect(path)
-    old.execute("CREATE TABLE runs (id INTEGER PRIMARY KEY, status TEXT NOT NULL)")
-    old.close()
-    conn = db.connect(path)
-    assert "progress" in {r["name"] for r in conn.execute("PRAGMA table_info(runs)")}
+def test_migrations_apply_once(db_url):
+    conn = db.connect(db_url)  # the template already ran them
+    assert db.apply_migrations(conn) == []
+    assert [r[0] for r in conn.execute("SELECT version FROM schema_migrations")] == [
+        v for v, _ in db.migrations()]

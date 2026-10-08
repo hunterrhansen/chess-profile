@@ -262,8 +262,9 @@ def save(conn, game_id: int, rows: list[dict], summary: dict) -> None:
             f"INSERT INTO moves ({', '.join(MOVE_COLUMNS)}) VALUES ({', '.join('?' * len(MOVE_COLUMNS))})",
             [[r[c] for c in MOVE_COLUMNS] for r in rows])
         conn.execute(
-            f"INSERT OR REPLACE INTO game_analysis ({', '.join(SUMMARY_COLUMNS)}) "
-            f"VALUES ({', '.join('?' * len(SUMMARY_COLUMNS))})",
+            f"INSERT INTO game_analysis ({', '.join(SUMMARY_COLUMNS)}) "
+            f"VALUES ({', '.join('?' * len(SUMMARY_COLUMNS))}) ON CONFLICT (game_id) DO UPDATE SET "
+            + ", ".join(f"{c} = excluded.{c}" for c in SUMMARY_COLUMNS[1:]) + ", analyzed_at = iso_now()",
             [summary.get(c) for c in SUMMARY_COLUMNS])
 
 
@@ -281,7 +282,7 @@ def run(conn, depth: int = 18, workers: int | None = None, engine_path: str | No
     engine_path = find_engine(engine_path)
     workers = workers or max(1, (os.cpu_count() or 2) - 1)
     sql = """SELECT id, pgn, user_color, time_control FROM games
-             WHERE variant = 'standard' {} ORDER BY played_at DESC""".format(
+             WHERE variant = 'standard' {} ORDER BY played_at DESC NULLS LAST""".format(
         "" if force else "AND id NOT IN (SELECT game_id FROM game_analysis)")
     if limit:
         sql += f" LIMIT {int(limit)}"

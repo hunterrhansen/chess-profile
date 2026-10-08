@@ -44,8 +44,8 @@ def add_game(conn, gid, *, played_at, outcome, rated=1, rating=900, opening="Pir
 
 
 @pytest.fixture
-def client(tmp_path):
-    path = tmp_path / "chess.db"
+def client(db_url, tmp_path):
+    path = db_url
     with db.connect(path) as conn:
         # 1: reached a winning position, then lost: a thrown win.
         add_game(conn, 1, played_at=days_ago(1), outcome="loss",
@@ -87,6 +87,9 @@ def test_overview_kpis(client):
     # "mistake": blunders are counted by size, not label.
     assert k["blunders_per_game"] == 1
     assert o["recent_games"][0]["id"] == 1
+    # Opening edge is the eval after move 10, and these games are shorter: no value, not a
+    # clamped one (Postgres's least() skips NULLs, unlike SQLite's min()).
+    assert k["opening_edge"] is None
 
 
 def test_previous_period_needs_enough_games(client):
@@ -131,9 +134,9 @@ def test_game_detail(client):
     assert client.get("/api/games/999").status_code == 404
 
 
-def test_accounts(client, tmp_path):
+def test_accounts(db_url, client, tmp_path):
     assert client.get("/api/accounts").json() == []
-    with db.connect(tmp_path / "chess.db") as conn:
+    with db.connect(db_url) as conn:
         db.add_account(conn, "chesscom", "gghansen")
     assert client.get("/api/accounts").json() == [{"source": "chesscom", "handle": "gghansen"}]
 
@@ -179,10 +182,10 @@ def test_add_and_remove_account(client, system):
     assert client.get("/api/accounts").json() == []
 
 
-def test_analysis_depth(client, system, tmp_path):
+def test_analysis_depth(db_url, client, system, tmp_path):
     assert client.put("/api/settings/analysis", json={"depth": 22}).json() == {"depth": 22}
     assert client.get("/api/settings").json()["depth"] == 22
-    with db.connect(tmp_path / "chess.db") as conn:
+    with db.connect(db_url) as conn:
         assert db.analysis_depth(conn) == 22  # what `analyze` and `update` will use
     assert client.put("/api/settings/analysis", json={"depth": 99}).status_code == 422
 
@@ -204,13 +207,13 @@ def test_schedule_and_run_now(client, system):
     assert client.put("/api/settings/schedule", json={"enabled": True, "hour": 24}).status_code == 422
 
 
-def test_settings_shows_the_live_run(client, system, tmp_path):
-    with db.connect(tmp_path / "chess.db") as conn:
+def test_settings_shows_the_live_run(db_url, client, system, tmp_path):
+    with db.connect(db_url) as conn:
         conn.execute("""INSERT INTO runs (status, trigger, errors, progress, finished_at)
                         VALUES ('partial', 'schedule', '["backup: disk full"]',
                                 '{"plan": ["backup"], "current": null, "detail": null,
                                   "done": [{"key": "backup", "summary": null, "error": "disk full"}]}',
-                                strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))""")
+                                iso_now())""")
         conn.execute("""INSERT INTO runs (status, trigger, progress) VALUES ('running', 'manual',
                         '{"plan": ["analyze", "backup"], "current": "analyze",
                           "detail": "1 of 3 games", "done": []}')""")
@@ -221,7 +224,7 @@ def test_settings_shows_the_live_run(client, system, tmp_path):
     assert s["last_run"]["progress"]["done"][0]["error"] == "disk full"
 
 
-def test_engine_lines_are_computed_once_then_cached(client, tmp_path, monkeypatch):
+def test_engine_lines_are_computed_once_then_cached(db_url, client, tmp_path, monkeypatch):
     import chess
     import chess.engine
 
@@ -239,15 +242,15 @@ def test_engine_lines_are_computed_once_then_cached(client, tmp_path, monkeypatc
             pass
 
     monkeypatch.setattr(api.lines, "Engine", FakeEngine)
-    with db.connect(tmp_path / "chess.db") as conn:
+    with db.connect(db_url) as conn:
         conn.execute("UPDATE moves SET fen_before = ?, uci = 'e2e4' WHERE game_id = 2 AND ply = 1",
                      (chess.STARTING_FEN,))
     first = client.get("/api/games/2/lines/1").json()
     assert set(first) == {"best", "why"} and first["why"]["start_fen"].split()[1] == "b"
     assert client.get("/api/games/2/lines/1").json() == first
     assert calls == [18]  # second request came from the cache
-    with db.connect(tmp_path / "chess.db") as conn:  # a line cached by an older lines.py...
-        conn.execute("""UPDATE engine_lines SET data = json_set(data, '$.best.v', 1)""")
+    with db.connect(db_url) as conn:  # a line cached by an older lines.py...
+        conn.execute("""UPDATE engine_lines SET data = jsonb_set(data::jsonb, '{best,v}', '1')::text""")
     client.get("/api/games/2/lines/1")
     assert calls == [18, 18]  # ...is recomputed
     assert client.get("/api/games/2/lines/99").status_code == 404
@@ -302,20 +305,20 @@ def test_games_quick_filters(client):
     assert client.get("/api/games?color=white").json()["counts"]["all"] == 5
 
 
-def test_patterns_endpoint(client, tmp_path):
+def test_patterns_endpoint(db_url, client, tmp_path):
     # Game 1's blunder (ply 3) is tagged on the first request; with no stored position
     # details to go on in this fixture it waits for the engine pass.
     p = client.get("/api/patterns?range=30d").json()
     assert p["range"] == "30d"
     assert p["pending"] + sum(x["total"] for x in p["patterns"]) >= 1
-    with db.connect(tmp_path / "chess.db") as conn:
+    with db.connect(db_url) as conn:
         conn.execute("UPDATE moves SET pattern = 'fork' WHERE game_id = 1 AND ply = 3")
     forks = next(x for x in client.get("/api/patterns?range=30d").json()["patterns"] if x["pattern"] == "fork")
     assert forks["blunder"] == 1 and forks["total"] >= 1
 
 
-def test_local_sounds_are_served_only_when_present(tmp_path):
-    client = TestClient(api.create_app(tmp_path / "chess.db"))
+def test_local_sounds_are_served_only_when_present(db_url, tmp_path):
+    client = TestClient(api.create_app(db_url))
     assert client.get("/api/sounds/move-self.mp3").status_code == 404
     assert client.get("/api/sounds").json() == []
     (tmp_path / "sounds").mkdir()
@@ -327,19 +330,19 @@ def test_local_sounds_are_served_only_when_present(tmp_path):
     assert client.get("/api/sounds/other.mp3").status_code == 404
 
 
-def test_spa_serves_top_level_files_and_routes(tmp_path):
+def test_spa_serves_top_level_files_and_routes(db_url, tmp_path):
     dist = tmp_path / "dist"
     (dist / "assets").mkdir(parents=True)
     (dist / "index.html").write_text("<html>app</html>")
     (dist / "favicon.svg").write_text("<svg/>")
-    client = TestClient(api.create_app(tmp_path / "chess.db", dist))
+    client = TestClient(api.create_app(db_url, dist))
     assert client.get("/favicon.svg").text == "<svg/>"
     assert client.get("/games/1").text == "<html>app</html>"
     assert client.get("/../chess.db").text == "<html>app</html>"
 
 
-def test_status_has_each_accounts_headline_rating_and_the_last_run(tmp_path):
-    path = tmp_path / "chess.db"
+def test_status_has_each_accounts_headline_rating_and_the_last_run(db_url, tmp_path):
+    path = db_url
     with db.connect(path) as conn:
         conn.execute("INSERT INTO accounts (source, handle) VALUES ('chesscom', 'gghansen'), ('lichess', 'hunterrhansen')")
         conn.execute("INSERT INTO snapshots (source, account, kind, data) VALUES ('chesscom', 'gghansen', 'stats', ?)",

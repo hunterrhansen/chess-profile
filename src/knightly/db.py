@@ -1,10 +1,21 @@
+"""The Postgres database: connecting, migrations, and the few writes every importer shares.
+
+`connect()` returns a `Connection` that keeps the small part of Python's sqlite3 API the
+code was written against (Knightly used SQLite until Phase 1a): `execute` with `?`
+placeholders, rows readable by name or position, and `with conn:` as a transaction. Outside
+a `with` block each statement commits on its own, so a long engine run never holds a
+transaction open.
+"""
 import json
 import os
-import sqlite3
+import re
+from datetime import date, datetime, time, timedelta, timezone
 from importlib import resources
-from pathlib import Path
 
-DEFAULT_DB = os.environ.get("KNIGHTLY_DB", "chess.db")
+import psycopg
+from psycopg.types.numeric import FloatLoader, IntDumper
+
+DEFAULT_URL = os.environ.get("KNIGHTLY_DATABASE_URL", "postgresql:///knightly")
 
 GAME_COLUMNS = [
     "source", "source_id", "account", "url", "played_at", "variant", "speed",
@@ -19,25 +30,117 @@ PUZZLE_COLUMNS = [
     "solution", "themes", "puzzle_rating", "plays", "url", "raw",
 ]
 
-
-# Columns added to existing tables after they were first created. schema.sql has them for
-# new databases; connect() adds any that an older database is missing.
-ADDED_COLUMNS = [("runs", "progress", "TEXT"), ("moves", "eval_second", "INTEGER"),
-                 ("moves", "pattern", "TEXT"), ("game_reviews", "marks", "TEXT"),
-                 ("cards", "fsrs", "TEXT"), ("card_reviews", "rating", "TEXT"),
-                 ("card_reviews", "quality", "TEXT"), ("card_reviews", "solved", "INTEGER NOT NULL DEFAULT 0")]
+MIGRATION_LOCK = 4_243_001  # pg_advisory_xact_lock key: one migrating process at a time
 
 
-def connect(path: str | Path = DEFAULT_DB) -> sqlite3.Connection:
-    conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.executescript(resources.files("knightly").joinpath("schema.sql").read_text())
-    for table, column, decl in ADDED_COLUMNS:
-        if column not in {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}:
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+class Row(tuple):
+    """A result row, read by column name (`row["ply"]`) or position (`row[0]`), like
+    sqlite3.Row. `dict(row)` gives {column: value}."""
+
+    def __new__(cls, values, names, index):
+        row = super().__new__(cls, values)
+        row._names, row._index = names, index
+        return row
+
+    def __getitem__(self, key):
+        return tuple.__getitem__(self, self._index[key] if isinstance(key, str) else key)
+
+    def keys(self):
+        return list(self._names)
+
+
+def _row_factory(cursor):
+    names = [c.name for c in cursor.description or []]
+    index = {name: i for i, name in enumerate(names)}
+    return lambda values: Row(values, names, index)
+
+
+_PLACEHOLDER = re.compile(r"'(?:[^']|'')*'|--[^\n]*|\?|%")
+
+
+def _sql(query: str) -> str:
+    """`?` placeholders to psycopg's `%s` (but not a `?` inside a string literal or a
+    comment), and every literal `%` to `%%`, which psycopg reads even inside literals."""
+    def swap(m):
+        text = m.group()
+        return "%s" if text == "?" else text.replace("%", "%%")
+    return _PLACEHOLDER.sub(swap, query)
+
+
+class Connection:
+    def __init__(self, pg: psycopg.Connection):
+        self.pg = pg
+        self._transactions = []
+
+    def execute(self, query: str, params=None) -> psycopg.Cursor:
+        cur = self.pg.cursor()
+        if params is None:
+            cur.execute(query)
+        else:
+            cur.execute(_sql(query), list(params))
+        return cur
+
+    def executemany(self, query: str, rows) -> psycopg.Cursor:
+        cur = self.pg.cursor()
+        cur.executemany(_sql(query), [list(r) for r in rows])
+        return cur
+
+    def __enter__(self):
+        transaction = self.pg.transaction()
+        transaction.__enter__()
+        self._transactions.append(transaction)
+        return self
+
+    def __exit__(self, *exc):
+        return self._transactions.pop().__exit__(*exc)
+
+    def commit(self) -> None:
+        """Nothing to do: outside `with conn:` every statement has already committed."""
+
+    def close(self) -> None:
+        self.pg.close()
+
+
+def connect(url: str = DEFAULT_URL, migrate: bool = True) -> Connection:
+    pg = psycopg.connect(url, autocommit=True, row_factory=_row_factory)
+    pg.adapters.register_loader("numeric", FloatLoader)  # avg(), round(): floats, as in SQLite
+    pg.adapters.register_dumper(bool, IntDumper)  # True -> 1: flags are INTEGER columns, as in SQLite
+    conn = Connection(pg)
+    if migrate:
+        apply_migrations(conn)
     return conn
+
+
+def migrations() -> list[tuple[str, str]]:
+    """(version, sql) for each file in migrations/, in order: "0001_initial.sql" is "0001"."""
+    folder = resources.files("knightly").joinpath("migrations")
+    files = sorted(f for f in folder.iterdir() if f.name.endswith(".sql"))
+    return [(f.name.split("_", 1)[0], f.read_text()) for f in files]
+
+
+def apply_migrations(conn: Connection) -> list[str]:
+    """Apply the migrations this database hasn't had yet, each in its own transaction.
+    Returns the versions applied."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS schema_migrations (
+                        version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())""")
+    applied = []
+    for version, sql in migrations():
+        with conn:
+            conn.execute("SELECT pg_advisory_xact_lock(?)", (MIGRATION_LOCK,))
+            if conn.execute("SELECT 1 FROM schema_migrations WHERE version = ?", (version,)).fetchone():
+                continue
+            conn.execute(sql)
+            conn.execute("INSERT INTO schema_migrations (version) VALUES (?)", (version,))
+            applied.append(version)
+    return applied
+
+
+def day_range(day: date) -> tuple[str, str]:
+    """The local calendar day `day` as [start, end) in the ISO UTC text the tables store, for
+    "answered today" queries: `reviewed_at >= ? AND reviewed_at < ?`."""
+    start = datetime.combine(day, time.min).astimezone()
+    end = datetime.combine(day + timedelta(days=1), time.min).astimezone()
+    return tuple(t.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") for t in (start, end))
 
 
 def _encode(value):
@@ -52,7 +155,7 @@ def _insert(conn, table, columns, row) -> bool:
     """Insert unless the natural key already exists. Returns True if a row was added."""
     placeholders = ", ".join("?" for _ in columns)
     cur = conn.execute(
-        f"INSERT OR IGNORE INTO {table} ({', '.join(columns)}) VALUES ({placeholders})",
+        f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({placeholders}) ON CONFLICT DO NOTHING",
         [_encode(row.get(c)) for c in columns],
     )
     return cur.rowcount == 1
@@ -67,7 +170,7 @@ def insert_puzzle_attempt(conn, attempt: dict) -> bool:
 
 
 def add_account(conn, source: str, handle: str) -> None:
-    conn.execute("INSERT OR IGNORE INTO accounts (source, handle) VALUES (?, ?)", (source, handle))
+    conn.execute("INSERT INTO accounts (source, handle) VALUES (?, ?) ON CONFLICT DO NOTHING", (source, handle))
 
 
 def add_snapshot(conn, source: str, account: str, kind: str, data) -> None:
@@ -89,7 +192,7 @@ def set_setting(conn, key: str, value) -> None:
     conn.execute(
         """INSERT INTO settings (key, value) VALUES (?, ?)
            ON CONFLICT (key) DO UPDATE
-           SET value = excluded.value, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')""",
+           SET value = excluded.value, updated_at = iso_now()""",
         (key, json.dumps(value)),
     )
 
@@ -110,6 +213,6 @@ def set_cursor(conn, source: str, account: str, kind: str, cursor: str) -> None:
     conn.execute(
         """INSERT INTO sync_state (source, account, kind, cursor) VALUES (?, ?, ?, ?)
            ON CONFLICT (source, account, kind) DO UPDATE
-           SET cursor = excluded.cursor, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')""",
+           SET cursor = excluded.cursor, updated_at = iso_now()""",
         (source, account.lower(), kind, cursor),
     )

@@ -13,11 +13,11 @@ import io
 import json
 import random
 import shutil
-import sqlite3
 import subprocess
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+from . import db
 from .patterns import THEMES
 
 SOURCE = "knightly"
@@ -55,7 +55,7 @@ def _rows(path: Path):
             yield from csv.DictReader(f)
 
 
-def import_file(conn: sqlite3.Connection, path: str | Path, log=print) -> dict[str, int]:
+def import_file(conn: db.Connection, path: str | Path, log=print) -> dict[str, int]:
     """Replace the stored puzzles with a fresh pick from a Lichess puzzle file. Returns how
     many were kept per theme."""
     kept = {t: 0 for t in THEMES}
@@ -84,9 +84,9 @@ def import_file(conn: sqlite3.Connection, path: str | Path, log=print) -> dict[s
     with conn:
         conn.execute("DELETE FROM lichess_puzzles")
         conn.executemany(
-            """INSERT OR IGNORE INTO lichess_puzzles
+            """INSERT INTO lichess_puzzles
                (puzzle_id, fen, moves, rating, popularity, plays, themes, url)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""", batch)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING""", batch)
     log(f"Kept {len(batch):,} of {seen:,} puzzles")
     return kept
 
@@ -114,7 +114,7 @@ def next_puzzle(conn, theme: str, rng: random.Random | None = None) -> dict | No
     for spread in (NEAR, NEAR * 3, 10_000):
         rows = conn.execute(
             """SELECT * FROM lichess_puzzles p
-               WHERE (' ' || p.themes || ' ') LIKE ? AND abs(p.rating - ?) <= ?
+               WHERE (' ' || p.themes || ' ') ILIKE ? AND abs(p.rating - ?) <= ?
                  AND p.puzzle_id NOT IN (SELECT puzzle_id FROM puzzle_attempts WHERE source = ?)
                LIMIT 50""", (f"% {theme} %", target, spread, SOURCE)).fetchall()
         if rows:
@@ -130,10 +130,10 @@ def record(conn, puzzle_id: str, correct: bool, now: datetime | None = None) -> 
         raise KeyError(puzzle_id)
     moves = p["moves"].split()
     conn.execute(
-        """INSERT OR IGNORE INTO puzzle_attempts
+        """INSERT INTO puzzle_attempts
            (source, puzzle_id, attempted_at, success, fen, last_move, solution, themes,
             puzzle_rating, plays, url)
-           VALUES (?, ?, ?, ?, ?, ?, ?, json(?), ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING""",
         (SOURCE, puzzle_id, (now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ"),
          int(correct), p["fen"], moves[0], " ".join(moves[1:]),
          json.dumps(p["themes"].split()),
@@ -144,5 +144,5 @@ def done_today(conn, today: date | None = None) -> int:
     today = today or date.today()
     return conn.execute(
         """SELECT count(*) FROM puzzle_attempts
-           WHERE source = ? AND date(attempted_at, 'localtime') = ?""",
-        (SOURCE, today.isoformat())).fetchone()[0]
+           WHERE source = ? AND attempted_at >= ? AND attempted_at < ?""",
+        (SOURCE, *db.day_range(today))).fetchone()[0]

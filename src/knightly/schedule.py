@@ -37,17 +37,16 @@ def _executable() -> str:
     return str(Path(found).resolve())
 
 
-def build_plist(db_path: Path, hour: int, minute: int, stockfish: str | None) -> dict:
-    db_path = Path(db_path).resolve()
+def build_plist(database_url: str, hour: int, minute: int, stockfish: str | None) -> dict:
     env = {"PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"}
     if stockfish:
         env["STOCKFISH"] = stockfish
     return {
         "Label": LABEL,
-        "ProgramArguments": [_executable(), "--db", str(db_path), "update", "--scheduled",
+        "ProgramArguments": [_executable(), "--db", database_url, "update", "--scheduled",
                              "--workers", str(SCHEDULED_WORKERS)],
         "StartCalendarInterval": {"Hour": hour, "Minute": minute},
-        "WorkingDirectory": str(db_path.parent),
+        "WorkingDirectory": str(config.data_dir().resolve()),  # where backups/ goes
         "EnvironmentVariables": env,
         "StandardOutPath": str(LOG),
         "StandardErrorPath": str(LOG),
@@ -61,14 +60,12 @@ def _launchctl(*args) -> subprocess.CompletedProcess:
     return subprocess.run(["launchctl", *args], capture_output=True, text=True)
 
 
-def install(db_path: Path, hour: int = 6, minute: int = 0, log=print) -> None:
+def install(database_url: str, hour: int = 6, minute: int = 0, log=print) -> None:
     _require_mac()
-    if not Path(db_path).exists():
-        raise SystemExit(f"No database at {db_path}; run a sync first.")
     stockfish = os.environ.get("STOCKFISH") or shutil.which("stockfish")
     if not stockfish:
         log("warning: Stockfish not found; scheduled runs will sync and back up but not analyse.")
-    plist = build_plist(db_path, hour, minute, stockfish)
+    plist = build_plist(database_url, hour, minute, stockfish)
     PLIST.parent.mkdir(parents=True, exist_ok=True)
     LOG.parent.mkdir(parents=True, exist_ok=True)
 
@@ -80,7 +77,7 @@ def install(db_path: Path, hour: int = 6, minute: int = 0, log=print) -> None:
         raise SystemExit(f"launchctl bootstrap failed: {result.stderr.strip() or result.stdout.strip()}")
     log(f"Installed: `knightly update` runs daily at {hour:02d}:{minute:02d} "
         f"(or on wake if the Mac was asleep).")
-    log(f"  database: {Path(db_path).resolve()}")
+    log(f"  database: {database_url}")
     log(f"  log:      {LOG}")
     log(f"  agent:    {PLIST}")
 

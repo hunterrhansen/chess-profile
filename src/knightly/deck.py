@@ -22,13 +22,13 @@ Each day serves at most DAILY_LIMIT cards, due ones first, then new ones from yo
 games. A day off never piles up a backlog: the next day is still at most DAILY_LIMIT.
 """
 import json
-import sqlite3
 from datetime import date, datetime, timezone
 
 import chess
 import chess.engine
 from fsrs import Card, Rating, ReviewLog, Scheduler
 
+from . import db
 from .analyze import find_engine, win_pct
 from .brilliance import GREAT_GAP
 
@@ -66,7 +66,7 @@ def clear_best(color: str, eval_best: int | None, eval_second: int | None) -> bo
     return win_pct(sign * eval_best) - win_pct(sign * eval_second) >= CLEAR_GAP
 
 
-def _qualifying(conn, where: str = "1", params: tuple = ()) -> list[tuple[int, int]]:
+def _qualifying(conn, where: str = "TRUE", params: tuple = ()) -> list[tuple[int, int]]:
     """(game_id, ply) of every move of yours that makes a card, card or not yet."""
     rows = conn.execute(
         f"""SELECT m.game_id, m.ply, m.color, m.eval_before, m.eval_second FROM moves m
@@ -85,14 +85,15 @@ def game_plies(conn, game_id: int) -> list[int]:
     return sorted(have | {ply for _, ply in _qualifying(conn, "m.game_id = ?", (game_id,))})
 
 
-def sync(conn: sqlite3.Connection) -> int:
+def sync(conn: db.Connection) -> int:
     """Add a card for every qualifying move that doesn't have one yet, and give cards
     answered before FSRS their FSRS state. Cards are never removed, so re-analysing a game
     keeps its review history. Returns how many were added."""
     have = {tuple(r) for r in conn.execute("SELECT game_id, ply FROM cards")}
     new = [key for key in _qualifying(conn) if key not in have]
-    # OR IGNORE: two requests can sync at once (the page loading twice, say).
-    added = conn.executemany("INSERT OR IGNORE INTO cards (game_id, ply) VALUES (?, ?)", new).rowcount
+    # DO NOTHING: two requests can sync at once (the page loading twice, say).
+    added = conn.executemany("INSERT INTO cards (game_id, ply) VALUES (?, ?) ON CONFLICT DO NOTHING",
+                             new).rowcount if new else 0
     _replay_history(conn)
     return added
 
@@ -167,13 +168,13 @@ def _local_date(at: datetime) -> str:
 
 def _reviewed_today(conn, today: date) -> set[tuple[int, int]]:
     rows = conn.execute(
-        "SELECT DISTINCT game_id, ply FROM card_reviews WHERE date(reviewed_at, 'localtime') = ?",
-        (today.isoformat(),),
+        "SELECT DISTINCT game_id, ply FROM card_reviews WHERE reviewed_at >= ? AND reviewed_at < ?",
+        db.day_range(today),
     )
     return {(r["game_id"], r["ply"]) for r in rows}
 
 
-def queue(conn, today: date | None = None) -> list[sqlite3.Row]:
+def queue(conn, today: date | None = None) -> list[db.Row]:
     """Today's remaining cards, in order: due ones (most overdue first), then new ones from
     the newest games. At most DAILY_LIMIT a day, counting cards already answered today."""
     today = today or date.today()
@@ -186,7 +187,7 @@ def queue(conn, today: date | None = None) -> list[sqlite3.Row]:
            JOIN moves m ON m.game_id = c.game_id AND m.ply = c.ply
            JOIN games g ON g.id = c.game_id
            WHERE (c.due IS NULL OR c.due <= ?) AND m.best_uci IS NOT NULL
-           ORDER BY c.due IS NULL, c.due, g.played_at DESC, c.ply""",
+           ORDER BY c.due IS NULL, c.due, g.played_at DESC NULLS LAST, c.ply""",
         (today.isoformat(),),
     ).fetchall()
     return [r for r in rows if (r["game_id"], r["ply"]) not in done][:room]
@@ -235,8 +236,8 @@ def today_results(conn, today: date | None = None) -> list[dict]:
            FROM card_reviews r
            JOIN moves m ON m.game_id = r.game_id AND m.ply = r.ply
            JOIN games g ON g.id = r.game_id
-           WHERE date(r.reviewed_at, 'localtime') = ? ORDER BY r.reviewed_at, r.id""",
-        (today.isoformat(),),
+           WHERE r.reviewed_at >= ? AND r.reviewed_at < ? ORDER BY r.reviewed_at, r.id""",
+        db.day_range(today),
     ).fetchall()
     seen, out = set(), []
     for r in rows:
@@ -333,8 +334,8 @@ def answer(conn, game_id: int, ply: int, uci: str, *, hinted: bool = False, redo
         conn.execute(
             """UPDATE card_reviews SET solved = 1 WHERE id = (
                  SELECT id FROM card_reviews WHERE game_id = ? AND ply = ?
-                   AND date(reviewed_at, 'localtime') = ? ORDER BY reviewed_at, id LIMIT 1)""",
-            (game_id, ply, today.isoformat()),
+                   AND reviewed_at >= ? AND reviewed_at < ? ORDER BY reviewed_at, id LIMIT 1)""",
+            (game_id, ply, *db.day_range(today)),
         )
     due = _local_date(state.due) if card["fsrs"] or rating else None
     return {

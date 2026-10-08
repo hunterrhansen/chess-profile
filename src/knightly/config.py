@@ -6,6 +6,7 @@ macOS, so the Docker image needs no setting; on a Mac, set it to try server beha
 """
 import os
 import sys
+from pathlib import Path
 
 MODES = ("mac", "server")
 
@@ -15,6 +16,12 @@ def mode() -> str:
     if value not in MODES:
         raise SystemExit(f"KNIGHTLY_MODE must be one of {', '.join(MODES)}, not {value!r}.")
     return value
+
+
+def data_dir() -> Path:
+    """Where backups and your own sounds live: $KNIGHTLY_DATA_DIR, else the folder Knightly
+    runs from (the repo, on your Mac; /data in the Docker image)."""
+    return Path(os.environ.get("KNIGHTLY_DATA_DIR") or Path.cwd())
 
 
 def on_mac() -> bool:

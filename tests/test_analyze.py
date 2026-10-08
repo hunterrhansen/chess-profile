@@ -62,8 +62,8 @@ def test_phase_and_time_control():
 
 
 @pytest.mark.skipif(not shutil.which("stockfish"), reason="stockfish not installed")
-def test_analyze_game_end_to_end(tmp_path):
-    conn = db.connect(tmp_path / "test.db")
+def test_analyze_game_end_to_end(db_url, tmp_path):
+    conn = db.connect(db_url)
     conn.execute("INSERT INTO games (source, source_id, pgn, user_color, time_control, variant) "
                  "VALUES ('otb', 'x', ?, 'white', '180+2', 'standard')", (SCHOLARS_MATE,))
     assert analyze.run(conn, depth=10, workers=1, log=lambda _: None) == 1
