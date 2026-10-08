@@ -28,7 +28,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import config, db, deck, lines, patterns, play, puzzles, schedule, units, update
+from . import config, db, deck, lines, patterns, play, positions, puzzles, schedule, units, update
 from .analyze import THRESHOLDS, find_engine
 
 # A position counts as "winning" once the user's win chance reaches this after one of
@@ -381,17 +381,19 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             data = json.loads(cached[0]["data"])
             if all(line.get("v") == lines.VERSION for line in data.values()):
                 return data  # else written by an older lines.py: recompute below
-        move = query("""SELECT m.fen_before, m.uci, m.is_user, g.opponent
-                        FROM moves m JOIN games g ON g.id = m.game_id
-                        WHERE m.game_id = ? AND m.ply = ?""", (game_id, ply))
-        if not move:
+        with connect() as conn:
+            move = conn.execute("""SELECT m.uci, m.is_user, g.opponent
+                                   FROM moves m JOIN games g ON g.id = m.game_id
+                                   WHERE m.game_id = ? AND m.ply = ?""", (game_id, ply)).fetchone()
+            fen = positions.fen_before(conn, game_id, ply)
+        if not move or not fen:
             raise HTTPException(404, "No analysed move there; run `knightly analyze` first.")
-        m = move[0]
+        m = move
         # Who answers the move in the "why" line: you, after the opponent's moves.
         other_side = "you" if m["is_user"] == 0 else (m["opponent"] or "your opponent")
         try:
             with lines.Engine(depth) as engine:
-                data = lines.compute(m["fen_before"], m["uci"], other_side, engine)
+                data = lines.compute(fen, m["uci"], other_side, engine)
         except SystemExit as e:  # Stockfish not installed
             raise HTTPException(503, str(e)) from None
         with write() as conn, conn:
@@ -474,7 +476,7 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
         card = None
         if nxt:
             rows = query(
-                """SELECT c.game_id, c.ply, c.reviews, m.fen_before, m.color, m.san,
+                """SELECT c.game_id, c.ply, c.reviews, m.color, m.san,
                           m.uci, m.move_number, m.classification, m.pattern, m.win_pct_before,
                           prev.uci AS prev_uci, g.opponent, g.played_at, g.time_control,
                           g.speed, g.user_outcome
@@ -486,6 +488,8 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
                 (nxt[0]["game_id"], nxt[0]["ply"]),
             )
             card = dict(rows[0])
+            with connect() as conn:
+                card["fen_before"] = positions.fen_before(conn, card["game_id"], card["ply"])
         return {**info, "card": card}
 
     @app.post("/api/deck/answer")

@@ -21,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 import chess
 import chess.engine
 
-from . import db
+from . import db, positions
 from .analyze import find_engine
 
 THEMES = ["hangingPiece", "fork", "pin", "skewer", "discoveredAttack", "backRankMate", "mate"]
@@ -176,10 +176,11 @@ def deepen(conn: db.Connection, engine_path: str | None = None, workers: int | N
     after your move (their tactic); for a miss, the line before it (yours). Returns how many
     were settled."""
     rows = conn.execute(
-        """SELECT game_id, ply, fen_before, uci, classification FROM moves
+        """SELECT game_id, ply, uci, classification FROM moves
            WHERE is_user = 1 AND pattern = ?""", (PENDING,)).fetchall()
     if not rows:
         return 0
+    fens = positions.fens(conn, [r["game_id"] for r in rows])
     engine_path = find_engine(engine_path)  # only needed when there's something to look at
     log(f"Looking deeper at {len(rows)} mistakes for their tactic...")
     local, engines, lock = threading.local(), [], threading.Lock()
@@ -193,7 +194,10 @@ def deepen(conn: db.Connection, engine_path: str | None = None, workers: int | N
         return local.engine
 
     def work(r):
-        board = chess.Board(r["fen_before"])
+        fen = fens.get((r["game_id"], r["ply"]))
+        if fen is None:  # the game's moves don't replay
+            return OTHER, r["game_id"], r["ply"]
+        board = chess.Board(fen)
         if r["classification"] != "miss":
             board.push(chess.Move.from_uci(r["uci"]))
         if board.is_game_over():
@@ -221,16 +225,21 @@ def tag_all(conn: db.Connection) -> int:
     (new games, or re-analysed ones, whose rows come back untagged): one-move tactics are
     named, the rest left PENDING for `deepen`. Returns how many were tagged."""
     rows = conn.execute(
-        f"""SELECT m.game_id, m.ply, m.fen_before, m.uci, m.best_uci, m.classification,
+        f"""SELECT m.game_id, m.ply, m.uci, m.best_uci, m.classification,
                    m.mate_after, m.color, n.best_uci AS reply
             FROM moves m LEFT JOIN moves n ON n.game_id = m.game_id AND n.ply = m.ply + 1
             WHERE m.is_user = 1 AND m.pattern IS NULL
               AND m.classification IN ({", ".join("?" for _ in KINDS)})""",
         KINDS,
     ).fetchall()
+    fens = positions.fens(conn, [r["game_id"] for r in rows])
+
     def safe(r):
+        fen = fens.get((r["game_id"], r["ply"]))
+        if fen is None:  # the game's moves don't replay
+            return OTHER
         try:
-            return tag(r["fen_before"], r["uci"], r["best_uci"], r["reply"], r["classification"],
+            return tag(fen, r["uci"], r["best_uci"], r["reply"], r["classification"],
                        r["mate_after"], r["color"])
         except (ValueError, AssertionError):  # a position python-chess can't read
             return OTHER

@@ -6,14 +6,15 @@ from fastapi.testclient import TestClient
 
 from knightly import api, db, deck
 
-START = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
+# Each test game's moves, so positions.py can rebuild the position before any ply up to 10.
+MOVES = "e4 e5 Nf3 Nc6 Bc4 Bc5 c3 Nf6 d3 d6"
 
 
 def add_game(conn, gid, played_at="2026-10-01T12:00:00Z"):
     conn.execute(
         """INSERT INTO games (id, source, source_id, played_at, speed, user_color, user_outcome,
-           opponent, pgn) VALUES (?, 'chesscom', ?, ?, 'rapid', 'black', 'loss', 'opp', '')""",
-        (gid, str(gid), played_at),
+           opponent, pgn, moves_san) VALUES (?, 'chesscom', ?, ?, 'rapid', 'black', 'loss', 'opp', '', ?)""",
+        (gid, str(gid), played_at, MOVES),
     )
 
 
@@ -21,10 +22,10 @@ def add_move(conn, gid, ply, *, cls="blunder", is_user=1, color="black", best=-5
              best_uci="e7e5", uci="g7g5"):
     """A move with the engine's best and second-best evals (White's point of view)."""
     conn.execute(
-        """INSERT INTO moves (game_id, ply, move_number, color, is_user, phase, fen_before, san,
+        """INSERT INTO moves (game_id, ply, move_number, color, is_user, phase, san,
            uci, best_san, best_uci, eval_before, eval_second, classification, win_pct_before)
-           VALUES (?, ?, ?, ?, ?, 'opening', ?, 'g5', ?, 'e5', ?, ?, ?, ?, 50)""",
-        (gid, ply, (ply + 1) // 2, color, is_user, START, uci, best_uci, best, second, cls),
+           VALUES (?, ?, ?, ?, ?, 'opening', 'g5', ?, 'e5', ?, ?, ?, ?, 50)""",
+        (gid, ply, (ply + 1) // 2, color, is_user, uci, best_uci, best, second, cls),
     )
 
 
