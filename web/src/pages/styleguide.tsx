@@ -43,6 +43,7 @@ import { Progress } from '@/components/ui/progress'
 import { StatDelta, StatLabel, StatValue } from '@/components/ui/stat'
 import { Switch } from '@/components/ui/switch'
 import type { Classification, DeckAnswer, Game } from '@/lib/api'
+import { SignInHeader } from '@/lib/auth'
 import { CLASSIFICATION } from '@/lib/classification'
 import type { FindMove } from '@/lib/find-move'
 import type { KeyMoment } from '@/lib/key-moments'
@@ -261,6 +262,7 @@ export function StyleguidePage() {
       <PlayBlock />
 
       <SettingsBlock />
+      <SignInBlock />
 
       <GamesBlock />
 
@@ -1091,6 +1093,21 @@ function SettingsBlock() {
           <Switch checked={sound} onCheckedChange={setSound} aria-label="Sounds" />
         </SettingRow>
       </SettingsSection>
+    </Block>
+  )
+}
+
+/** The top of the sign-in screen. The form under it is Clerk's, themed in lib/auth.tsx, and
+ * only renders with a Clerk key: see it signed out. */
+function SignInBlock() {
+  return (
+    <Block
+      title="Sign-in"
+      note="SignInScreen (lib/auth.tsx), shown signed out once Clerk is set up: the mark, what Knightly is for, then Clerk's form in our tokens (a panel on its ledge, inputs with 2px borders, Continue in brand green)."
+    >
+      <div className="panel flex justify-center p-8">
+        <SignInHeader />
+      </div>
     </Block>
   )
 }

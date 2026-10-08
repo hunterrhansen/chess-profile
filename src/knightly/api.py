@@ -349,18 +349,17 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
     clerk = auth.from_env()
     with closing(db.connect(database_url)) as conn:  # applies any pending migrations
         local = None if clerk else User(users.ensure(conn, users.LOCAL), users.LOCAL)
-    known: dict[str, User] = {}  # Clerk id -> user, so a request costs no lookup
-
     def admin():
         """The owner's connection, for the users table itself."""
         return closing(db.connect(database_url, migrate=False))
 
     def signed_in(token: str) -> User:
         clerk_id = clerk.user(token)
-        if clerk_id not in known:
-            with admin() as conn:  # the first request after signing up creates the user
-                known[clerk_id] = User(users.ensure(conn, clerk_id), clerk_id)
-        return known[clerk_id]
+        # Looked up every time (one indexed query), not cached: `knightly users link` and
+        # account deletion change who a Clerk id is while the server runs. The first request
+        # after signing up creates the user.
+        with admin() as conn:
+            return User(users.ensure(conn, clerk_id), clerk_id)
 
     async def authenticate(request: Request) -> None:
         if clerk is None:
@@ -972,7 +971,6 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             def forget():
                 with admin() as conn:
                     users.delete(conn, clerk_id)
-                known.pop(clerk_id, None)
             await run_in_threadpool(forget)
         return {"ok": True}
 

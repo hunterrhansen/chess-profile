@@ -218,9 +218,9 @@ def main(argv=None) -> None:
                                 "Aggregate your chess data into one Postgres database.")
     p.add_argument("--db", default=db.DEFAULT_URL,
                    help="Postgres URL (default: $KNIGHTLY_DATABASE_URL or postgresql:///knightly)")
-    p.add_argument("--user", default=users.LOCAL,
-                   help='Whose data: a Clerk user id, or "local" (default), the one person a Mac '
-                        "install serves without signing in")
+    p.add_argument("--user", default=os.environ.get("KNIGHTLY_USER", users.LOCAL),
+                   help='Whose data: a Clerk user id, or "local", the one person a Mac install '
+                        "serves without signing in (default: $KNIGHTLY_USER, else local)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("sync", help="Pull games (and Lichess puzzles) from Chess.com / Lichess. "
@@ -315,7 +315,7 @@ def main(argv=None) -> None:
     s = sub.add_parser("serve", help="Run the web app at http://127.0.0.1:8000")
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8000)
-    s.set_defaults(func=cmd_serve)
+    s.set_defaults(func=cmd_serve, admin=True)  # the app signs people in itself
 
     args = p.parse_args(argv)
     # Admin commands work on the whole database; the rest act for one user and see only theirs.

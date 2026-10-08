@@ -294,7 +294,10 @@ you've signed in, find your Clerk user id (`user_...`) in Clerk's dashboard, the
 uv run knightly users                          # who's here, with their games and accounts
 uv run knightly users link local user_2abc...  # your games, reviews and settings move over
 uv run --env-file .env knightly --user user_2abc... update   # CLI commands act for one user
+uv run knightly --user user_2abc... schedule install         # the daily job, for your account
 ```
+
+Set `KNIGHTLY_USER=user_2abc...` in `.env` to make that the CLI's default user.
 
 Deleting an account in Clerk deletes everything of theirs, through a webhook: in Clerk's
 dashboard add one for `user.deleted` pointing at `/api/webhooks/clerk`, and put its signing

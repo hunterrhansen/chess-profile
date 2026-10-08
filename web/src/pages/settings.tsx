@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { type RunProgress, send, type Settings, useApi } from '@/lib/api'
+import { SignedInAs } from '@/lib/auth'
 import { BOARDS, type Preferences, usePreferences } from '@/lib/preferences'
 import { playSound, setSoundEnabled } from '@/lib/sound'
 import { cn } from '@/lib/utils'
@@ -249,6 +250,7 @@ function AccountsSection({ settings, reload }: { settings: Settings; reload: () 
 
   return (
     <Section title="Accounts" glyph="games" description="The daily update syncs every account here. Removing one keeps its games.">
+      <SignedInAs />
       {settings.accounts.map((a) => {
         const key = `${a.source}/${a.handle}`
         const through = syncedThrough(a.synced_through)

@@ -7,7 +7,7 @@ import { Board, type Palette } from '@/components/board'
 import { Confetti } from '@/components/confetti'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
-import { type AccountStatus, send, useApi } from '@/lib/api'
+import { type AccountStatus, apiFetch, send, useApi } from '@/lib/api'
 import { BOARDS, usePreferences } from '@/lib/preferences'
 import { durationMs, useWide } from '@/lib/motion'
 import { playSound } from '@/lib/sound'
@@ -171,7 +171,7 @@ export function PlayPage() {
     setThinking(true)
     setError(null)
     Promise.all([
-      fetch('/api/play/move', {
+      apiFetch('/api/play/move', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fen, elo: state.elo }),

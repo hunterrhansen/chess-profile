@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { type Puzzle, type PuzzleNext, send } from '@/lib/api'
+import { apiFetch, type Puzzle, type PuzzleNext, send } from '@/lib/api'
 import { durationMs } from '@/lib/motion'
 import { patternOf, tacticHint } from '@/lib/patterns'
 import { BOARDS, usePreferences } from '@/lib/preferences'
@@ -42,7 +42,7 @@ export function PuzzlesPage() {
 
   const load = useCallback(() => {
     setNext(null)
-    fetch(`/api/puzzles/next?theme=${encodeURIComponent(theme)}`)
+    apiFetch(`/api/puzzles/next?theme=${encodeURIComponent(theme)}`)
       .then(async (r) => {
         const body = await r.json()
         if (!r.ok) throw new Error(body.detail ?? r.status)

@@ -13,7 +13,7 @@ import { Card, CardHeader } from '@/components/ui/card'
 import { CountUp } from '@/components/ui/count-up'
 import { Progress } from '@/components/ui/progress'
 import { StatLabel, StatValue } from '@/components/ui/stat'
-import { type DeckCard, type DeckToday, type EngineLines, type PracticeMark, useApi } from '@/lib/api'
+import { apiFetch, type DeckCard, type DeckToday, type EngineLines, type PracticeMark, useApi } from '@/lib/api'
 import { CLASSIFICATION } from '@/lib/classification'
 import { nextTime, shortDate } from '@/lib/format'
 import { type FindOutcome, useFindMove } from '@/lib/find-move'
@@ -127,7 +127,7 @@ function Position({
   useEffect(() => {
     if (!over) return
     let live = true
-    fetch(`/api/games/${card.game_id}/lines/${card.ply}`)
+    apiFetch(`/api/games/${card.game_id}/lines/${card.ply}`)
       .then((r) => (r.ok ? (r.json() as Promise<EngineLines>) : null))
       .then((lines) => live && setWhy(lines?.best?.summary ?? null))
       .catch(() => live && setWhy(null))
