@@ -24,6 +24,53 @@ let enabled = true
 let ctx: AudioContext | null = null
 let out: GainNode | null = null
 
+/* Your own recordings for a move and a capture, if you've put them in the `sounds/` folder
+   beside the database (README: Sounds). Fetched once at startup and decoded with the first
+   sound; until then, or without them, the built-in knock plays. */
+const SAMPLE_FILES = { move: 'move-self.mp3', capture: 'capture.mp3' } as const
+type Sample = keyof typeof SAMPLE_FILES
+const fetched: Partial<Record<Sample, Promise<ArrayBuffer | null>>> = {}
+const samples: Partial<Record<Sample, AudioBuffer>> = {}
+
+if (typeof fetch !== 'undefined') {
+  const present = fetch('/api/sounds')
+    .then((r) => (r.ok ? (r.json() as Promise<string[]>) : []))
+    .catch(() => [] as string[])
+  for (const name of Object.keys(SAMPLE_FILES) as Sample[]) {
+    fetched[name] = present.then((files) =>
+      files.includes(SAMPLE_FILES[name])
+        ? fetch(`/api/sounds/${SAMPLE_FILES[name]}`).then((r) => (r.ok ? r.arrayBuffer() : null))
+        : null,
+    ).catch(() => null)
+  }
+}
+
+function decodeSamples(ac: AudioContext) {
+  for (const name of Object.keys(fetched) as Sample[]) {
+    fetched[name]!.then((buf) => buf && ac.decodeAudioData(buf))
+      .then((decoded) => {
+        if (decoded) samples[name] = decoded
+      })
+      .catch(() => {
+        // not a sound file the browser can play: keep the built-in one
+      })
+  }
+}
+
+/** Plays one of your recordings, if it's loaded. */
+function sample(name: Sample, at: number, loud = 1) {
+  const buffer = samples[name]
+  if (!buffer) return false
+  const { ac, dest } = audio()
+  const src = ac.createBufferSource()
+  src.buffer = buffer
+  const gain = ac.createGain()
+  gain.gain.value = 2 * loud // the master gain is set for the quieter synthesized sounds
+  src.connect(gain).connect(dest)
+  src.start(ac.currentTime + at)
+  return true
+}
+
 /** Set from the preferences; every sound checks it. */
 export function setSoundEnabled(on: boolean) {
   enabled = on
@@ -35,6 +82,7 @@ function audio() {
     out = ctx.createGain()
     out.gain.value = 0.45
     out.connect(ctx.destination)
+    decodeSamples(ctx)
   }
   // Browsers start audio suspended until the page has had a click or a key press.
   if (ctx.state === 'suspended') void ctx.resume()
@@ -57,6 +105,7 @@ function burst(ac: AudioContext, seconds: number, curve: number) {
  * differently, so stepping through a game doesn't sound like a metronome.
  */
 function knock(at: number, { pitch = 1, loud = 1 } = {}) {
+  if (sample('move', at, loud)) return
   const { ac, dest } = audio()
   const t = ac.currentTime + at
   const p = pitch * (0.96 + Math.random() * 0.08)
@@ -133,6 +182,7 @@ const SOUNDS: Record<SoundName, () => void> = {
   move: () => knock(0),
   // the taken piece clacks against the one landing on it
   capture: () => {
+    if (sample('capture', 0)) return
     knock(0, { pitch: 1.2, loud: 1.15 })
     knock(0.025, { pitch: 0.9, loud: 0.6 })
   },

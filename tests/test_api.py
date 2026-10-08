@@ -311,3 +311,27 @@ def test_patterns_endpoint(client, tmp_path):
         conn.execute("UPDATE moves SET pattern = 'fork' WHERE game_id = 1 AND ply = 3")
     forks = next(x for x in client.get("/api/patterns?range=30d").json()["patterns"] if x["pattern"] == "fork")
     assert forks["blunder"] == 1 and forks["total"] >= 1
+
+
+def test_local_sounds_are_served_only_when_present(tmp_path):
+    client = TestClient(api.create_app(tmp_path / "chess.db"))
+    assert client.get("/api/sounds/move-self.mp3").status_code == 404
+    assert client.get("/api/sounds").json() == []
+    (tmp_path / "sounds").mkdir()
+    (tmp_path / "sounds" / "move-self.mp3").write_bytes(b"ID3")
+    assert client.get("/api/sounds").json() == ["move-self.mp3"]
+    r = client.get("/api/sounds/move-self.mp3")
+    assert r.status_code == 200 and r.headers["content-type"] == "audio/mpeg"
+    assert client.get("/api/sounds/..%2Fchess.db").status_code == 404
+    assert client.get("/api/sounds/other.mp3").status_code == 404
+
+
+def test_spa_serves_top_level_files_and_routes(tmp_path):
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<html>app</html>")
+    (dist / "favicon.svg").write_text("<svg/>")
+    client = TestClient(api.create_app(tmp_path / "chess.db", dist))
+    assert client.get("/favicon.svg").text == "<svg/>"
+    assert client.get("/games/1").text == "<html>app</html>"
+    assert client.get("/../chess.db").text == "<html>app</html>"

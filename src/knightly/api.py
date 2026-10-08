@@ -216,6 +216,7 @@ def _game_json(r) -> dict:
 
 
 SOURCES = ("chesscom", "lichess")
+LOCAL_SOUNDS = ("move-self.mp3", "capture.mp3")  # `sounds/` beside the database, if present
 HANDLE = re.compile(r"^[A-Za-z0-9_-]{2,40}$")
 KEYCHAIN_SERVICE = "knightly-lichess"  # same entry `cli.keychain_token` reads
 STALE_RUN = timedelta(hours=3)  # a "running" row older than this is a crashed run
@@ -823,12 +824,35 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
             )
         return {"reviewed_at": now}
 
+    @app.get("/api/sounds", include_in_schema=False)
+    def sounds():
+        """Which of your own sound files are there, so the app only asks for those."""
+        folder = Path(db_path).parent / "sounds"
+        return [n for n in LOCAL_SOUNDS if (folder / n).is_file()]
+
+    @app.get("/api/sounds/{name}", include_in_schema=False)
+    def sound(name: str):
+        """Your own sound files for moves and captures, from a `sounds/` folder beside the
+        database. They stay out of git (they may be someone else's), so the app falls back to
+        its built-in sounds when they're missing."""
+        if name not in LOCAL_SOUNDS:
+            raise HTTPException(404, "unknown sound")
+        path = Path(db_path).parent / "sounds" / name
+        if not path.is_file():
+            raise HTTPException(404, "not there")
+        return FileResponse(path, media_type="audio/mpeg")
+
     if static_dir and static_dir.is_dir():
         app.mount("/assets", StaticFiles(directory=static_dir / "assets"), name="assets")
+        root = static_dir.resolve()
 
         @app.get("/{path:path}", include_in_schema=False)
         def spa(path: str):
-            # Client-side routes (/games?...) all serve the SPA shell.
-            return FileResponse(static_dir / "index.html")
+            # Files at the top of the build (favicon.svg) as themselves; client-side routes
+            # (/games?...) all serve the SPA shell.
+            file = (root / path).resolve()
+            if path and file.is_file() and file.is_relative_to(root):
+                return FileResponse(file)
+            return FileResponse(root / "index.html")
 
     return app

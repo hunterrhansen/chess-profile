@@ -6,3 +6,5 @@ __pycache__/
 .pytest_cache/
 backups/
 *.db.lock
+# your own move/capture sounds (README: Sounds); not ours to redistribute
+sounds/
