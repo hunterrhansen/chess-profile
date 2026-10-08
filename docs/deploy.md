@@ -77,12 +77,18 @@ Do this once per environment.
    direct connection (`db.<ref>.supabase.co`) is IPv6-only, and the Oracle VM's network is IPv4.
 3. Nothing else is needed. The app creates its tables on its first start, as migrations.
 
-To bring your existing Mac data into production, run this once, before anyone signs up:
+To bring your existing Mac data into production, run this once, before anyone signs up. Run
+the migrations first, so the tables, the `knightly_app` role and its grants exist. A dump can't
+carry a role, and restoring with `--no-acl` drops the grants. Then restore your rows alone:
 
 ```bash
-pg_dump --format=custom --no-owner --no-acl -d knightly -f knightly.dump      # on the Mac
-pg_restore --no-owner --no-acl -d "<production KNIGHTLY_DATABASE_URL>" knightly.dump
+KNIGHTLY_DATABASE_URL="<production KNIGHTLY_DATABASE_URL>" uv run knightly migrate
+pg_dump --format=custom --data-only --exclude-table=schema_migrations -d knightly -f knightly-data.dump
+pg_restore --data-only --no-owner -d "<production KNIGHTLY_DATABASE_URL>" knightly-data.dump
 ```
+
+Rehearsed on a local copy: every table matched, new ids carried on from the old ones, and
+`knightly_app` could read the rows.
 
 Then sign in to production with the same Clerk account. If it's a different Clerk instance,
 run `knightly users link <old clerk id> <new clerk id>` against production (see the README), so
