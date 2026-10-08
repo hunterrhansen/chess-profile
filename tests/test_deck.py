@@ -54,37 +54,79 @@ def test_sync_adds_only_clear_mistakes_of_yours_once(conn):
     assert {tuple(r) for r in conn.execute("SELECT game_id, ply FROM cards")} == {(1, 2), (1, 8)}
 
 
-def test_schedule_grows_until_mastered_and_resets_on_a_miss(conn):
+@pytest.fixture(autouse=True)
+def no_engine(monkeypatch):
+    """Judge answers without Stockfish: the engine's move is best, "d7d5" is within 5 points
+    (a good move), anything else is wrong."""
+    def fake(fen, uci, best_uci, eval_best):
+        if uci == deck.SKIP:
+            return "shown"
+        if uci == best_uci or (len(uci) == 5 and uci[:4] == best_uci[:4]):
+            return "best"
+        return "good" if uci == "d7d5" else "wrong"
+    monkeypatch.setattr(deck, "judge", fake)
+
+
+NOON = datetime(2026, 10, 6, 18, tzinfo=timezone.utc)  # Oct 6 in any US time zone
+DAY = date(2026, 10, 6)
+
+
+def first_review(conn, gid, ply):
+    return conn.execute("SELECT rating, quality, solved FROM card_reviews WHERE game_id = ? AND ply = ?",
+                        (gid, ply)).fetchone()
+
+
+def test_first_try_grades_the_card_like_anki(conn):
+    add_game(conn, 1)
+    for ply in (2, 4, 6, 8):
+        add_move(conn, 1, ply)
+    deck.sync(conn)
+    best = deck.answer(conn, 1, 2, "e7e5", today=DAY, now=NOON)
+    assert best["correct"] and best["rating"] == "good" and best["quality"] == "best"
+    assert best["due"] == "2026-10-08"  # FSRS: a new card answered Good comes back in 2 days
+    good = deck.answer(conn, 1, 4, "d7d5", today=DAY, now=NOON)
+    assert good["correct"] and good["rating"] == "hard" and good["due"] == "2026-10-07"
+    wrong = deck.answer(conn, 1, 6, "g7g5", today=DAY, now=NOON)
+    assert not wrong["correct"] and wrong["rating"] == "again" and wrong["due"] == "2026-10-07"
+    hinted = deck.answer(conn, 1, 8, "e7e5", hinted=True, today=DAY, now=NOON)
+    assert hinted["correct"] and hinted["rating"] == "again"
+    assert tuple(conn.execute("SELECT reviews, lapses FROM cards WHERE ply = 6").fetchone()) == (1, 1)
+
+
+def test_a_retry_is_for_learning_and_keeps_the_grade(conn):
     add_game(conn, 1)
     add_move(conn, 1, 2)
-    deck.sync(conn)
-    day = date(2026, 10, 6)
-    for step, interval in enumerate(deck.INTERVALS, start=1):
-        r = deck.answer(conn, 1, 2, "e7e5", today=day)
-        assert r["correct"] and r["step"] == step
-        if step < deck.MASTERED:
-            assert r["due"] == (day + timedelta(days=interval)).isoformat()
-            day += timedelta(days=interval)
-    assert r["mastered"] and r["due"] is None
-    assert deck.queue(conn, day + timedelta(days=365)) == []
-
     add_move(conn, 1, 4)
     deck.sync(conn)
-    deck.answer(conn, 1, 4, "e7e5", today=day)
-    r = deck.answer(conn, 1, 4, "g7g5", today=day + timedelta(days=3))
-    assert not r["correct"] and r["step"] == 0
-    assert r["due"] == (day + timedelta(days=4)).isoformat()
+    assert deck.answer(conn, 1, 2, "g7g5", today=DAY, now=NOON)["rating"] == "again"
+    retry = deck.answer(conn, 1, 2, "e7e5", today=DAY, now=NOON)
+    assert retry["correct"] and retry["rating"] is None and retry["due"] == "2026-10-07"
+    assert tuple(first_review(conn, 1, 2)) == ("again", "wrong", 1)
+    assert conn.execute("SELECT count(*) FROM card_reviews").fetchone()[0] == 1
+    # Show me, then the end-of-session redo: judged, but it stays a miss.
+    deck.answer(conn, 1, 4, deck.SKIP, today=DAY, now=NOON)
+    assert deck.answer(conn, 1, 4, "e7e5", redo=True, today=DAY, now=NOON)["correct"]
+    assert tuple(first_review(conn, 1, 4)) == ("again", "shown", 0)
+    assert [r["mark"] for r in deck.today_results(conn, DAY)] == ["helped", "missed"]
 
 
-def test_only_the_first_answer_of_the_day_counts(conn):
+def test_marks_for_the_done_screens():
+    assert [deck.mark(r, s) for r, s in [("good", True), ("hard", True), ("again", True), ("again", False)]] == [
+        "found", "good", "helped", "missed"]
+
+
+def test_answers_from_before_fsrs_are_replayed(conn):
     add_game(conn, 1)
     add_move(conn, 1, 2)
     deck.sync(conn)
-    today = date.today()
-    assert not deck.answer(conn, 1, 2, "g7g5", today=today)["correct"]
-    again = deck.answer(conn, 1, 2, "e7e5", today=today)
-    assert again["correct"] and again["step"] == 0  # right on the retry, but still due tomorrow
-    assert tuple(conn.execute("SELECT reviews, lapses FROM cards").fetchone()) == (1, 1)
+    # Answered right once under the old ladder: no FSRS state yet.
+    conn.execute("UPDATE cards SET reviews = 1, step = 1, due = '2026-10-09' WHERE ply = 2")
+    conn.execute("INSERT INTO card_reviews (game_id, ply, reviewed_at, answer_uci, correct) "
+                 "VALUES (1, 2, '2026-10-06T18:00:00Z', 'e7e5', 1)")
+    deck.sync(conn)
+    fsrs_state, due = conn.execute("SELECT fsrs, due FROM cards WHERE ply = 2").fetchone()
+    assert fsrs_state and due == "2026-10-08"
+    assert first_review(conn, 1, 2)["rating"] == "good"
 
 
 def test_queue_caps_the_day_and_puts_new_games_first(conn):
@@ -109,7 +151,7 @@ def test_queue_serves_due_cards_before_new_ones(conn):
     add_move(conn, 1, 4)
     deck.sync(conn)
     yesterday = date.today() - timedelta(days=1)
-    conn.execute("UPDATE cards SET step = 1, due = ?, reviews = 1 WHERE ply = 4", (yesterday.isoformat(),))
+    conn.execute("UPDATE cards SET due = ?, reviews = 1 WHERE ply = 4", (yesterday.isoformat(),))
     assert [r["ply"] for r in deck.queue(conn)] == [4, 2]
 
 
@@ -138,10 +180,12 @@ def test_api_serves_a_card_and_grades_it(tmp_path):
     assert graded["correct"] and graded["best_san"] == "e5"
     after = client.get("/api/deck").json()
     assert after["card"] is None and after["today"] == {"done": 1, "total": 1}
-    assert after["results"] == [{"game_id": 1, "ply": 2, "correct": True, "san": "g5", "opponent": "opp"}]
+    assert after["results"] == [{"game_id": 1, "ply": 2, "correct": True, "mark": "found", "san": "g5", "opponent": "opp"}]
 
     assert client.post("/api/deck/answer", json={"game_id": 9, "ply": 2, "uci": "e7e5"}).status_code == 404
     assert client.post("/api/deck/answer", json={"game_id": 1, "ply": 2, "uci": "nonsense"}).status_code == 422
+    assert client.post("/api/deck/hint", json={"game_id": 1, "ply": 2}).json() == {"best_uci": "e7e5", "from": "e7"}
+    assert client.post("/api/deck/hint", json={"game_id": 9, "ply": 2}).status_code == 404
 
 
 def test_skip_counts_as_a_miss(tmp_path):
@@ -153,7 +197,7 @@ def test_skip_counts_as_a_miss(tmp_path):
     client = TestClient(api.create_app(path))
     client.get("/api/deck")
     skipped = client.post("/api/deck/answer", json={"game_id": 1, "ply": 2, "uci": "0000"}).json()
-    assert not skipped["correct"] and skipped["step"] == 0
+    assert not skipped["correct"] and skipped["rating"] == "again" and skipped["quality"] == "shown"
     assert [r["correct"] for r in client.get("/api/deck").json()["results"]] == [False]
 
 
@@ -170,9 +214,20 @@ def test_answer_from_game_review_adds_the_card_first(conn):
     # Game review asks before Finish review has synced the deck; the answer still counts.
     add_game(conn, 1)
     add_move(conn, 1, 2)
-    today = date(2026, 10, 7)
-    res = deck.answer(conn, 1, 2, "e7e5", today=today)
-    assert res["correct"] and res["due"] == "2026-10-10"
-    assert conn.execute("SELECT step FROM cards WHERE game_id = 1 AND ply = 2").fetchone()[0] == 1
+    res = deck.answer(conn, 1, 2, "e7e5", today=DAY, now=NOON)
+    assert res["correct"] and res["rating"] == "good" and res["due"] == "2026-10-08"
+    assert conn.execute("SELECT reviews FROM cards WHERE game_id = 1 AND ply = 2").fetchone()[0] == 1
     with pytest.raises(KeyError):
-        deck.answer(conn, 1, 4, "e7e5", today=today)
+        deck.answer(conn, 1, 4, "e7e5", today=DAY, now=NOON)
+
+
+@pytest.mark.skipif(not __import__("shutil").which("stockfish"), reason="stockfish not installed")
+def test_judge_accepts_moves_close_to_the_best(monkeypatch):
+    monkeypatch.undo()  # the real judge, with Stockfish
+    after_e4 = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
+    assert deck.judge(after_e4, "e7e5", "e7e5", 30) == "best"
+    assert deck.judge(after_e4, "c7c5", "e7e5", 30) in ("excellent", "good")  # the Sicilian is fine
+    assert deck.judge(after_e4, "g7g5", "e7e5", 30) == "wrong"
+    assert deck.judge(after_e4, deck.SKIP, "e7e5", 30) == "shown"
+    fools = "rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2"
+    assert deck.judge(fools, "d8h4", "e5e4", 0) == "best"  # any mate counts

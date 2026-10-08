@@ -1,8 +1,8 @@
-import { Chess } from 'chess.js'
-import { CheckIcon, CircleNotchIcon, ListIcon, XIcon } from '@phosphor-icons/react'
+import { CircleNotchIcon, ListIcon, XIcon } from '@phosphor-icons/react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router'
 import { LoadingBlock } from '@/components/empty-state'
+import { FindBar } from '@/components/find-bar'
 import { MoveBadge } from '@/components/move-badge'
 import { MarkedText, MoveText } from '@/components/move-text'
 import { LessonBar, LessonBoard, LessonScreen, LessonVerdict } from '@/components/lesson-bar'
@@ -10,15 +10,14 @@ import { LinePanel, ReviewBoard } from '@/components/review-bits'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
-import { type DeckAnswer, type GameDetail, type LineKind, send, useApi } from '@/lib/api'
+import { type GameDetail, type LineKind, send, useApi } from '@/lib/api'
 import { CLASSIFICATION } from '@/lib/classification'
 import { nextTime, shortDate } from '@/lib/format'
 import { type LessonStep, type StepMark, keyMoments, lessonSteps, moveLabel } from '@/lib/key-moments'
 import { lastLocation } from '@/lib/last-location'
-import { durationMs } from '@/lib/motion'
+import { type FindOutcome, useFindMove } from '@/lib/find-move'
 import { BOARDS, usePreferences } from '@/lib/preferences'
 import { type Replay, type Side, useEngineLines, useLineView, useReplay } from '@/lib/replay'
-import { playSound } from '@/lib/sound'
 import { PlayBoard } from '@/pages/play'
 
 /**
@@ -93,8 +92,6 @@ export function ReviewPage() {
   )
 }
 
-const SKIP = '0000'
-
 interface Progress {
   step: number
   marks: Record<number, StepMark>
@@ -146,60 +143,22 @@ function Step({
   const { prefs } = usePreferences()
   const ply = step.ply
   const move = replay.moves[ply - 1]
-  const before = useMemo(() => new Chess(replay.fens[ply - 1]), [replay, ply])
-  const [selected, setSelected] = useState<string | null>(null)
-  const [tried, setTried] = useState<string | null>(null) // your answer, as UCI
-  const [result, setResult] = useState<DeckAnswer | null>(null)
-  const [failed, setFailed] = useState<string | null>(null)
   const [line, setLine] = useState<{ kind: LineKind; step: number } | null>(null)
   const { view: lineView, error: lineError } = useLineView(game.id, ply, line)
   const lineLength = lineView?.squares.length ?? 0
   const lineStep = line ? Math.min(Math.max(line.step, 1), Math.max(lineLength, 1)) : 0
 
   const find = step.type === 'find'
-  const answered = !find || !!result
+  // Find steps work like Practice: try again after a miss, Hint, Show me; the first try is
+  // that position's graded answer for the day (deck.py).
+  const fm = useFindMove({ gameId: game.id, ply, fen: replay.fens[ply - 1] })
+  const answered = !find || !!fm.outcome
+  useEffect(() => {
+    if (find && fm.outcome) onMark(FIND_MARK[fm.outcome])
+  }, [find, fm.outcome, onMark])
   // The engine's one-line explanation of the best line, once there's something to explain.
   const lines = useEngineLines(game.id, answered && step.type !== 'praise' ? ply : null)
   const why = lines?.data ? (lines.data.best?.summary ?? null) : lines?.error ? null : undefined
-
-  // The verdict's sound lands with the square's flash, after the piece.
-  useEffect(() => {
-    if (result) return playSound(result.correct ? 'right' : 'wrong', durationMs('--duration-move'))
-  }, [result])
-
-  const submit = (uci: string) => {
-    setTried(uci)
-    setSelected(null)
-    send<DeckAnswer>('POST', '/api/deck/answer', { game_id: game.id, ply, uci })
-      .then((r) => {
-        setResult(r)
-        onMark(r.correct ? 'found' : 'missed')
-      })
-      .catch((e: Error) => {
-        setTried(null)
-        setFailed(`Couldn't check that move. ${e.message}`)
-      })
-  }
-  const tryMove = (from: string, to: string) => {
-    if (tried) return false
-    const probe = new Chess(before.fen())
-    try {
-      const m = probe.move({ from, to, promotion: 'q' })
-      submit(m.from + m.to + (m.promotion ?? ''))
-      return true
-    } catch {
-      return false
-    }
-  }
-  const skipped = tried === SKIP
-
-  // A found move is shown played; a miss shows the engine's move as an arrow.
-  const shown = useMemo(() => {
-    if (!result?.correct || !tried) return before
-    const after = new Chess(before.fen())
-    after.move({ from: tried.slice(0, 2), to: tried.slice(2, 4), promotion: tried[4] })
-    return after
-  }, [result, tried, before])
 
   const san = move.san
   const pctBefore = Math.round(move.win_pct_before ?? 50)
@@ -278,16 +237,17 @@ function Step({
           />
         ) : find ? (
           <PlayBoard
-            chess={shown}
+            chess={fm.shown}
             orientation={me}
-            lastMove={result?.correct && tried ? { from: tried.slice(0, 2), to: tried.slice(2, 4) } : replay.squares[ply - 2]}
-            hint={result && !result.correct ? result.best_uci : null}
-            selected={selected}
-            interactive={!tried}
+            lastMove={fm.board.lastMove ?? replay.squares[ply - 2]}
+            hint={fm.board.hint}
+            glow={fm.board.glow}
+            selected={fm.selected}
+            interactive={fm.board.interactive}
             palette={BOARDS[prefs.board]}
-            flash={result && tried && !skipped ? { square: tried.slice(2, 4), tone: result.correct ? 'right' : 'wrong' } : undefined}
-            onMove={tryMove}
-            onSelect={setSelected}
+            flash={fm.board.flash}
+            onMove={fm.tryMove}
+            onSelect={fm.setSelected}
           />
         ) : (
           <ReviewBoard
@@ -301,7 +261,6 @@ function Step({
         )}
       </LessonBoard>
 
-      {failed && <p className="text-sm text-destructive">{failed}</p>}
       {line ? (
         <div className="panel overflow-hidden">
           <LinePanel
@@ -320,23 +279,31 @@ function Step({
             onSwitch={() => setLine({ kind: line.kind === 'why' ? 'best' : 'why', step: 1 })}
           />
         </div>
-      ) : !answered ? (
-        <LessonBar tone="idle">
-          <Button variant="outline" onClick={() => submit(SKIP)} disabled={!!tried} className="self-start md:self-auto">
-            Show me
-          </Button>
-          <p className="text-sm text-muted-foreground">
-            {tried ? 'Checking…' : selected ? 'Now pick where it goes.' : 'Tap a piece, then where it goes. Or drag it.'}
+      ) : find ? (
+        <FindBar
+          find={fm}
+          when={fm.first ? `In your review deck. ${nextTime(fm.first)}` : undefined}
+          next={last ? 'Finish review' : 'Continue'}
+          busy={finishing}
+          onNext={onNext}
+          onLine={() => setLine({ kind: fm.outcome === 'shown' ? 'why' : 'best', step: 1 })}
+        >
+          <p>
+            {why === undefined ? (
+              <span className="flex items-center gap-2 text-muted-foreground">
+                <CircleNotchIcon className="size-4 animate-spin" /> Asking Stockfish why…
+              </span>
+            ) : (
+              <MarkedText text={why ?? `${label} gave it away; the engine's move keeps the position.`} />
+            )}
           </p>
-        </LessonBar>
+        </FindBar>
       ) : (
         <Sheet
-          tone={step.type === 'praise' ? 'gold' : result?.correct ? 'right' : 'wrong'}
+          tone={step.type === 'praise' ? 'gold' : 'wrong'}
           icon={
             step.type === 'praise' ? (
               <MoveBadge kind={step.kind} pop className="size-12 text-xl [&_svg]:size-7" />
-            ) : result?.correct ? (
-              <CheckIcon className="size-6" />
             ) : (
               <XIcon className="size-6" />
             )
@@ -348,13 +315,11 @@ function Step({
               ) : (
                 <>{kind.label} move: <MoveText ply={ply} san={san} number /></>
               )
-            ) : result?.correct ? (
-              `Found it: ${result.best_san}`
             ) : (
-              `The move was ${result?.best_san ?? move.best_san}`
+              `The move was ${move.best_san}`
             )
           }
-          onLine={step.type === 'praise' ? undefined : () => setLine({ kind: result?.correct ? 'best' : 'why', step: 1 })}
+          onLine={step.type === 'praise' ? undefined : () => setLine({ kind: 'why', step: 1 })}
           next={last ? 'Finish review' : 'Continue'}
           busy={finishing}
           onNext={onNext}
@@ -372,9 +337,7 @@ function Step({
           </p>
           {step.type !== 'praise' && (
             <p className="mt-1 text-sm text-muted-foreground">
-              {step.type === 'look'
-                ? "It wasn't the only good move, so this one stays out of your review deck."
-                : `In your review deck. ${result ? nextTime(result) : ''}`}
+              It wasn't the only good move, so this one stays out of your review deck.
             </p>
           )}
         </Sheet>
@@ -382,6 +345,9 @@ function Step({
     </>
   )
 }
+
+// How a find step went, as its mark on Review complete.
+const FIND_MARK: Record<FindOutcome, StepMark> = { found: 'found', good: 'good', helped: 'helped', shown: 'missed' }
 
 const PRAISE: Partial<Record<LessonStep['kind'], string>> = {
   brilliant: 'A sound sacrifice: it gives up material and the engine agrees.',

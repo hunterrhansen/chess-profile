@@ -66,14 +66,15 @@ export function changeTone(change: number) {
   return { text: '', chip: 'text-muted-foreground' }
 }
 
-/** "Back in 3 days", "Back tomorrow", or the mastered message. */
-export function nextTime(result: DeckAnswer) {
-  if (result.mastered) return 'Mastered: four times in a row. It won\'t come back.'
+/** "Back tomorrow", "Back in 3 days", "Back in 2 weeks", "Back in 3 months": when FSRS will
+ * bring a position back. */
+export function nextTime(result: Pick<DeckAnswer, 'due'>) {
   if (!result.due) return ''
   const days = Math.round((Date.parse(result.due) - Date.parse(localToday())) / 86_400_000)
   if (days <= 1) return 'Back tomorrow.'
   if (days < 14) return `Back in ${days} days.`
-  return `Back in ${Math.round(days / 7)} weeks.`
+  if (days < 60) return `Back in ${Math.round(days / 7)} weeks.`
+  return `Back in ${Math.round(days / 30)} months.`
 }
 
 function localToday() {

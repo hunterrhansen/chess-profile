@@ -1,28 +1,54 @@
 """The review deck: spaced repetition over positions from your own games.
 
 Every mistake, miss or blunder of yours where one move was clearly better than the rest
-becomes a card: the position before your move, and the engine's move as the answer. Get it
-right and it comes back later and later (3 days, a week, 3 weeks, 2 months); four in a row
-and it's mastered. Get it wrong and it comes back tomorrow.
+becomes a card: the position before your move, and the engine's move as the answer.
+
+Scheduling is inspired by Anki, the go-to for learning a lot and keeping it (decided Oct 7,
+2026): it uses FSRS, the scheduler Anki uses by default, and grades each answer with Anki's
+buttons, which the app presses for you from your FIRST try of the day:
+
+- Good: the best move, or one within GOOD_DROP points of win chance of it, or any mate.
+- Hard: within HARD_DROP points ("Good move! Best was ...").
+- Again: anything else, a hint before answering, or Show me. Anki's manual is clear that a
+  forgotten card is Again, never Hard, or the schedule stops being trustworthy.
+
+You can try again after a miss and keep going until you find it; that's for learning and
+doesn't change the grade (the same rule Lichess uses for puzzle ratings). A position you
+didn't get first time also comes back once more at the end of the session (the app does
+that, Duolingo-style; it stands in for Anki's relearning steps, so FSRS runs without any).
 
 Each day serves at most DAILY_LIMIT cards, due ones first, then new ones from your newest
-games. A day off never piles up a backlog: the next day is still at most DAILY_LIMIT. Only
-a card's first answer of the day counts, so trying again after a miss is free. Game review
-asks for the same moves, and an answer there is the card's answer for the day.
+games. A day off never piles up a backlog: the next day is still at most DAILY_LIMIT.
 """
+import json
 import sqlite3
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 
-from .analyze import win_pct
+import chess
+import chess.engine
+from fsrs import Card, Rating, Scheduler
+
+from .analyze import find_engine, win_pct
 from .brilliance import GREAT_GAP
 
-INTERVALS = [3, 7, 21, 60]  # days until the next review after 1, 2, 3, 4 right in a row
-MASTERED = len(INTERVALS)   # a card's step once it has been right this many times in a row
 DAILY_LIMIT = 10
 KINDS = ("mistake", "miss", "blunder")
 # One move clearly better: the engine's second choice would have cost this much win%,
 # the same bar as a Great move.
 CLEAR_GAP = GREAT_GAP
+# How close to the best move an answer must be, in points of win chance (Lichess and
+# Chess.com both call moves within a couple of points good or excellent).
+GOOD_DROP = 2
+HARD_DROP = 5
+JUDGE_DEPTH = 14
+# "Mastered" for the counts on Progress and Done: FSRS expects you to remember it for two
+# months or more. Mastered cards still come back, just rarely.
+MASTERED_DAYS = 60
+SKIP = "0000"  # Show me (or Skip): no move
+
+# No learning or relearning steps: the session's end-of-lesson redo does that job.
+SCHEDULER = Scheduler(learning_steps=(), relearning_steps=())
+RATING = {"again": Rating.Again, "hard": Rating.Hard, "good": Rating.Good}
 
 
 def clear_best(color: str, eval_best: int | None, eval_second: int | None) -> bool:
@@ -54,12 +80,36 @@ def game_plies(conn, game_id: int) -> list[int]:
 
 
 def sync(conn: sqlite3.Connection) -> int:
-    """Add a card for every qualifying move that doesn't have one yet. Cards are never
-    removed, so re-analysing a game keeps its review history. Returns how many were added."""
+    """Add a card for every qualifying move that doesn't have one yet, and give cards
+    answered before FSRS their FSRS state. Cards are never removed, so re-analysing a game
+    keeps its review history. Returns how many were added."""
     have = {tuple(r) for r in conn.execute("SELECT game_id, ply FROM cards")}
     new = [key for key in _qualifying(conn) if key not in have]
     # OR IGNORE: two requests can sync at once (the page loading twice, say).
-    return conn.executemany("INSERT OR IGNORE INTO cards (game_id, ply) VALUES (?, ?)", new).rowcount
+    added = conn.executemany("INSERT OR IGNORE INTO cards (game_id, ply) VALUES (?, ?)", new).rowcount
+    _replay_history(conn)
+    return added
+
+
+def _replay_history(conn) -> None:
+    """Cards answered under the old fixed ladder (3 days, 1 week, ...) have no FSRS state:
+    rebuild it by replaying their answers, a right one as Good and a wrong one as Again."""
+    for card in conn.execute("SELECT game_id, ply FROM cards WHERE fsrs IS NULL AND reviews > 0").fetchall():
+        state = Card()
+        for r in conn.execute(
+            """SELECT reviewed_at, correct FROM card_reviews WHERE game_id = ? AND ply = ?
+               ORDER BY reviewed_at, id""", (card["game_id"], card["ply"])):
+            at = datetime.fromisoformat(r["reviewed_at"].replace("Z", "+00:00"))
+            state, _ = SCHEDULER.review_card(state, Rating.Good if r["correct"] else Rating.Again, at)
+            conn.execute(
+                "UPDATE card_reviews SET rating = ? WHERE game_id = ? AND ply = ? AND reviewed_at = ? AND rating IS NULL",
+                ("good" if r["correct"] else "again", card["game_id"], card["ply"], r["reviewed_at"]))
+        conn.execute("UPDATE cards SET fsrs = ?, due = ? WHERE game_id = ? AND ply = ?",
+                     (json.dumps(state.to_dict()), _local_date(state.due), card["game_id"], card["ply"]))
+
+
+def _local_date(at: datetime) -> str:
+    return at.astimezone().date().isoformat()
 
 
 def _reviewed_today(conn, today: date) -> set[tuple[int, int]]:
@@ -79,24 +129,25 @@ def queue(conn, today: date | None = None) -> list[sqlite3.Row]:
     if not room:
         return []
     rows = conn.execute(
-        f"""SELECT c.game_id, c.ply, c.step, c.due FROM cards c
-            JOIN moves m ON m.game_id = c.game_id AND m.ply = c.ply
-            JOIN games g ON g.id = c.game_id
-            WHERE c.step < ? AND (c.due IS NULL OR c.due <= ?) AND m.best_uci IS NOT NULL
-            ORDER BY c.due IS NULL, c.due, g.played_at DESC, c.ply""",
-        (MASTERED, today.isoformat()),
+        """SELECT c.game_id, c.ply, c.due FROM cards c
+           JOIN moves m ON m.game_id = c.game_id AND m.ply = c.ply
+           JOIN games g ON g.id = c.game_id
+           WHERE (c.due IS NULL OR c.due <= ?) AND m.best_uci IS NOT NULL
+           ORDER BY c.due IS NULL, c.due, g.played_at DESC, c.ply""",
+        (today.isoformat(),),
     ).fetchall()
     return [r for r in rows if (r["game_id"], r["ply"]) not in done][:room]
 
 
+def _stability(fsrs_json: str | None) -> float:
+    return (json.loads(fsrs_json).get("stability") or 0) if fsrs_json else 0
+
+
 def stats(conn, today: date | None = None) -> dict:
     today = today or date.today()
-    totals = conn.execute(
-        """SELECT count(*) AS total, sum(step >= ?) AS mastered,
-                  sum(step > 0 AND step < ?) AS learning, sum(reviews = 0) AS new
-           FROM cards""",
-        (MASTERED, MASTERED),
-    ).fetchone()
+    cards = conn.execute("SELECT reviews, fsrs FROM cards").fetchall()
+    mastered = sum(1 for c in cards if _stability(c["fsrs"]) >= MASTERED_DAYS)
+    new = sum(1 for c in cards if c["reviews"] == 0)
     done = len(_reviewed_today(conn, today))
     kinds = conn.execute(
         """SELECT m.classification AS kind, count(*) AS n FROM cards c
@@ -104,12 +155,22 @@ def stats(conn, today: date | None = None) -> dict:
     ).fetchall()
     return {
         "kinds": {k: 0 for k in KINDS} | {r["kind"]: r["n"] for r in kinds if r["kind"] in KINDS},
-        "total": totals["total"],
-        "mastered": totals["mastered"] or 0,
-        "learning": totals["learning"] or 0,
-        "new": totals["new"] or 0,
+        "total": len(cards),
+        "mastered": mastered,
+        "learning": len(cards) - mastered - new,
+        "new": new,
         "today": {"done": done, "total": done + len(queue(conn, today))},
     }
+
+
+def mark(rating: str | None, solved: bool) -> str:
+    """How a position went, for the marks on the done screens: found, good move, found with
+    help (a retry or a hint), or missed."""
+    if rating == "good":
+        return "found"
+    if rating == "hard":
+        return "good"
+    return "helped" if solved else "missed"
 
 
 def today_results(conn, today: date | None = None) -> list[dict]:
@@ -117,7 +178,7 @@ def today_results(conn, today: date | None = None) -> list[dict]:
     with what's needed to name the position: "29…Qxc8 vs woolcap"."""
     today = today or date.today()
     rows = conn.execute(
-        """SELECT r.game_id, r.ply, r.correct, m.san, g.opponent
+        """SELECT r.game_id, r.ply, r.correct, r.rating, r.solved, m.san, g.opponent
            FROM card_reviews r
            JOIN moves m ON m.game_id = r.game_id AND m.ply = r.ply
            JOIN games g ON g.id = r.game_id
@@ -129,22 +190,57 @@ def today_results(conn, today: date | None = None) -> list[dict]:
         if (r["game_id"], r["ply"]) in seen:
             continue
         seen.add((r["game_id"], r["ply"]))
+        rating = r["rating"] or ("good" if r["correct"] else "again")
         out.append({"game_id": r["game_id"], "ply": r["ply"], "correct": bool(r["correct"]),
-                    "san": r["san"], "opponent": r["opponent"]})
+                    "mark": mark(rating, bool(r["solved"])), "san": r["san"], "opponent": r["opponent"]})
     return out
 
 
-def answer(conn, game_id: int, ply: int, uci: str, today: date | None = None,
-           now: datetime | None = None) -> dict:
-    """Grade an answer and reschedule the card. Only the first answer of the day moves
-    the schedule; later ones just say whether they were right. Skip sends the null move
-    "0000", which counts as a miss."""
+def judge(fen: str, uci: str, best_uci: str, eval_best: int | None) -> str:
+    """How good an answer is: 'best' (the engine's move, or any mate), 'excellent' (within
+    GOOD_DROP points of win chance), 'good' (within HARD_DROP), 'wrong', or 'shown' (no move).
+    Needs Stockfish for anything but the engine's own move; without it, only that counts."""
+    if uci == SKIP:
+        return "shown"
+    # Promotions: the board always offers a queen, the engine might have wanted a knight.
+    if uci == best_uci or (len(uci) == 5 and uci[:4] == best_uci[:4]):
+        return "best"
+    board = chess.Board(fen)
+    try:
+        move = chess.Move.from_uci(uci)
+    except ValueError:
+        return "wrong"
+    if move not in board.legal_moves:
+        return "wrong"
+    mover = board.turn
+    board.push(move)
+    if board.is_checkmate():
+        return "best"
+    if eval_best is None:
+        return "wrong"
+    try:
+        with chess.engine.SimpleEngine.popen_uci(find_engine(None)) as engine:
+            info = engine.analyse(board, chess.engine.Limit(depth=JUDGE_DEPTH))
+    except (SystemExit, chess.engine.EngineError, OSError):
+        return "wrong"
+    after = info["score"].white().score(mate_score=10000)
+    sign = 1 if mover == chess.WHITE else -1
+    drop = win_pct(sign * eval_best) - win_pct(sign * after)
+    return "excellent" if drop <= GOOD_DROP else "good" if drop <= HARD_DROP else "wrong"
+
+
+def answer(conn, game_id: int, ply: int, uci: str, *, hinted: bool = False, redo: bool = False,
+           today: date | None = None, now: datetime | None = None) -> dict:
+    """Check an answer. The first answer of the day grades the card (Again / Hard / Good) and
+    FSRS schedules it; a hint before it makes it Again. Later answers that day (a retry, or
+    the end-of-session redo with `redo`) only say how good they are, and a retry that finds
+    it records the position as found with help."""
     today = today or date.today()
 
     def load():
         return conn.execute(
-            """SELECT c.step, c.due, m.best_uci, m.best_san FROM cards c
-               JOIN moves m ON m.game_id = c.game_id AND m.ply = c.ply
+            """SELECT c.fsrs, c.due, c.reviews, m.fen_before, m.best_uci, m.best_san, m.eval_before
+               FROM cards c JOIN moves m ON m.game_id = c.game_id AND m.ply = c.ply
                WHERE c.game_id = ? AND c.ply = ?""",
             (game_id, ply),
         ).fetchone()
@@ -156,32 +252,54 @@ def answer(conn, game_id: int, ply: int, uci: str, today: date | None = None,
         card = load()
     if card is None:
         raise KeyError((game_id, ply))
-    # Promotions: the board always offers a queen, the engine might have wanted a knight.
-    correct = uci == card["best_uci"] or (len(uci) == 5 and uci[:4] == card["best_uci"][:4])
-    step, due = card["step"], card["due"]
+    quality = judge(card["fen_before"], uci, card["best_uci"], card["eval_before"])  # module-level, so tests can swap it
+    passed = quality in ("best", "excellent", "good")
+    state = Card.from_dict(json.loads(card["fsrs"])) if card["fsrs"] else Card()
+    rating = None
     if (game_id, ply) not in _reviewed_today(conn, today):
-        if correct:
-            step += 1
-            due = None if step >= MASTERED else (today + timedelta(days=INTERVALS[step - 1])).isoformat()
-        else:
-            step = 0
-            due = (today + timedelta(days=1)).isoformat()
-        stamp = (now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        rating = "again" if hinted or not passed else "hard" if quality == "good" else "good"
+        when = now or datetime.now(timezone.utc)
+        state, _ = SCHEDULER.review_card(state, RATING[rating], when)
+        stamp = when.strftime("%Y-%m-%dT%H:%M:%SZ")
         conn.execute(
-            """UPDATE cards SET step = ?, due = ?, reviews = reviews + 1,
-                      lapses = lapses + ?, last_reviewed_at = ?
-               WHERE game_id = ? AND ply = ?""",
-            (step, due, 0 if correct else 1, stamp, game_id, ply),
+            """UPDATE cards SET fsrs = ?, due = ?, reviews = reviews + 1, lapses = lapses + ?,
+                      last_reviewed_at = ? WHERE game_id = ? AND ply = ?""",
+            (json.dumps(state.to_dict()), _local_date(state.due), int(rating == "again"), stamp, game_id, ply),
         )
         conn.execute(
-            "INSERT INTO card_reviews (game_id, ply, reviewed_at, answer_uci, correct) VALUES (?, ?, ?, ?, ?)",
-            (game_id, ply, stamp, uci, int(correct)),
+            """INSERT INTO card_reviews (game_id, ply, reviewed_at, answer_uci, correct, rating, quality, solved)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (game_id, ply, stamp, uci, int(passed and not hinted), rating, quality, int(passed)),
         )
+    elif passed and not redo:
+        # Found on a retry: it still counts as Again, but the done screen says "with help".
+        conn.execute(
+            """UPDATE card_reviews SET solved = 1 WHERE id = (
+                 SELECT id FROM card_reviews WHERE game_id = ? AND ply = ?
+                   AND date(reviewed_at, 'localtime') = ? ORDER BY reviewed_at, id LIMIT 1)""",
+            (game_id, ply, today.isoformat()),
+        )
+    due = _local_date(state.due) if card["fsrs"] or rating else None
     return {
-        "correct": correct,
+        "correct": passed,
+        "quality": quality,
+        "rating": rating,
         "best_uci": card["best_uci"],
         "best_san": card["best_san"],
-        "step": step,
-        "mastered": step >= MASTERED,
         "due": due,
+        "mastered": (state.stability or 0) >= MASTERED_DAYS,
     }
+
+
+def hint(conn, game_id: int, ply: int) -> dict:
+    """The answer's move, for the two-step Hint (the piece, then the arrow). Asking makes the
+    day's first answer count as Again; the client says so when it answers."""
+    row = conn.execute(
+        """SELECT m.best_uci FROM cards c JOIN moves m ON m.game_id = c.game_id AND m.ply = c.ply
+           WHERE c.game_id = ? AND c.ply = ?""", (game_id, ply)).fetchone()
+    if row is None:
+        sync(conn)
+        row = conn.execute("SELECT best_uci FROM moves WHERE game_id = ? AND ply = ?", (game_id, ply)).fetchone()
+    if row is None or not row["best_uci"]:
+        raise KeyError((game_id, ply))
+    return {"best_uci": row["best_uci"], "from": row["best_uci"][:2]}

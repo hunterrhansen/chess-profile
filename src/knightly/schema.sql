@@ -199,8 +199,9 @@ CREATE TABLE IF NOT EXISTS cards (
     game_id           INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
     ply               INTEGER NOT NULL,
     added_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-    step              INTEGER NOT NULL DEFAULT 0,  -- right answers in a row; 4 = mastered
-    due               TEXT,                        -- YYYY-MM-DD (local) of the next review; NULL = new, or mastered
+    step              INTEGER NOT NULL DEFAULT 0,  -- unused since FSRS (the old fixed ladder's step)
+    due               TEXT,                        -- YYYY-MM-DD (local) of the next review; NULL = new
+    fsrs              TEXT,                        -- FSRS card state (JSON, fsrs.Card.to_dict); NULL = new
     reviews           INTEGER NOT NULL DEFAULT 0,
     lapses            INTEGER NOT NULL DEFAULT 0,  -- wrong answers
     last_reviewed_at  TEXT,
@@ -216,6 +217,8 @@ CREATE TABLE IF NOT EXISTS game_reviews (
 );
 
 -- Every graded answer (a card's first of the day), for history and the daily count.
+-- rating: the Anki grade FSRS got (again | hard | good); quality: how good the move was
+-- (best | excellent | good | wrong | shown); solved: found that day, maybe on a retry.
 CREATE TABLE IF NOT EXISTS card_reviews (
     id           INTEGER PRIMARY KEY,
     game_id      INTEGER NOT NULL,
@@ -223,6 +226,9 @@ CREATE TABLE IF NOT EXISTS card_reviews (
     reviewed_at  TEXT NOT NULL,             -- ISO-8601 UTC
     answer_uci   TEXT NOT NULL,
     correct      INTEGER NOT NULL,
+    rating       TEXT,
+    quality      TEXT,
+    solved       INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (game_id, ply) REFERENCES cards(game_id, ply) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS card_reviews_at ON card_reviews (reviewed_at);

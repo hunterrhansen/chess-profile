@@ -9,6 +9,7 @@ requires-python = ">=3.11"
 dependencies = [
     "chess>=1.10",
     "fastapi>=0.142.2",
+    "fsrs>=6.3,<7",
     "uvicorn>=0.30",
 ]
 

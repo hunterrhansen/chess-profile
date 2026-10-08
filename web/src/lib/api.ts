@@ -82,7 +82,7 @@ export interface DeckToday {
   kinds: { mistake: number; miss: number; blunder: number } // what the cards were in your games
   today: { done: number; total: number }
   /** Today's answers in order (a card's first of the day), for the Done screen. */
-  results: { game_id: number; ply: number; correct: boolean; san: string; opponent: string | null }[]
+  results: { game_id: number; ply: number; correct: boolean; mark: PracticeMark; san: string; opponent: string | null }[]
   card: DeckCard | null
 }
 
@@ -90,7 +90,6 @@ export interface DeckCard {
   game_id: number
   ply: number
   pattern: string | null // the tactic behind it (patterns.py); shown only after you answer
-  step: number // right answers in a row so far
   reviews: number // 0: you haven't seen this position yet
   fen_before: string
   color: 'white' | 'black' // who moved: you
@@ -107,11 +106,18 @@ export interface DeckCard {
   user_outcome: Outcome | null
 }
 
+/** How a position went (deck.mark): found first try, a good move that wasn't the best,
+ * found with help (a retry or a hint), or missed. */
+export type PracticeMark = 'found' | 'good' | 'helped' | 'missed'
+
+/** A checked answer (deck.answer). `rating` is the Anki grade FSRS got, set only by the day's
+ * first try; retries and the end-of-session redo come back with null. */
 export interface DeckAnswer {
   correct: boolean
+  quality: 'best' | 'excellent' | 'good' | 'wrong' | 'shown'
+  rating: 'again' | 'hard' | 'good' | null
   best_uci: string
   best_san: string
-  step: number
   mastered: boolean
   due: string | null // YYYY-MM-DD of the next review
 }

@@ -131,7 +131,8 @@ export function PlayPage() {
   const [thinking, setThinking] = useState(false)
   const [retry, setRetry] = useState(0) // bumped to ask the bot again after an error
   const [error, setError] = useState<string | null>(null)
-  const [hint, setHint] = useState<{ ply: number; uci: string } | null>(null)
+  // Hint, in two steps like everywhere else: the piece to move, then the move as an arrow.
+  const [hint, setHint] = useState<{ ply: number; uci: string; step: 1 | 2 } | null>(null)
   const [hintLoading, setHintLoading] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [analysis, setAnalysis] = useState<'running' | 'done' | 'failed' | null>(null)
@@ -274,10 +275,11 @@ export function PlayPage() {
 
   const askHint = async () => {
     if (!playing || !myTurn) return
+    if (hint?.ply === moves.length) return setHint({ ...hint, step: 2 })
     setHintLoading(true)
     try {
       const move = await send<{ uci: string }>('POST', '/api/play/move', { fen: chess.fen() })
-      setHint({ ply: moves.length, uci: move.uci })
+      setHint({ ply: moves.length, uci: move.uci, step: 1 })
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -315,7 +317,8 @@ export function PlayPage() {
             chess={chess}
             orientation={me}
             lastMove={squares[squares.length - 1]}
-            hint={hint?.ply === moves.length ? hint.uci : null}
+            hint={hint?.ply === moves.length && hint.step === 2 ? hint.uci : null}
+            glow={hint?.ply === moves.length && hint.step === 1 ? hint.uci.slice(0, 2) : null}
             danger={warning?.reply_uci ?? null}
             selected={selected}
             interactive={playing && myTurn}
@@ -421,9 +424,9 @@ export function PlayPage() {
                   <NavButton label="Resign" onClick={resign} icon={<FlagIcon weight="fill" />} disabled={!playing} />
                   <NavButton label="Take back" onClick={takeback} icon={<ArrowUUpLeftIcon />} disabled={!playing || !moves.length} />
                   <NavButton
-                    label="Hint"
+                    label={hint?.ply === moves.length ? 'Show the move' : 'Hint'}
                     onClick={askHint}
-                    disabled={!playing || !myTurn || hintLoading}
+                    disabled={!playing || !myTurn || hintLoading || (hint?.ply === moves.length && hint.step === 2)}
                     icon={hintLoading ? <CircleNotchIcon className="animate-spin" /> : <LightbulbIcon weight="fill" />}
                   />
                 </div>
@@ -582,6 +585,7 @@ export function PlayBoard({
   interactive,
   palette,
   flash,
+  glow,
   onMove,
   onSelect,
 }: {
@@ -596,6 +600,8 @@ export function PlayBoard({
   palette: Palette
   /** Lights a square up once after the piece lands: green for a right answer, red for wrong. */
   flash?: { square: string; tone: 'right' | 'wrong' }
+  /** Hint: a gold glow on the piece to move. */
+  glow?: string | null
   onMove: (from: string, to: string) => boolean
   onSelect: (square: string | null) => void
 }) {
@@ -615,6 +621,7 @@ export function PlayBoard({
         ...(danger ? [{ from: danger.slice(0, 2), to: danger.slice(2, 4), tone: 'danger' as const }] : []),
       ]}
       flash={flash}
+      glow={glow}
       movable={interactive ? (orientation === 'white' ? 'w' : 'b') : undefined}
       onMove={onMove}
       onSelect={onSelect}

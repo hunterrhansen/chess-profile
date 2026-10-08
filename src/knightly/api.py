@@ -246,12 +246,19 @@ class PuzzleAnswerIn(BaseModel):
 class AnswerIn(BaseModel):
     game_id: int
     ply: int
-    uci: str = Field(pattern=r"^([a-h][1-8][a-h][1-8][qrbn]?|0000)$")  # 0000: skipped
+    uci: str = Field(pattern=r"^([a-h][1-8][a-h][1-8][qrbn]?|0000)$")  # 0000: Show me / Skip
+    hinted: bool = False  # took a hint before this first answer: it counts as Again
+    redo: bool = False    # the end-of-session redo: judged, never graded
+
+
+class HintIn(BaseModel):
+    game_id: int
+    ply: int
 
 
 class StepMarkIn(BaseModel):
     ply: int = Field(ge=1)
-    mark: Literal["found", "missed", "praise", "seen"]
+    mark: Literal["found", "good", "helped", "missed", "praise", "seen"]
 
 
 class ReviewIn(BaseModel):
@@ -450,7 +457,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
         card = None
         if nxt:
             rows = query(
-                """SELECT c.game_id, c.ply, c.step, c.reviews, m.fen_before, m.color, m.san,
+                """SELECT c.game_id, c.ply, c.reviews, m.fen_before, m.color, m.san,
                           m.uci, m.move_number, m.classification, m.pattern, m.win_pct_before,
                           prev.uci AS prev_uci, g.opponent, g.played_at, g.time_control,
                           g.speed, g.user_outcome
@@ -468,7 +475,16 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
     def deck_answer(body: AnswerIn):
         with write() as conn, conn:
             try:
-                return deck.answer(conn, body.game_id, body.ply, body.uci)
+                return deck.answer(conn, body.game_id, body.ply, body.uci, hinted=body.hinted, redo=body.redo)
+            except KeyError:
+                raise HTTPException(404, "No card for that position.") from None
+
+    @app.post("/api/deck/hint")
+    def deck_hint(body: HintIn):
+        """The move behind the two-step Hint: the piece to move, then the arrow."""
+        with write() as conn, conn:
+            try:
+                return deck.hint(conn, body.game_id, body.ply)
             except KeyError:
                 raise HTTPException(404, "No card for that position.") from None
 

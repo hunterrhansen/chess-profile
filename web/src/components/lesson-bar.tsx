@@ -1,9 +1,11 @@
 import { cn } from '@/lib/utils'
 
-type Tone = 'idle' | 'right' | 'wrong' | 'gold'
+type Tone = 'idle' | 'retry' | 'right' | 'wrong' | 'gold'
 
 const BAND: Record<Tone, string> = {
   idle: 'border-border bg-background',
+  // after a miss, before you've found it: a light red, "Not quite"
+  retry: 'border-danger bg-[color-mix(in_srgb,var(--danger)_10%,var(--card))]',
   right: 'border-brand bg-[color-mix(in_srgb,var(--brand)_20%,var(--card))]',
   wrong: 'border-danger bg-[color-mix(in_srgb,var(--danger)_16%,var(--card))]',
   gold: 'border-gold bg-[color-mix(in_srgb,var(--gold)_22%,var(--card))]',
@@ -36,11 +38,11 @@ export function LessonBoard({ children }: { children: React.ReactNode }) {
 export function LessonBar({ tone, children }: { tone: Tone; children: React.ReactNode }) {
   return (
     <footer
-      aria-live={tone === 'idle' ? undefined : 'polite'}
+      aria-live={tone === 'idle' || tone === 'retry' ? undefined : 'polite'}
       className={cn(
         'relative left-1/2 w-screen shrink-0 -translate-x-1/2 border-t-2 pb-[env(safe-area-inset-bottom)]',
         BAND[tone],
-        tone !== 'idle' && 'animate-sheet',
+        tone !== 'idle' && tone !== 'retry' && 'animate-sheet',
       )}
     >
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-4 md:flex-row md:items-center md:justify-between md:gap-6 md:px-6 md:py-5">
@@ -50,12 +52,12 @@ export function LessonBar({ tone, children }: { tone: Tone; children: React.Reac
   )
 }
 
-const MARK: Record<Exclude<Tone, 'idle'>, string> = {
+const MARK: Record<Exclude<Tone, 'idle' | 'retry'>, string> = {
   right: 'animate-bounce-in bg-brand text-on-brand',
   wrong: 'animate-shake bg-danger text-on-danger',
   gold: '',
 }
-const TITLE: Record<Exclude<Tone, 'idle'>, string> = {
+const TITLE: Record<Exclude<Tone, 'idle' | 'retry'>, string> = {
   right: 'text-brand-text',
   wrong: 'text-danger-text',
   gold: 'text-gold-text',
@@ -70,7 +72,7 @@ export function LessonVerdict({
   children,
   actions,
 }: {
-  tone: Exclude<Tone, 'idle'>
+  tone: Exclude<Tone, 'idle' | 'retry'>
   icon: React.ReactNode
   title: React.ReactNode
   children?: React.ReactNode
