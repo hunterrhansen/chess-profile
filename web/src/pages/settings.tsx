@@ -378,34 +378,40 @@ function UpdateSection({ settings, reload }: { settings: Settings; reload: () =>
     <Section
       title="Daily update"
       glyph="goal"
-      description="Syncs every account, analyses new games, and backs up the database. If the Mac is asleep at that time, it runs on wake."
+      description={
+        settings.schedule_available
+          ? 'Syncs every account, analyses new games, and backs up the database. If the Mac is asleep at that time, it runs on wake.'
+          : 'Syncs every account, analyses new games, and backs up the database.'
+      }
     >
-      <Row
-        label="Run every day"
-        hint={current ? (current.loaded ? `On, at ${savedTime}` : 'Installed but not loaded. Save again to fix.') : 'Off'}
-      >
-        <div className="flex items-center gap-2.5">
-          <Input
-            type="time"
-            step={300}
-            value={time}
-            onChange={(e) => setTime(e.target.value)}
-            aria-label="Time of day"
-            className="h-10 w-32"
-          />
-          {current && time !== savedTime && (
-            <Button size="sm" disabled={!!busy} onClick={() => saveSchedule(true)}>
-              Save time
-            </Button>
-          )}
-          <Switch
-            aria-label="Run every day"
-            checked={!!current}
-            disabled={!!busy}
-            onCheckedChange={(on) => saveSchedule(on)}
-          />
-        </div>
-      </Row>
+      {settings.schedule_available && (
+        <Row
+          label="Run every day"
+          hint={current ? (current.loaded ? `On, at ${savedTime}` : 'Installed but not loaded. Save again to fix.') : 'Off'}
+        >
+          <div className="flex items-center gap-2.5">
+            <Input
+              type="time"
+              step={300}
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              aria-label="Time of day"
+              className="h-10 w-32"
+            />
+            {current && time !== savedTime && (
+              <Button size="sm" disabled={!!busy} onClick={() => saveSchedule(true)}>
+                Save time
+              </Button>
+            )}
+            <Switch
+              aria-label="Run every day"
+              checked={!!current}
+              disabled={!!busy}
+              onCheckedChange={(on) => saveSchedule(on)}
+            />
+          </div>
+        </Row>
+      )}
       {settings.current_run ? (
         <div className="px-5 py-3.5 text-sm">
           <div className="mb-2 flex items-center justify-between gap-4">

@@ -109,15 +109,17 @@ def parse_time_control(tc: str | None) -> tuple[float | None, float]:
     return float(m.group(1)), float(m.group(2) or 0)
 
 
-def _evaluate(engine, board: chess.Board, depth: int) -> dict:
+def _evaluate(engine, board: chess.Board, depth: int | chess.engine.Limit) -> dict:
     """For one position, White POV: cp and mate-in-N for the best move, cp for the second
-    best (None with only one legal move), and the best move."""
+    best (None with only one legal move), and the best move. `depth` may be a full Limit,
+    e.g. a node budget."""
     if board.is_checkmate():  # side to move has been mated
         return {"cp": -MATE_CP if board.turn == chess.WHITE else MATE_CP, "mate": None,
                 "second": None, "best": None}
     if board.is_game_over():  # stalemate, insufficient material, ...
         return {"cp": 0, "mate": None, "second": None, "best": None}
-    infos = engine.analyse(board, chess.engine.Limit(depth=depth), multipv=2)
+    limit = depth if isinstance(depth, chess.engine.Limit) else chess.engine.Limit(depth=depth)
+    infos = engine.analyse(board, limit, multipv=2)
     score = infos[0]["score"].white()
     pv = infos[0].get("pv") or []
     second = infos[1]["score"].white().score(mate_score=MATE_CP) if len(infos) > 1 else None

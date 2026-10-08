@@ -210,6 +210,8 @@ export interface Settings {
   accounts: { source: string; handle: string; synced_through: string | null }[]
   lichess_token: boolean
   schedule: { hour: number; minute: number; loaded: boolean } | null
+  /** False in server mode: the daily job is a macOS launchd agent. */
+  schedule_available: boolean
   last_run: {
     started_at: string
     finished_at: string | null

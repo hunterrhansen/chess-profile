@@ -29,7 +29,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import db, deck, lines, patterns, play, puzzles, schedule, units, update
+from . import config, db, deck, lines, patterns, play, puzzles, schedule, units, update
 from .analyze import THRESHOLDS, find_engine
 
 # A position counts as "winning" once the user's win chance reaches this after one of
@@ -326,6 +326,8 @@ def lichess_token_saved() -> bool:
     """Whether a token is available, without ever reading the secret itself."""
     if os.environ.get("LICHESS_TOKEN"):
         return True
+    if not config.on_mac():
+        return False
     found = subprocess.run(["security", "find-generic-password", "-s", KEYCHAIN_SERVICE],
                            capture_output=True)
     return found.returncode == 0
@@ -546,6 +548,7 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
             ],
             "lichess_token": lichess_token_saved(),
             "schedule": schedule.current(),
+            "schedule_available": config.on_mac(),
             "last_run": run_json(last[0]) if last else None,
             # The runs before it, for the history under it (without their step lists).
             "earlier_runs": [{k: v for k, v in run_json(r).items() if k != "progress"} for r in last[1:]],
@@ -606,20 +609,23 @@ def create_app(db_path: str | Path = db.DEFAULT_DB, static_dir: Path | None = No
     @app.post("/api/update/run", status_code=202)
     def run_update():
         """Start the update pipeline in the background: via launchd when the daily job is
-        installed (same low priority and log), else as a detached `knightly update`."""
+        installed (same low priority and log), else as a detached `knightly update`. In
+        server mode its output joins the server's own (the container's log)."""
         if schedule.current():
             try:
                 schedule.run_now(log=lambda _: None)
             except SystemExit as e:
                 raise HTTPException(400, str(e)) from None
-        else:
-            exe = Path(sys.executable).parent / "knightly"
+            return {"started": True}
+        command = [str(Path(sys.executable).parent / "knightly"), "--db", db_path, "update",
+                   "--workers", str(schedule.SCHEDULED_WORKERS)]
+        options = {"stdin": subprocess.DEVNULL, "cwd": str(Path(db_path).parent), "start_new_session": True}
+        if config.on_mac():
             schedule.LOG.parent.mkdir(parents=True, exist_ok=True)
             with open(schedule.LOG, "a") as log_file:
-                subprocess.Popen(
-                    [str(exe), "--db", db_path, "update", "--workers", str(schedule.SCHEDULED_WORKERS)],
-                    stdout=log_file, stderr=log_file, stdin=subprocess.DEVNULL,
-                    cwd=str(Path(db_path).parent), start_new_session=True)
+                subprocess.Popen(command, stdout=log_file, stderr=log_file, **options)
+        else:
+            subprocess.Popen(command, **options)
         return {"started": True}
 
     @app.get("/api/home")
