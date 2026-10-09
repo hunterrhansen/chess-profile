@@ -1,0 +1,13 @@
+# Shared project connections. OAuth credentials stay in each user's local store.
+# Codex loads this file only after the checkout is trusted.
+[mcp_servers.expo]
+url = "https://mcp.expo.dev/mcp"
+enabled = true
+
+[mcp_servers.supabase-staging]
+url = "https://mcp.supabase.com/mcp?project_ref=mwkkgxrkhhvvagouvtmo&read_only=true&features=database,debugging,docs"
+enabled = true
+
+[mcp_servers.supabase-prod]
+url = "https://mcp.supabase.com/mcp?project_ref=duvdkqvszkmljwwrhhfk&read_only=true&features=database,debugging,docs"
+enabled = true

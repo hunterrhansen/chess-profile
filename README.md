@@ -4,6 +4,9 @@ Turn your own chess games into daily practice. Knightly pulls all of your chess 
 (Chess.com, Lichess, over-the-board PGNs) into one Postgres database, analyses it with
 Stockfish, and turns your mistakes into positions to review.
 
+For a shared Codex or other coding-agent setup (Expo and Supabase skills, MCP
+connections and sign-in), see [Agent setup](docs/agent-setup.md).
+
 ## Quick start
 
 ```bash
