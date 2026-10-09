@@ -31,9 +31,11 @@ the owner's password manager, under "Knightly deploy".
 
 - [x] **Domain:** `knightlychess.app`, bought through Cloudflare Registrar (2026-10-08).
       Production is at `knightlychess.app`, staging at `staging.knightlychess.app`.
-- [x] **Supabase** (§3): `knightly-staging` and `knightly` are in West US (North California),
-      with the Data API off. Staging is migrated, and `SET ROLE knightly_app` works there.
-      Production is empty: it waits for the restore in §3.
+- [x] **Supabase** (§3): the current dashboard lists `knightly-staging`
+      (`mwkkgxrkhhvvagouvtmo`, us-east-2) and `knightly-prod`
+      (`duvdkqvszkmljwwrhhfk`, us-west-2). Staging's Data API is off.
+      Confirm migrations, app-role access and production emptiness through the database
+      before deploying or restoring; the server URLs are not filled in yet.
 - [x] **Oracle machine** (§2): made with OpenTofu (`infra/oracle`, PHX-AD-1), bootstrapped,
       and the `knightly` deploy user logs in with `~/.ssh/knightly-deploy`. The IP:
       `tofu output public_ip` in `infra/oracle`, with state in `~/.knightly/oracle.tfstate` on
@@ -55,13 +57,15 @@ the owner's password manager, under "Knightly deploy".
       Production instance created (2026-10-08), all five DNS CNAMEs are managed in
       `infra/cloudflare/clerk.tf` and verified by Clerk. Both deletion webhooks exist;
       production allows self-service deletion. Email sign-in is enabled. Google sign-in
-      still needs custom OAuth credentials. Copy the two webhook signing secrets into the
+      still needs custom OAuth credentials. Both webhook signing secrets are saved in the
       matching server env files; delivery and account deletion need testing after deployment.
 - [ ] **Fill in `.env` on the machine** (§6, §7): `/opt/knightly/{staging,production}/.env`
       and `/opt/knightly/backup.env`. The owner pastes the secrets over SSH.
       Both allowed origins are set to their real domains. Staging's existing development
       Clerk publishable key and owner admin ID are set (2026-10-08), as is production's
-      publishable key. Database URLs, webhook secrets and contact email still need filling in.
+      publishable key and both webhook signing secrets. The owner's contact email is saved.
+      Only the database URLs still need filling in; the correct session-pooler URLs have
+      been read from each project, but their existing passwords must be retrieved.
 - [ ] **GitHub** (§8), last, because setting `DEPLOY_HOST` starts deploying on every push to
       `main`. Set the `DEPLOY_SSH_KEY` secret, the `DEPLOY_HOST` variable, and the `staging` and
       `production` environments. Make the GHCR package public.
