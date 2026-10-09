@@ -85,7 +85,8 @@ the owner's password manager, under "Knightly deploy".
       check passes, the worker runs, runtime config matches staging, protected routes return
       401 without sign-in, and the browser displays Clerk sign-in. A signed no-op webhook
       is accepted and an invalid signature rejected. The owner signed in and confirmed that
-      Chess.com onboarding imports games successfully. A throwaway deletion test remains.
+      Chess.com onboarding imports games successfully. The throwaway deletion test passed
+      in Safari (2026-10-09), as detailed below.
 - [x] **Production:** move the Mac data in (§3: migrate, then a data-only restore), deploy the
       staging tag (§9), and sign in as the owner. Run the backup by hand once (§7).
       GitHub Actions run `37883614272` deployed `sha-0ba6ab5` with the owner's approval.
@@ -100,9 +101,28 @@ the owner's password manager, under "Knightly deploy".
       and CLI owner IDs are configured, and all services restarted healthy. A fresh backup
       after linking completed successfully and matched its R2 copy.
 - [ ] **Done when** (architecture doc, Phases 4 and 5): a push to `main` reaches staging with
-      no manual steps, and a friend can sign up, use Knightly and delete their account. Test
-      the deletion in Safari with a throwaway account, since Clerk's captcha blocks automated
-      browsers.
+      no manual steps, and a friend can sign up, use Knightly and delete their account.
+      Throwaway account deletion has passed in Safari; the broader friend acceptance
+      test is still open.
+
+Deletion verification (2026-10-09): both public Clerk webhook endpoints rejected an invalid
+signature (400), accepted a signed `user.deleted` event and its redelivery (200), and removed
+temporary probe users and all their rows. All 14 personal tables were checked; existing
+users remained. These probes exercise the deployed webhook and database cascade, but do
+not replace the real Safari account deletion acceptance test above. Automated database
+tests also cover both in-app deletion and webhook deletion with data in every personal table,
+including running jobs, and verify that another user's data remains intact.
+
+Safari acceptance (2026-10-09): signed up a disposable development Clerk account on staging,
+confirmed a Chess.com handle, and imported 29 October game copies with the CLI while the
+onboarding job waited behind existing analysis. Settings displayed the signed-in test email,
+the account and 29 games. The incorrect confirmation word kept deletion disabled; `delete`
+enabled it. In-app deletion returned to sign-in, removed the user and all rows across the
+14 personal tables (including its running job, run, snapshots and sync cursor), and Clerk's
+dashboard search returned no test user. The existing staging owner retained all 691 games.
+The staging worker was restarted afterward to stop its in-flight analysis of the deleted
+test games. Frontend fix `sha-a9c59c9` passed CI and was deployed to staging by Actions run
+`37938169247`; production still needs promotion of the reviewed fix.
 
 ## 1. Accounts and values
 
