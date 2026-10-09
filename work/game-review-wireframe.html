@@ -1,0 +1,120 @@
+<div id="knightly-review-proposal">
+  <div class="viz-carousel" aria-label="Review layouts">
+    <section data-variant="Desktop" aria-label="Desktop review"></section>
+    <section data-variant="Mobile" aria-label="Mobile review" hidden></section>
+  </div>
+</div>
+<style>
+#knightly-review-proposal { --kr-page:light-dark(#f4f6ef,#171e14); --kr-card:light-dark(#fff,#242d20); --kr-muted:light-dark(#eaeee1,#303a2a); --kr-line:light-dark(#dce1d2,#414d39); --kr-ink:light-dark(#1d2618,#eef3e7); --kr-sub:light-dark(#56614e,#bac6ae); --kr-green:#6cc23a; --kr-on:#13200c; --kr-sky:#49a8f2; --kr-danger:light-dark(#b8352a,#ff9b90); --kr-board-light:#eaefd8; --kr-board-dark:#7da35a; --kr-piece-dark:#24211c; --kr-piece-light:#fbfaf5; color:var(--kr-ink); font-family:Nunito,system-ui,sans-serif; }
+#knightly-review-proposal * { box-sizing:border-box; }
+#knightly-review-proposal .kr-app { background:var(--kr-page); border:1px solid var(--kr-line); border-radius:16px; padding:20px; min-height:680px; }
+#knightly-review-proposal .kr-mobile { max-width:390px; margin:auto; }
+#knightly-review-proposal .kr-head,#knightly-review-proposal .kr-row,#knightly-review-proposal .kr-controls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+#knightly-review-proposal .kr-head { justify-content:space-between; padding-bottom:16px; padding-right:72px; }
+#knightly-review-proposal h2,#knightly-review-proposal h3,#knightly-review-proposal p { margin:0; }
+#knightly-review-proposal h2 { font-size:22px; font-weight:700; }
+#knightly-review-proposal h3 { font-size:19px; font-weight:700; }
+#knightly-review-proposal .kr-sub { color:var(--kr-sub); font-size:13px; }
+#knightly-review-proposal .kr-layout { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr); gap:24px; }
+#knightly-review-proposal .kr-mobile .kr-layout { display:flex; flex-direction:column; gap:14px; }
+#knightly-review-proposal .kr-board-area { min-width:0; }
+#knightly-review-proposal .kr-board { display:grid; grid-template-columns:repeat(8,1fr); width:100%; aspect-ratio:1; overflow:hidden; border-radius:10px; margin:10px 0; box-shadow:0 4px 0 var(--kr-line); }
+#knightly-review-proposal .kr-square { display:grid; place-items:center; padding:0; border:0; border-radius:0; background:var(--kr-board-light); color:var(--kr-piece-dark); font-size:clamp(24px,4vw,46px); font-family:Georgia,serif; position:relative; cursor:default; aspect-ratio:1; }
+#knightly-review-proposal .kr-square.kr-dark { background:var(--kr-board-dark); }
+#knightly-review-proposal .kr-square.kr-white { color:var(--kr-piece-light); text-shadow:1px 1px var(--kr-piece-dark),-1px -1px var(--kr-piece-dark); }
+#knightly-review-proposal .kr-square.kr-selected { box-shadow:inset 0 0 0 3px var(--kr-sky); }
+#knightly-review-proposal .kr-square.kr-highlight { background:color-mix(in srgb,var(--kr-sky) 48%,var(--kr-board-light)); }
+#knightly-review-proposal .kr-mobile .kr-square { font-size:32px; }
+#knightly-review-proposal .kr-square small { position:absolute; left:3px; bottom:2px; font:11px system-ui; color:var(--kr-piece-dark); }
+#knightly-review-proposal .kr-card { padding:18px; border:2px solid var(--kr-line); border-radius:20px; background:var(--kr-card); box-shadow:0 2px 0 var(--kr-line); }
+#knightly-review-proposal .kr-card > * + * { margin-top:12px; }
+#knightly-review-proposal .kr-panel { display:flex; flex-direction:column; gap:16px; min-width:0; }
+#knightly-review-proposal button.kr-button { padding:10px 13px; border:1px solid var(--kr-line); border-radius:12px; background:var(--kr-card); color:var(--kr-ink); font:600 13px Nunito,system-ui; box-shadow:0 2px 0 var(--kr-line); cursor:pointer; }
+#knightly-review-proposal button.kr-button:active { transform:translateY(1px); }
+#knightly-review-proposal button.kr-button.kr-main { background:var(--kr-green); color:var(--kr-on); border-color:var(--kr-green); }
+#knightly-review-proposal button.kr-button[aria-pressed=true] { border-color:var(--kr-sky); background:var(--kr-muted); }
+#knightly-review-proposal button.kr-button:disabled { opacity:.45; cursor:default; }
+#knightly-review-proposal button:focus-visible { outline:3px solid var(--kr-sky); outline-offset:2px; }
+#knightly-review-proposal .kr-controls { justify-content:space-between; }
+#knightly-review-proposal .kr-controls .kr-button { flex:1; }
+#knightly-review-proposal .kr-label { text-transform:uppercase; letter-spacing:.06em; font-size:11px; font-weight:700; color:var(--kr-sub); }
+#knightly-review-proposal .kr-error { color:var(--kr-danger); }
+#knightly-review-proposal .kr-line { padding:12px 0; border-top:1px solid var(--kr-line); display:flex; flex-direction:column; gap:10px; }
+#knightly-review-proposal .kr-position { display:flex; justify-content:space-between; gap:8px; }
+#knightly-review-proposal .kr-context { display:flex; flex-direction:column; gap:10px; }
+#knightly-review-proposal .kr-moves { display:flex; flex-wrap:wrap; gap:6px; }
+#knightly-review-proposal .kr-progress { height:6px; background:var(--kr-muted); border-radius:8px; margin-top:8px; overflow:hidden; }
+#knightly-review-proposal .kr-progress span { display:block; height:100%; width:50%; background:var(--kr-green); }
+#knightly-review-proposal .kr-summary { display:flex; flex-direction:column; gap:16px; }
+#knightly-review-proposal .kr-summary .kr-row { justify-content:space-between; }
+#knightly-review-proposal .kr-board-title { min-height:20px; }
+#knightly-review-proposal [hidden] { display:none!important; }
+@media(max-width:650px) { #knightly-review-proposal .kr-layout { grid-template-columns:1fr; gap:16px; } #knightly-review-proposal .kr-app { padding:12px; min-height:1050px; } #knightly-review-proposal .kr-head { padding-right:0; } #knightly-review-proposal .kr-square { font-size:clamp(24px,7vw,42px); } }
+</style>
+<script>
+(() => {
+ const root=document.getElementById('knightly-review-proposal');
+ const initial={a8:'r',b8:'n',c8:'b',d8:'q',e8:'k',f8:'b',g8:'n',h8:'r',a7:'p',b7:'p',c7:'p',d7:'p',f7:'p',g7:'p',h7:'p',a2:'P',b2:'P',c2:'P',d2:'P',f2:'P',g2:'P',h2:'P',a1:'R',b1:'N',c1:'B',e1:'K',g1:'N',h1:'R',e4:'P',e5:'p',c4:'B',c6:'n',h5:'Q'};
+ const glyph={r:'♜',n:'♞',b:'♝',q:'♛',k:'♚',p:'♟',R:'♜',N:'♞',B:'♝',Q:'♛',K:'♚',P:'♟'};
+ const save=(name,s)=>window.openai?.setWidgetState?.({modelContent:{layout:name,reviewMode:s.mode},privateContent:{name,mode:s.mode,step:s.step,summary:s.summary}})?.catch(()=>{});
+ root.querySelectorAll('[data-variant]').forEach(section=>{
+  const name=section.dataset.variant; const mobile=name==='Mobile';
+  section.innerHTML=`<div class="kr-app ${mobile?'kr-mobile':''}" aria-label="${name} game review wireframe">
+   <header class="kr-head"><div><h2>Knightly · Game review</h2><p class="kr-sub">You played Black · vs Alex</p></div><button class="kr-button" data-action="summary">Highlights</button></header>
+   <div class="kr-summary" hidden><div class="kr-card"><p class="kr-label">Your game at a glance</p><h3>You developed quickly, but missed a mating threat.</h3><p>One turning point to understand. One defense to practice.</p><div class="kr-row"><span>Key moments <strong>2</strong></span><span>To practice <strong>1</strong></span></div></div><button class="kr-button kr-main" data-action="start">Start review</button></div>
+   <div class="kr-layout"><div class="kr-board-area"><div class="kr-position"><span>Alex · White</span><span class="kr-sub kr-board-title">Your played move</span></div><div class="kr-board" role="group" aria-label="Illustrative chess position, White at bottom"></div><div class="kr-position"><span>You · Black</span><span class="kr-sub" data-score>White mates in 1</span></div><div class="kr-row" style="margin-top:14px"><button class="kr-button" data-action="prev" aria-label="Previous move">← Previous move</button><button class="kr-button" data-action="forward">Next move →</button></div></div>
+   <div class="kr-panel"><div><div class="kr-position"><span class="kr-label">Key moment</span><span class="kr-sub" data-progress>1 of 2</span></div><div class="kr-progress"><span></span></div></div>
+    <div class="kr-card" aria-live="polite"><div class="kr-position"><span class="kr-label" data-mode>Reviewing your move</span><span class="kr-sub">Move 3</span></div><h3 data-title>3…Nf6 misses a mating threat</h3><p data-copy>The queen can take f7, protected by the bishop on c4.</p><div class="kr-line" hidden><div class="kr-moves" data-line></div><div class="kr-row"><button class="kr-button" data-action="line-prev">←</button><button class="kr-button" data-action="line-next">→</button><button class="kr-button" data-action="return">Back to review</button></div></div><div class="kr-row" data-retry hidden><button class="kr-button" data-action="hint">Hint</button><button class="kr-button" data-action="reveal">Show best move</button><button class="kr-button" data-action="return">Back to review</button></div><div class="kr-row" data-explore hidden><button class="kr-button" data-action="undo">Undo</button><button class="kr-button" data-action="reply">Play reply</button><button class="kr-button" data-action="return">Back to review</button></div></div>
+    <div class="kr-controls"><button class="kr-button" data-action="why">Show why</button><button class="kr-button" data-action="best">Best move</button><button class="kr-button" data-action="retry">Try again</button></div><div class="kr-controls"><button class="kr-button" data-action="explore">Explore position</button><button class="kr-button kr-main" data-action="next">Next moment →</button></div>
+    <div class="kr-context"><p class="kr-label">Game context</p><div class="kr-moves"><button class="kr-button" data-action="context" data-ply="1">1. e4 e5</button><button class="kr-button" data-action="context" data-ply="2">2. Bc4 Nc6</button><button class="kr-button" data-action="context" data-ply="3" aria-pressed="true">3. Qh5 Nf6?</button></div><p class="kr-sub">White at bottom · illustrative game</p></div>
+   </div></div></div>`;
+  const app=section.querySelector('.kr-app'), q=sel=>app.querySelector(sel);
+  const s={mode:'review',step:0,summary:false,selected:null,branch:null,replied:false,moment:1,context:3};
+  const opts={context:true};
+  function render(){
+   q('.kr-summary').hidden=!s.summary; q('.kr-layout').hidden=s.summary;
+   q('.kr-context').hidden=!opts.context;
+   const line=['why','best'].includes(s.mode); const pre=['retry','explore','before'].includes(s.mode);
+   q('.kr-line').hidden=!line; q('[data-retry]').hidden=s.mode!=='retry'; q('[data-explore]').hidden=s.mode!=='explore';
+   const texts={review:['Reviewing your move','3…Nf6 misses a mating threat','The queen can take f7, protected by the bishop on c4.'],before:['Before your move','White threatens Qxf7#','Choose how you would defend f7.'],why:['Showing the consequence','4. Qxf7# ends the game','The bishop protects the queen. Black has no legal escape.'],best:['Showing a better defense','3…g6 stops the mating threat','The pawn attacks the queen and blocks its path to f7.'],retry:['Your turn · Black to move','Find a defense to the mating threat','Try a move on the board. Your review progress stays here.'],explore:['Exploring · not played','What would you play instead?','Try a defense, then play a reply or undo to compare.']};
+   let t=texts[s.mode]; if(s.branch&&s.mode==='retry')t=s.branch==='g6'?['Good defense','3…g6 stops the threat','You attacked the queen and blocked the path to f7.']:['Try again','That move still allows Qxf7#','Look for a way to attack the queen or block its path.'];
+   if(s.branch&&s.mode==='explore')t=['Exploring · not played',`3…${s.branch}${s.replied?(s.branch==='g6'?' 4. Qf3':' 4. Qxf7#'):''}`,s.branch==='g6'?'The immediate mating threat is stopped.':'The mating threat on f7 remains.'];
+   if(s.moment===2&&s.mode==='review')t=['Review complete','Keep checking what your opponent threatens','This position is ready to revisit in Practice.'];
+   q('[data-mode]').textContent=t[0];q('[data-title]').textContent=t[1];q('[data-copy]').textContent=t[2];
+   q('[data-progress]').textContent=`${s.moment} of 2`;q('.kr-progress span').style.width=`${s.moment*50}%`;
+   q('[data-action="next"]').textContent=s.moment===2?'Finish review':'Next moment →';
+   q('.kr-board-title').textContent={review:'Your played move',before:'Before your move',why:'Why · not played',best:'Best line · not played',retry:'Black to move',explore:'Your variation · not played'}[s.mode];
+   let p={...initial};if(!pre){delete p.g8;p.f6='n';}
+   if(s.mode==='before'&&s.context<3){delete p.h5;p.d1='Q';if(s.context===1){delete p.c4;p.f1='B';delete p.c6;p.b8='n';}q('[data-mode]').textContent='Game context';q('[data-title]').textContent=s.context===1?'1. e4 e5':'2. Bc4 Nc6';q('[data-copy]').textContent='Return to move 3 to inspect the mating threat.';}
+   if(s.mode==='why'&&s.step){delete p.h5;delete p.f7;p.f7='Q';}
+   if(s.mode==='best'){p.g8='n';delete p.f6;if(s.step){delete p.g7;p.g6='p';}}
+   if(s.branch&&pre){if(s.branch==='g6'){delete p.g7;p.g6='p';}if(s.branch==='Nf6'){delete p.g8;p.f6='n';}if(s.branch==='h6'){delete p.h7;p.h6='p';}if(s.replied){delete p.h5; if(s.branch==='g6')p.f3='Q';else{delete p.f7;p.f7='Q';}}}
+   q('[data-score]').textContent=(s.mode==='best'&&s.step)||(s.branch==='g6')?'Mating threat stopped':(s.mode==='why'&&s.step)||(s.replied&&s.branch!=='g6')?'Checkmate':pre&&!s.branch?'Black to move':'White mates in 1';
+   const board=q('.kr-board');board.innerHTML='';
+   for(let r=8;r>=1;r--)for(let f=0;f<8;f++){const sq='abcdefgh'[f]+r;const b=document.createElement('button');const piece=p[sq];b.type='button';b.className='kr-square'+((f+r)%2?' kr-dark':'')+(piece&&piece===piece.toUpperCase()?' kr-white':'')+(s.selected===sq?' kr-selected':'');b.setAttribute('aria-label',sq+(piece?' '+piece:''));b.textContent=piece?glyph[piece]:'';if(f===0||r===1){const coord=document.createElement('small');coord.textContent=f===0?r:'abcdefgh'[f];b.append(coord);}b.onclick=()=>{if(!['retry','explore'].includes(s.mode))return;const targets={g7:['g6','g6'],g8:['f6','Nf6'],h7:['h6','h6']};if(targets[s.selected]?.[0]===sq){s.branch=targets[s.selected][1];s.selected=null;s.replied=false;}else s.selected=targets[sq]?sq:null;render();save(name,s);};board.append(b);}
+   q('[data-line]').innerHTML=''; const moves=s.mode==='best'?['Position before 3…','3…g6']:['3…Nf6','4. Qxf7#'];moves.forEach((move,i)=>{const b=document.createElement('button');b.className='kr-button';b.textContent=move;b.setAttribute('aria-pressed',String(s.step===i));b.onclick=()=>{s.step=i;render();save(name,s);};q('[data-line]').append(b);});
+   q('[data-action="line-prev"]').disabled=s.step===0;q('[data-action="line-next"]').disabled=s.step===1;
+   q('[data-action="reply"]').disabled=!s.branch||s.replied;q('[data-action="undo"]').disabled=!s.branch;
+  }
+  app.addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(!b)return;const a=b.dataset.action;
+   if(['why','best','retry','explore'].includes(a)){s.mode=a;s.step=1;if(['retry','explore'].includes(a))s.step=0;s.selected=null;s.branch=null;s.replied=false;s.moment=1;}
+   if(a==='return'){s.mode='review';s.branch=null;s.selected=null;s.replied=false;}
+   if(a==='summary')s.summary=true;if(a==='start'){s.summary=false;s.moment=1;s.mode='review';}
+   if(a==='prev'){s.mode='before';s.context=3;}if(a==='forward')s.mode='review';
+   if(a==='line-prev')s.step=0;if(a==='line-next')s.step=1;
+   if(a==='hint'){q('[data-copy]').textContent='Can your g-pawn attack the queen and block its diagonal?';return;}
+   if(a==='reveal'){s.mode='best';s.step=1;}
+   if(a==='undo'){if(s.replied)s.replied=false;else{s.branch=null;s.selected=null;}}
+   if(a==='reply')s.replied=true;
+   if(a==='context'){s.context=Number(b.dataset.ply);s.mode=s.context===3?'review':'before';s.branch=null;}
+   if(a==='next'){if(s.moment===2)s.summary=true;else{s.moment=2;s.mode='review';s.branch=null;}}
+   render();save(name,s);
+  });
+  function restore(saved){if(saved?.name===name&&['review','why','best','retry','explore','before'].includes(saved.mode)){s.mode=saved.mode;s.step=saved.step===1?1:0;s.summary=!!saved.summary;}}
+  restore(window.openai?.widgetState?.privateContent);
+  window.addEventListener('openai:set_globals',event=>{restore(event.detail?.globals?.widgetState?.privateContent);render();});
+  render();
+  if(globalThis.Tweak){const tweak=new Tweak({container:app,onChange:render});tweak.addToggle(opts,'context',{label:'Show game context'});}
+ });
+})();
+</script>

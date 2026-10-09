@@ -1,0 +1,87 @@
+<div id="kr-simple-review">
+ <div class="viz-carousel" aria-label="Simple game review layouts">
+  <section data-variant="Desktop" aria-label="Desktop review"></section>
+  <section data-variant="Mobile" aria-label="Mobile review" hidden></section>
+ </div>
+</div>
+<style>
+#kr-simple-review { --ks-page:light-dark(#f4f6ef,#171e14); --ks-card:light-dark(#ffffff,#242d20); --ks-muted:light-dark(#eaeee1,#303a2a); --ks-line:light-dark(#dce1d2,#414d39); --ks-ink:light-dark(#1d2618,#eef3e7); --ks-sub:light-dark(#56614e,#bac6ae); --ks-brand:#6cc23a; --ks-on-brand:#13200c; --ks-sky:#49a8f2; --ks-light:#eaefd8; --ks-dark:#7da35a; --ks-piece:#24211c; --ks-white:#fbfaf5; font-family:Nunito,system-ui,sans-serif; color:var(--ks-ink); }
+#kr-simple-review * { box-sizing:border-box; }
+#kr-simple-review .ks-app { background:var(--ks-page); border:1px solid var(--ks-line); border-radius:16px; padding:20px;  }
+#kr-simple-review .ks-phone { max-width:380px; margin:auto; }
+#kr-simple-review .ks-header { display:flex; align-items:center; gap:10px; padding-bottom:18px; padding-right:90px; }
+#kr-simple-review h2 { font-size:22px; margin:0; font-weight:700; }
+#kr-simple-review h3 { font-size:17px; margin:0; font-weight:700; }
+#kr-simple-review p { margin:0; }
+#kr-simple-review .ks-sub { font-size:13px; color:var(--ks-sub); }
+#kr-simple-review .ks-layout { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr); gap:24px; }
+#kr-simple-review .ks-phone .ks-layout { grid-template-columns:1fr; gap:16px; }
+#kr-simple-review .ks-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+#kr-simple-review .ks-between { justify-content:space-between; }
+#kr-simple-review .ks-panel { display:flex; flex-direction:column; gap:16px; min-width:0; }
+#kr-simple-review .ks-box { background:var(--ks-card); border:2px solid var(--ks-line); border-radius:18px; padding:16px; box-shadow:0 2px 0 var(--ks-line); }
+#kr-simple-review .ks-box > * + * { margin-top:12px; }
+#kr-simple-review .ks-button { border:1px solid var(--ks-line); border-radius:12px; padding:10px 12px; background:var(--ks-card); color:var(--ks-ink); font:600 13px Nunito,system-ui; box-shadow:0 2px 0 var(--ks-line); }
+#kr-simple-review .ks-button:disabled { opacity:.4; }
+#kr-simple-review .ks-button[aria-pressed=true] { background:var(--ks-muted); border-color:var(--ks-sky); }
+#kr-simple-review .ks-main { background:var(--ks-brand); color:var(--ks-on-brand); border-color:var(--ks-brand); }
+#kr-simple-review button:focus-visible { outline:3px solid var(--ks-sky); outline-offset:2px; }
+#kr-simple-review .ks-state { font-size:12px; padding:5px 8px; background:var(--ks-muted); border-radius:8px; }
+#kr-simple-review .ks-state.ks-var { background:color-mix(in srgb,var(--ks-sky) 15%,var(--ks-card)); }
+#kr-simple-review .ks-board { width:100%; max-width:480px; display:grid; grid-template-columns:repeat(8,1fr); aspect-ratio:1; border-radius:10px; overflow:hidden; margin:10px auto; box-shadow:0 4px 0 var(--ks-line); }
+#kr-simple-review .ks-square { border:0; border-radius:0; padding:0; background:var(--ks-light); color:var(--ks-piece); font-size:clamp(26px,4vw,42px); font-family:Georgia,serif; display:grid; place-items:center; position:relative; aspect-ratio:1; }
+#kr-simple-review .ks-square.ks-dark { background:var(--ks-dark); }
+#kr-simple-review .ks-square.ks-white { color:var(--ks-white); text-shadow:1px 1px var(--ks-piece),-1px -1px var(--ks-piece); }
+#kr-simple-review .ks-square.ks-picked { box-shadow:inset 0 0 0 3px var(--ks-sky); }
+#kr-simple-review .ks-square.ks-last { background:color-mix(in srgb,var(--ks-sky) 45%,var(--ks-light)); }
+#kr-simple-review .ks-square.ks-target:after { content:''; position:absolute; width:16%; height:16%; border-radius:50%; background:var(--ks-piece); opacity:.35; }
+#kr-simple-review .ks-square small { position:absolute; bottom:2px; left:3px; font:11px system-ui; color:var(--ks-piece); }
+#kr-simple-review .ks-phone .ks-square { font-size:31px; }
+#kr-simple-review .ks-path { display:flex; flex-wrap:wrap; gap:6px; padding-left:12px; border-left:2px solid var(--ks-sky); }
+#kr-simple-review .ks-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--ks-sub); }
+#kr-simple-review .ks-note { padding-top:16px; border-top:1px solid var(--ks-line); }
+#kr-simple-review [hidden] { display:none!important; }
+@media(max-width:650px) { #kr-simple-review .ks-layout { grid-template-columns:1fr; gap:16px; } #kr-simple-review .ks-app { padding:12px; } #kr-simple-review .ks-header { padding-right:0; } #kr-simple-review .ks-square { font-size:clamp(24px,7vw,42px); } }
+</style>
+<script>
+(() => {
+ const root=document.getElementById('kr-simple-review');
+ const pieces={a8:'r',b8:'',c8:'b',d8:'q',e8:'k',f8:'b',g8:'n',h8:'r',a7:'p',b7:'p',c7:'p',d7:'p',f7:'p',g7:'p',h7:'p',e5:'p',c6:'n',a2:'P',b2:'P',c2:'P',d2:'P',f2:'P',g2:'P',h2:'P',e4:'P',a1:'R',b1:'N',c1:'B',d1:'Q',e1:'K',f1:'B',g1:'',h1:'R',f3:'N'};
+ const glyph={r:'♜',n:'♞',b:'♝',q:'♛',k:'♚',p:'♟',R:'♜',N:'♞',B:'♝',Q:'♛',K:'♚',P:'♟'};
+ const moves={Bb5:['f1','b5','3. Bb5'],Bc4:['f1','c4','3. Bc4'],a6:['a7','a6','3…a6'],Ba4:['b5','a4','4. Ba4'],Nf6:['g8','f6','…Nf6'],d3:['d2','d3','4. d3'],Bc5:['f8','c5','…Bc5'],c3:['c2','c3','5. c3'],Nc3:['b1','c3','4. Nc3']};
+ const continuations={'':['Bb5','a6','Ba4','Nf6'],'Bb5':['a6','Ba4','Nf6'],'Bb5,a6':['Ba4','Nf6'],'Bb5,a6,Ba4':['Nf6'],'Bc4':['Nf6','d3','Bc5','c3'],'Bc4,Nf6':['d3','Bc5','c3'],'Bc4,Nf6,d3':['Bc5','c3'],'Bc4,Bc5':['d3','Nf6','c3'],'Bc4,Bc5,d3':['Nf6','c3'],'Bc4,Nf6,Nc3':['Bc5','d3'],'Bc4,Nf6,Nc3,Bc5':['d3'],'Bc4,Nf6,d3,Bc5':['c3'],'Bc4,Bc5,d3,Nf6':['c3']};
+ const original=['Bb5','a6','Ba4','Nf6'];
+ const moveLabel=(move,index)=>`${3+Math.floor(index/2)}${index%2?'…':'. '}${move}`;
+ root.querySelectorAll('[data-variant]').forEach(section=>{
+  const layout=section.dataset.variant;
+  section.innerHTML=`<div class="ks-app ${layout==='Mobile'?'ks-phone':''}" aria-label="${layout} branching review"><header class="ks-header"><div><h2>Knightly · Game review</h2><p class="ks-sub">vs Alex · Move 3</p></div></header><div class="ks-layout"><div><div class="ks-row ks-between"><span>Alex · Black</span><span class="ks-state" data-status>Game · before 3. Bb5</span></div><div class="ks-board" role="group" aria-label="Sample chess position"></div><div class="ks-row ks-between"><span>You · White</span><span class="ks-sub" data-turn>White to move</span></div><div class="ks-row ks-between" style="margin-top:16px"><button class="ks-button cursor-interaction" data-action="back">← Previous</button><button class="ks-button cursor-interaction" data-action="forward">Next →</button></div><p class="ks-sub" style="margin-top:12px" data-hint>Move a piece to try a different continuation.</p></div><div class="ks-panel"><div class="ks-box" aria-live="polite"><div class="ks-row ks-between"><h3>Stockfish</h3><span class="ks-sub">Preview · sample line</span></div><div class="ks-row ks-between"><span class="ks-sub">Evaluation · White’s perspective</span><strong data-eval>+0.3</strong></div><div class="ks-row" data-preview></div><p class="ks-sub">Select a move to follow the line up to that point.</p></div><div class="ks-box" data-variation hidden><div class="ks-row ks-between"><h3>Your variation</h3><span class="ks-sub">Not played</span></div><div class="ks-path" data-path></div><div class="ks-row" data-alternatives></div><button class="ks-button ks-main cursor-interaction" data-action="return">Back to game</button></div><div class="ks-note"><p class="ks-label">Original game</p><div class="ks-row" data-game style="margin-top:10px"></div><p class="ks-sub" style="margin-top:12px">3. Bb5 puts pressure on the knight defending e5.</p></div></div></div></div>`;
+  const app=section.querySelector('.ks-app'),q=x=>app.querySelector(x),state={path:[],selected:null},opts={note:true},remembered=[];
+  const isVariation=()=>state.path.some((m,i)=>original[i]!==m);
+  function persist(){window.openai?.setWidgetState?.({modelContent:{layout,branch:state.path.join(' ')},privateContent:{layout,path:state.path}})?.catch(()=>{});}
+  function add(m){state.path.push(m);state.selected=null;if(isVariation()&&!remembered.some(p=>p.join(',')===state.path.join(',')))remembered.push([...state.path]);render();persist();}
+  function allowed(){const line=continuations[state.path.join(',')]||[];const list=line.length?[line[0]]:[];if(!state.path.length)list.push('Bc4');if(state.path.join(',')==='Bc4')list.push('Bc5');if(state.path.join(',')==='Bc4,Nf6')list.push('Nc3');return [...new Set(list)];}
+  function pathButton(label,fn,pressed=false){const b=document.createElement('button');b.type='button';b.className='ks-button cursor-interaction';b.textContent=label;if(pressed)b.setAttribute('aria-pressed','true');b.onclick=fn;return b;}
+  function render(){
+   let board={...pieces};for(const m of state.path){const [a,b]=moves[m];board[b]=board[a];delete board[a];}
+   const variant=isVariation(),line=continuations[state.path.join(',')]||[],options=allowed();
+   q('[data-status]').textContent=variant?'Variation · not played':state.path.length?'Game continuation':'Game · before 3. Bb5';q('[data-status]').classList.toggle('ks-var',variant);
+   q('[data-turn]').textContent=state.path.length%2?'Black to move':'White to move';q('[data-variation]').hidden=!variant;
+   q('[data-eval]').textContent=state.path[0]==='Bc4'?'+0.2':'+0.3';
+   q('[data-hint]').textContent=state.selected?'Choose a highlighted square.':'Move a piece to try a different continuation.';
+   q('.ks-note').hidden=!opts.note;
+   q('[data-preview]').innerHTML='';line.forEach((m,i)=>q('[data-preview]').append(pathButton(moveLabel(m,state.path.length+i),()=>{const prefix=[...state.path];for(let j=0;j<=i;j++)prefix.push(line[j]);state.path=prefix;state.selected=null;if(isVariation())remembered.push([...prefix]);render();persist();})));
+   if(!line.length)q('[data-preview]').textContent='End of sample preview';
+   const el=q('.ks-board');el.innerHTML='';const last=state.path.length?moves[state.path.at(-1)]:[];
+   for(let r=8;r>=1;r--)for(let f=0;f<8;f++){const sq='abcdefgh'[f]+r,p=board[sq],b=document.createElement('button');b.type='button';const target=options.some(m=>moves[m][0]===state.selected&&moves[m][1]===sq);b.className='ks-square cursor-interaction'+((f+r)%2?' ks-dark':'')+(p&&p===p.toUpperCase()?' ks-white':'')+(state.selected===sq?' ks-picked':'')+(target?' ks-target':'')+(last.slice(0,2).includes(sq)?' ks-last':'');b.setAttribute('aria-label',sq+(p?' '+p:''));b.textContent=p?glyph[p]:'';if(f===0||r===1){const c=document.createElement('small');c.textContent=f===0?r:'abcdefgh'[f];b.append(c);}b.onclick=()=>{const m=options.find(m=>moves[m][0]===state.selected&&moves[m][1]===sq);if(m)add(m);else{state.selected=options.some(m=>moves[m][0]===sq)?sq:null;render();}};el.append(b);}
+   q('[data-path]').innerHTML='';q('[data-path]').append(pathButton('Start',()=>{state.path=[];render();persist();}));state.path.forEach((m,i)=>q('[data-path]').append(pathButton(moveLabel(m,i),()=>{state.path=state.path.slice(0,i+1);render();persist();},i===state.path.length-1)));
+   q('[data-alternatives]').innerHTML='';const prefix=state.path.join(','),children=remembered.filter(p=>p.length>state.path.length&&p.slice(0,state.path.length).join(',')===prefix);const next=[...new Set(children.map(p=>p[state.path.length]))];next.forEach(m=>q('[data-alternatives]').append(pathButton('Continue '+moveLabel(m,state.path.length),()=>add(m))));
+   q('[data-game]').innerHTML='';original.forEach((m,i)=>q('[data-game]').append(pathButton(moveLabel(m,i),()=>{state.path=original.slice(0,i+1);state.selected=null;render();persist();},!variant&&state.path.length===i+1)));
+   q('[data-action="back"]').disabled=!state.path.length;q('[data-action="forward"]').disabled=!line.length;
+  }
+  app.addEventListener('click',e=>{const action=e.target.closest('[data-action]')?.dataset.action;if(!action)return;if(action==='back')state.path.pop();if(action==='forward'){const m=continuations[state.path.join(',')]?.[0];if(m)state.path.push(m);}if(action==='return')state.path=[];state.selected=null;render();persist();});
+  function restore(saved){if(saved?.layout===layout&&Array.isArray(saved.path)&&saved.path.every(m=>moves[m]))state.path=saved.path.slice(0,8);}
+  restore(window.openai?.widgetState?.privateContent);window.addEventListener('openai:set_globals',e=>{restore(e.detail?.globals?.widgetState?.privateContent);render();});render();
+  if(globalThis.Tweak){const tweak=new Tweak({container:app,onChange:render});tweak.addToggle(opts,'note',{label:'Show original game note'});}
+ });
+})();
+</script>

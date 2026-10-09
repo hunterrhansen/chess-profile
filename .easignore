@@ -1,0 +1,20 @@
+# EAS builds the standalone mobile app in this repository.
+/*
+!/mobile
+/mobile/node_modules/
+/mobile/.expo/
+/mobile/dist/
+/mobile/web-build/
+/mobile/ios/
+/mobile/android/
+/mobile/.env*
+!/mobile/.env.example
+*.p8
+*.p12
+*.key
+*.pem
+*.mobileprovision
+*.jks
+.DS_Store
+*.tsbuildinfo
+*-debug.log*

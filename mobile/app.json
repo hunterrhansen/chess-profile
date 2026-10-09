@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Knightly Preview",
+    "slug": "knightly-preview",
+    "version": "0.1.0",
+    "scheme": "knightly-preview",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "app.knightly.preview",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store",
+      "@clerk/expo"
+    ],
+    "web": {
+      "bundler": "metro"
+    },
+    "android": {
+      "package": "app.knightly.preview"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "aed64483-1b28-4038-bc55-766c0f64be9b"
+      }
+    },
+    "owner": "hunterhansen"
+  }
+}

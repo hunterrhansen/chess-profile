@@ -7,6 +7,10 @@ Stockfish, and turns your mistakes into positions to review.
 For a shared Codex or other coding-agent setup (Expo and Supabase skills, MCP
 connections and sign-in), see [Agent setup](docs/agent-setup.md).
 
+The Expo / React Native app lives in [`mobile/`](mobile/README.md). Its setup guide
+covers sample practice in Expo Go, connecting to the hosted server, and installing
+an iPhone preview. Saved game-review design prototypes are in [`work/`](work/README.md).
+
 ## Quick start
 
 ```bash
