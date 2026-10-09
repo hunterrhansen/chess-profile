@@ -34,8 +34,8 @@ the owner's password manager, under "Knightly deploy".
 - [x] **Supabase** (§3): the current dashboard lists `knightly-staging`
       (`mwkkgxrkhhvvagouvtmo`, us-east-2) and `knightly-prod`
       (`duvdkqvszkmljwwrhhfk`, us-west-2). Staging's Data API is off.
-      Confirm migrations, app-role access and production emptiness through the database
-      before deploying or restoring; the server URLs are not filled in yet.
+      Both reset passwords connect successfully over TLS. Staging has five migrations and
+      the VM can switch to `knightly_app`; production has no public tables yet.
 - [x] **Oracle machine** (§2): made with OpenTofu (`infra/oracle`, PHX-AD-1), bootstrapped,
       and the `knightly` deploy user logs in with `~/.ssh/knightly-deploy`. The IP:
       `tofu output public_ip` in `infra/oracle`, with state in `~/.knightly/oracle.tfstate` on
@@ -45,7 +45,7 @@ the owner's password manager, under "Knightly deploy".
       `knightly-cloudflare`) made the tunnels `knightly` and `knightly-staging`, their proxied
       DNS records, and the `knightly-backups` bucket (2026-10-08). `push-tokens.sh` put each
       tunnel's `TUNNEL_TOKEN` in its `.env`, and both tunnels connected healthy from the
-      machine. The sites answer 502 until the app runs.
+      machine. Staging serves the app; production waits for its first deploy.
 - [x] **Backup key** (§7): an R2 token with *Object Read & Write* on `knightly-backups`
       only. Its Access Key ID (32 characters) and Secret Access Key (64) are in
       `/opt/knightly/backup.env`. The token value isn't used. Tested from the machine: upload,
@@ -59,21 +59,25 @@ the owner's password manager, under "Knightly deploy".
       production allows self-service deletion. Email sign-in is enabled. Google sign-in
       still needs custom OAuth credentials. Both webhook signing secrets are saved in the
       matching server env files; delivery and account deletion need testing after deployment.
-- [ ] **Fill in `.env` on the machine** (§6, §7): `/opt/knightly/{staging,production}/.env`
-      and `/opt/knightly/backup.env`. The owner pastes the secrets over SSH.
+- [x] **Fill in `.env` on the machine** (§6, §7): `/opt/knightly/{staging,production}/.env`
+      and `/opt/knightly/backup.env` are configured. The owner authorized direct secret transfer.
       Both allowed origins are set to their real domains. Staging's existing development
       Clerk publishable key and owner admin ID are set (2026-10-08), as is production's
       publishable key and both webhook signing secrets. The owner's contact email is saved.
-      Only the database URLs still need filling in; the correct session-pooler URLs have
-      been read from each project, but their existing passwords must be retrieved.
-- [ ] **GitHub** (§8), last, because setting `DEPLOY_HOST` starts deploying on every push to
+      Both session-pooler URLs are saved with `sslmode=require`. The new database passwords
+      are saved in the Mac login Keychain as `knightly-db-staging` and
+      `knightly-db-production`. The temporary phone password page and its files were removed.
+- [x] **GitHub** (§8), last, because setting `DEPLOY_HOST` starts deploying on every push to
       `main`. Set the `DEPLOY_SSH_KEY` secret, the `DEPLOY_HOST` variable, and the `staging` and
       `production` environments. Make the GHCR package public.
       The deploy key is saved, both environments exist, production requires the owner's
-      review, and GHCR is public (2026-10-08). `DEPLOY_HOST` is still unset until staging's
-      app configuration is ready.
+      review, and GHCR is public (2026-10-08). `DEPLOY_HOST` is set to the VM's IP.
 - [ ] **Staging:** push to `main`, then check `https://staging.knightlychess.app` and
       `/api/health`, and sign up with a test account.
+      GitHub Actions run `37882431397` deployed `sha-0ba6ab5` successfully. The public health
+      check passes, the worker runs, runtime config matches staging, protected routes return
+      401 without sign-in, and the browser displays Clerk sign-in. A signed no-op webhook
+      is accepted and an invalid signature rejected. A real sign-up/deletion test remains.
 - [ ] **Production:** move the Mac data in (§3: migrate, then a data-only restore), deploy the
       staging tag (§9), and sign in as the owner. Run the backup by hand once (§7).
       A data-only export is prepared on the Mac at
