@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from knightly import api, db, jobs, limits, users
-from test_users import as_user, clerk, seed  # noqa: F401  (clerk is a fixture)
+from test_users import as_user, clerk, seed, signed  # noqa: F401  (clerk is a fixture)
 
 
 @pytest.fixture
@@ -44,6 +44,50 @@ def test_deleting_your_account_removes_everything_of_yours(two, db_url):
         assert owners == {users.find(owner, "user_bob")}, table
     assert two.get("/api/accounts", headers=as_user("user_bob")).json() == [
         {"source": "chesscom", "handle": "bob_handle"}]
+
+
+@pytest.mark.parametrize("via_webhook", [False, True])
+def test_deletion_cascades_every_personal_table_and_webhook_retries(two, db_url, via_webhook):
+    with db.connect(db_url) as owner:
+        alice, bob = (users.find(owner, f"user_{name}") for name in ("alice", "bob"))
+        tables = [row[0] for row in owner.execute(
+            "SELECT table_name FROM information_schema.columns "
+            "WHERE table_schema = 'public' AND column_name = 'user_id' ORDER BY table_name")]
+    for uid, game in ((alice, 100), (bob, 200)):
+        with db.connect(db_url, migrate=False, user_id=uid) as conn:
+            conn.execute("INSERT INTO puzzle_attempts (source, puzzle_id, attempted_at) VALUES ('lichess', 'probe', iso_now())")
+            conn.execute("INSERT INTO snapshots (source, account, kind, data) VALUES ('chesscom', 'probe', 'stats', '{}')")
+            conn.execute("INSERT INTO sync_state (source, account, kind) VALUES ('chesscom', 'probe', 'games')")
+            conn.execute("INSERT INTO runs (status) VALUES ('ok')")
+            conn.execute("INSERT INTO settings (key, value) VALUES ('analysis_nodes', '500000')")
+            conn.execute("INSERT INTO engine_lines (game_id, ply, depth, data) VALUES (?, 1, 18, '{}')", (game,))
+            conn.execute("INSERT INTO cards (game_id, ply) VALUES (?, 1)", (game,))
+            conn.execute("INSERT INTO card_reviews (game_id, ply, reviewed_at, answer_uci, correct) "
+                         "VALUES (?, 1, iso_now(), 'e2e4', 1)", (game,))
+            conn.execute("INSERT INTO jobs (kind, status) VALUES ('update', 'running')")
+
+    def counts(owner, uid):
+        return {table: owner.execute(f'SELECT count(*) FROM "{table}" WHERE user_id = ?', (uid,)).fetchone()[0]
+                for table in tables}
+
+    with db.connect(db_url) as owner:
+        assert all(counts(owner, alice).values())
+        before_bob = counts(owner, bob)
+        assert all(before_bob.values())
+
+    headers, raw = signed({"type": "user.deleted", "data": {"id": "user_alice"}})
+    if via_webhook:
+        assert two.post("/api/webhooks/clerk", headers=headers, content=raw).status_code == 200
+    else:
+        assert two.delete("/api/account", headers=as_user("user_alice")).status_code == 204
+    # Clerk delivery after in-app deletion, or a redelivery, must both be harmless.
+    for _ in range(2):
+        assert two.post("/api/webhooks/clerk", headers=headers, content=raw).status_code == 200
+    with db.connect(db_url) as owner:
+        assert users.find(owner, "user_alice") is None
+        assert not any(counts(owner, alice).values())
+        assert users.find(owner, "user_bob") == bob
+        assert counts(owner, bob) == before_bob
 
 
 def test_settings_show_your_data_not_the_servers(two):

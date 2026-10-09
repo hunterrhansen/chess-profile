@@ -1,4 +1,4 @@
-import { ClerkProvider, SignIn, useAuth, useClerk, useUser } from '@clerk/react'
+import { ClerkProvider, SignIn, useAuth, useClerk, useReverification, useUser } from '@clerk/react'
 import { SignOutIcon } from '@phosphor-icons/react'
 import { type ReactNode, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
@@ -6,6 +6,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Logo, LogoLoader } from '@/components/logo'
 import { Button } from '@/components/ui/button'
 import { send, setTokenSource } from '@/lib/api'
+import { deleteAccount } from '@/lib/delete-account'
 
 /**
  * Sign-in, with Clerk. The server says whether to use it: `/api/config` gives its
@@ -148,7 +149,10 @@ export function DeleteAccount({ games }: { games: number }) {
 
 function DeleteAccountRow({ games }: { games: number }) {
   const { user } = useUser()
-  const { signOut } = useClerk()
+  const deleteSignIn = useReverification(async () => {
+    if (!user) throw new Error('Sign in again to finish deleting your account.')
+    await user.delete()
+  })
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -158,18 +162,20 @@ function DeleteAccountRow({ games }: { games: number }) {
     setBusy(true)
     setError(null)
     try {
-      // Your data first: if this fails, nothing is gone and you can try again.
-      await send('DELETE', '/api/account')
+      await deleteAccount(
+        () => send('DELETE', '/api/account'),
+        async () => {
+          // A native modal makes the rest of the page inert, including Clerk's
+          // verification modal. Close ours before Clerk asks for verification.
+          setOpen(false)
+          await deleteSignIn()
+        },
+      )
     } catch (e) {
-      setError(`Couldn't delete your data: ${(e as Error).message}`)
+      setError((e as Error).message)
+      setOpen(true)
       setBusy(false)
       return
-    }
-    try {
-      await user?.delete()
-    } catch {
-      // Your data is gone either way; Clerk's user.deleted webhook isn't needed for that.
-      await signOut()
     }
     navigate('/', { replace: true })
   }
@@ -180,7 +186,7 @@ function DeleteAccountRow({ games }: { games: number }) {
         <div className="font-extrabold">Delete your account</div>
         <div className="mt-0.5 text-[13px] text-muted-foreground">Your games, reviews, practice and sign-in, all gone at once.</div>
       </div>
-      <Button variant="danger" size="sm" onClick={() => setOpen(true)}>
+      <Button variant="danger" size="sm" disabled={busy} onClick={() => { setError(null); setOpen(true) }}>
         Delete account
       </Button>
       <ConfirmDialog

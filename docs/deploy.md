@@ -104,6 +104,14 @@ the owner's password manager, under "Knightly deploy".
       the deletion in Safari with a throwaway account, since Clerk's captcha blocks automated
       browsers.
 
+Deletion verification (2026-10-09): both public Clerk webhook endpoints rejected an invalid
+signature (400), accepted a signed `user.deleted` event and its redelivery (200), and removed
+temporary probe users and all their rows. All 14 personal tables were checked; existing
+users remained. These probes exercise the deployed webhook and database cascade, but do
+not replace the real Safari account deletion acceptance test above. Automated database
+tests also cover both in-app deletion and webhook deletion with data in every personal table,
+including running jobs, and verify that another user's data remains intact.
+
 ## 1. Accounts and values
 
 Collect these first. The **Where it goes** column says which file or setting gets each one.
