@@ -1,5 +1,24 @@
 This is an Expo/React Native mobile application. Prioritize mobile-first patterns, performance, and cross-platform compatibility.
 
+## Universal app target
+
+Knightly will consolidate its browser and native clients into this Expo app using
+React Native Web. Implement and verify iOS first; keep the existing `web/` app
+available during the migration. Web consolidation is the target, not a claim of
+current browser feature parity.
+
+- Share route identities, API contracts, domain logic, design tokens and reusable
+  components across platforms. Keep server grading and Clerk user identity intact.
+- Keep platform services (authentication, storage, chess engine execution and
+  file export) behind small interfaces or platform-specific modules. Avoid native
+  imports in otherwise portable domain code.
+- Use the phone and desktop screen specs for responsive layouts. Native tabs and
+  the desktop sidebar can have separate shell implementations with shared routes.
+- Choose dependencies with a web-compatible implementation or an explicit web
+  adapter. Do not compromise iOS behavior to force identical UI on every platform.
+- Verify iOS behavior on a simulator/device. Keep web export working; test browser
+  behavior separately before declaring a migrated flow ready for web.
+
 ## Expo has changed — do not trust your training data
 
 Expo ships breaking changes every SDK release. APIs you remember are likely renamed, moved, or removed. Before writing any code that touches an Expo, EAS, or React Native API:

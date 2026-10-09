@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { router } from "expo-router";
 import { FlatList, View, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useSession } from "../lib/session";
-import { useTheme } from "../lib/theme";
-import { Text, Button, Card } from "../components/ui";
+import { useSession } from "@/lib/session";
+import { useTheme } from "@/lib/theme";
+import { Placeholder } from "@/components/page";
+import { Text, Button, Card } from "@/components/ui";
 type Game = {
   id: number;
   opponent: string | null;
@@ -15,6 +16,27 @@ type Game = {
   accuracy: number | null;
 };
 export default function Games() {
+  const { connected } = useSession();
+  return connected ? (
+    <ConnectedGames />
+  ) : (
+    <Placeholder
+      title="Games"
+      description="Your imported games will appear here when you connect your Knightly account."
+    >
+      <Button
+        label="Link a chess account"
+        onPress={() => router.push("/welcome")}
+      />
+      <Button
+        label="Explore review screens"
+        variant="secondary"
+        onPress={() => router.push("/games/preview")}
+      />
+    </Placeholder>
+  );
+}
+function ConnectedGames() {
   const { api } = useSession();
   const { colors } = useTheme();
   const [page, setPage] = useState(1),
@@ -54,17 +76,11 @@ export default function Games() {
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           <View style={styles.header}>
-            <Button
-              label="Home"
-              variant="secondary"
-              onPress={() => router.replace("/")}
-            />
             <Text heading accessibilityRole="header" style={{ fontSize: 30 }}>
               Your games
             </Text>
             <Text tone="muted">
-              {total} imported games. Full game review is still available on the
-              web.
+              {total} imported games. Native game review is coming next.
             </Text>
           </View>
         }
@@ -84,6 +100,16 @@ export default function Games() {
                   : `${Math.round(item.accuracy)}% accuracy`
                 : "Awaiting analysis"}
             </Text>
+            <Button
+              label="Review game"
+              variant="secondary"
+              onPress={() =>
+                router.push({
+                  pathname: "/games/[id]",
+                  params: { id: String(item.id) },
+                })
+              }
+            />
           </Card>
         )}
         ListFooterComponent={

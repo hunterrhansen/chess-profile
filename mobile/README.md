@@ -3,6 +3,36 @@
 Expo SDK 57 / React Native 0.86. The native component layer reuses Knightly's
 palette, fonts and SVG pieces. The web app and Python backend remain available.
 
+See the [migration audit and next steps](../docs/migration-progress.md) for current
+screen coverage, remaining gaps and the ordered implementation checklist.
+
+## Platform direction
+
+This Expo app is the future shared iOS, Android and browser client, with React
+Native Web for the browser. Development prioritizes iOS now. The existing `web/`
+app stays available until the Expo app reaches browser feature parity and passes
+desktop interaction checks. Shared domain logic, API contracts, tokens and routes
+support consolidation; platform services and phone/desktop shells can differ.
+
+## Navigation skeleton
+
+The four bottom tabs are Home, Games, Play and Progress. The top-bar gear opens
+Settings as a separate stack screen. Home launches
+Practice; Practice, Puzzles and game review run outside the tabs. Settings opens
+the Welcome → Link Account → Import Progress preview. Game review has separate
+All Moves and Review Complete placeholders.
+
+Without a hosted API URL, Home offers sample practice and Games offers a review
+preview. Home uses an explicitly labeled design-preview unit and sample positions.
+With a configured server, Home reads the existing `/api/home` learning-path contract;
+sign-in and the existing real practice and
+games list remain active. Placeholder actions do not import games or save reviews.
+
+The branded shell uses Expo Router's headless tabs and React Native SVG icons.
+It runs natively on iOS and through React Native Web in the browser. Wide browser
+windows use a sidebar and a separate Today's goal column; phone windows use the
+four-tab bar and goal counters. Browser consolidation is still in progress.
+
 ## Run on iPhone
 
 Use Node.js 22 and pnpm 12. From a fresh clone, install the committed lockfile:
@@ -48,7 +78,8 @@ Local tests verify request contracts; another server or build needs its own live
 
 Connected screens:
 
-- Home: today's progress, deck counts, account, appearance and sign out.
+- Home: learning units, today's game, due positions, tactic puzzles and the bot
+  path. Account, appearance and sign out are in Settings.
 - Practice: server cards, answers, two-step hints, Show me, next review dates,
   ungraded end-of-session retries, and the daily summary. Only the server grades.
 - Games: paginated imported-game list. Full game review and importing/analysing

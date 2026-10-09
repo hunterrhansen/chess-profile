@@ -1,31 +1,34 @@
+import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Chess, type Square } from "chess.js";
+import { View, AccessibilityInfo, Platform } from "react-native";
+import { Board } from "@/components/board";
+import { Text } from "@/components/ui";
 import {
-  ScrollView,
-  View,
-  StyleSheet,
-  Switch,
-  AccessibilityInfo,
-  Platform,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { StatusBar } from "expo-status-bar";
-import { Board } from "../components/board";
-import { Logo } from "../components/logo";
-import { HelpDialog } from "../components/help-dialog";
-import { Text, Button, Card, Progress } from "../components/ui";
-import { exercises, legalTargets, evaluateMove } from "../lib/practice";
-import { useTheme, fonts } from "../lib/theme";
+  LessonScreen,
+  LessonPrompt,
+  LessonBoard,
+  LessonBar,
+  LessonAction,
+} from "@/components/lesson-screen";
+import { exercises, legalTargets, evaluateMove } from "@/lib/practice";
+import { KnIcon } from "@/components/kn-icon";
 export default function PracticePreview() {
-  const { colors: c, isDark, setMode } = useTheme();
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<Square | null>(null);
   const [flipped, setFlipped] = useState(false);
-  const [hint, setHint] = useState(false);
+  const [hints, setHints] = useState(0);
+  const hint = hints > 0;
+  const [hintReady, setHintReady] = useState(false);
+  const [shown, setShown] = useState(false);
   const [correct, setCorrect] = useState(false);
   const [wrong, setWrong] = useState(false);
   const [done, setDone] = useState(false);
   const exercise = exercises[index];
+  useEffect(() => {
+    const timer = setTimeout(() => setHintReady(true), 2000);
+    return () => clearTimeout(timer);
+  }, [index]);
   const [flash, setFlash] = useState<{
     square: string;
     tone: "right" | "wrong";
@@ -47,8 +50,10 @@ export default function PracticePreview() {
     selected && !correct ? legalTargets(exercise.fen, selected) : [];
   const reset = (next = 0) => {
     setIndex(next);
+    setHintReady(false);
     setSelected(null);
-    setHint(false);
+    setHints(0);
+    setShown(false);
     setCorrect(false);
     setWrong(false);
     setPlayedFen(null);
@@ -58,7 +63,7 @@ export default function PracticePreview() {
     setDone(false);
   };
   function onSquare(square: Square) {
-    if (correct || returning) return;
+    if (correct || shown || returning) return;
     const chess = new Chess(exercise.fen);
     const piece = chess.get(square);
     if (piece?.color === chess.turn()) {
@@ -89,179 +94,136 @@ export default function PracticePreview() {
       setPlayedFen(answer.fen);
     }
   }
+  const answered = correct || shown;
+  function next() {
+    if (index === exercises.length - 1) setDone(true);
+    else reset(index + 1);
+  }
+  function showMove() {
+    const chess = new Chess(exercise.fen);
+    const from = exercise.solution.slice(0, 2),
+      to = exercise.solution.slice(2, 4);
+    chess.move({ from, to });
+    setPlayedFen(chess.fen());
+    setLastMove({ from, to });
+    setShown(true);
+    setWrong(false);
+  }
+  const footer = done ? (
+    <LessonBar detail="Sample positions · Your review progress is unchanged">
+      <LessonAction quiet label="Practice again" onPress={() => reset()} />
+      <LessonAction label="Back home" onPress={() => router.dismissTo("/")} />
+    </LessonBar>
+  ) : (
+    <LessonBar
+      tone={correct ? "right" : shown ? "wrong" : wrong ? "retry" : "idle"}
+      title={
+        correct
+          ? hint
+            ? "Found it, with help!"
+            : "You found it!"
+          : shown
+            ? "Here's the move"
+            : wrong
+              ? "Not quite"
+              : undefined
+      }
+      detail={
+        answered
+          ? exercise.explanation
+          : wrong
+            ? "Try again, or use a hint."
+            : hint
+              ? hints === 1
+                ? exercise.hint
+                : "The arrow shows the move. Play it."
+              : selected
+                ? `${selected} selected. Tap a highlighted square.`
+                : "Tap a piece, then where it goes."
+      }
+      note="Sample positions · Your review progress is unchanged"
+    >
+      {answered ? (
+        <LessonAction label="Continue" danger={shown} onPress={next} />
+      ) : (
+        <>
+          <LessonAction
+            quiet
+            glyph="hint"
+            label={
+              hints === 0 ? "Hint" : hints === 1 ? "Show move" : "Hint shown"
+            }
+            disabled={!hintReady || hints >= 2 || returning}
+            onPress={() => {
+              setHints((n) => n + 1);
+              setWrong(false);
+            }}
+          />
+          <LessonAction
+            quiet
+            label="Show me"
+            disabled={returning}
+            onPress={showMove}
+          />
+          <LessonAction
+            quiet
+            label="Flip"
+            onPress={() => setFlipped(!flipped)}
+          />
+        </>
+      )}
+    </LessonBar>
+  );
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: c.page }]}>
-      <StatusBar style={isDark ? "light" : "dark"} />
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.column}>
-          <View style={styles.header}>
-            <Logo />
-            <HelpDialog />
-          </View>
-          <View style={styles.theme}>
-            <Text tone="muted" style={styles.small}>
-              LOCAL PRACTICE PREVIEW
-            </Text>
-            <View style={styles.row}>
-              <Text tone="muted" style={styles.small}>
-                Dark
-              </Text>
-              <Switch
-                accessibilityLabel="Dark appearance"
-                value={isDark}
-                onValueChange={(value) => setMode(value ? "dark" : "light")}
-                trackColor={{ false: c.line, true: c.brand }}
-                thumbColor={c.surface}
-              />
-            </View>
-          </View>
-          <View style={styles.rowBetween}>
-            <Text tone="brand" style={{ fontFamily: fonts.bold }}>
-              Daily practice
-            </Text>
-            <Text tone="muted">{done ? 2 : index + (correct ? 1 : 0)} / 2</Text>
-          </View>
-          <Progress value={done ? 2 : index + (correct ? 1 : 0)} total={2} />
-          {done ? (
-            <View style={styles.finished}>
-              <Text style={{ fontSize: 48, lineHeight: 60 }}>♛</Text>
-              <Text heading style={styles.title}>
-                Nicely done.
-              </Text>
-              <Text tone="muted" style={{ textAlign: "center" }}>
-                Two ideas to take into your next game.
-              </Text>
-              <Card>
-                <Text heading style={{ fontSize: 22 }}>
-                  Back rank, locked down.
-                </Text>
-                <Text tone="muted">
-                  Look for a king trapped behind its own pawns. A rook can
-                  finish the game in a single move.
-                </Text>
-              </Card>
-              <Button
-                label="Practice again"
-                variant="gold"
-                onPress={() => reset()}
-              />
-            </View>
-          ) : (
-            <>
-              <View style={{ gap: 4 }}>
-                <Text heading accessibilityRole="header" style={styles.title}>
-                  {exercise.title}
-                </Text>
-                <Text tone="muted">White to move · Find checkmate in one.</Text>
-              </View>
-              <Board
-                edgeInset={20}
-                key={index}
-                flash={flash}
-                lastMove={lastMove}
-                fen={playedFen ?? exercise.fen}
-                selected={selected}
-                targets={targets}
-                flipped={flipped}
-                hintSquare={
-                  hint && !correct ? exercise.solution.slice(0, 2) : undefined
-                }
-                disabled={correct || returning}
-                onSquare={onSquare}
-              />
-              <View style={styles.row}>
-                <View style={styles.grow}>
-                  <Button
-                    label={hint ? "Hint shown" : "Hint"}
-                    variant="secondary"
-                    disabled={hint || correct}
-                    onPress={() => {
-                      setHint(true);
-                      setWrong(false);
-                    }}
-                  />
-                </View>
-                <View style={styles.grow}>
-                  <Button
-                    label="Flip board"
-                    variant="secondary"
-                    onPress={() => setFlipped(!flipped)}
-                  />
-                </View>
-              </View>
-              <View accessibilityLiveRegion="polite">
-                <Card>
-                  <Text heading style={{ fontSize: 22 }}>
-                    {correct
-                      ? "✓ You found it!"
-                      : wrong
-                        ? "Try another move"
-                        : hint
-                          ? "Look at the back rank"
-                          : "Your move"}
-                  </Text>
-                  <Text tone={wrong ? "danger" : "muted"}>
-                    {correct
-                      ? exercise.explanation
-                      : wrong
-                        ? "That move is legal, but it does not give checkmate. Your position is ready for another try."
-                        : hint
-                          ? exercise.hint
-                          : selected
-                            ? `${selected} selected. Tap a highlighted square.`
-                            : "Tap a white piece to see its legal moves."}
-                  </Text>
-                </Card>
-              </View>
-              <Button
-                label={
-                  correct
-                    ? index === exercises.length - 1
-                      ? "Finish practice"
-                      : "Next position"
-                    : "Find the move on the board"
-                }
-                disabled={!correct}
-                onPress={() =>
-                  index === exercises.length - 1
-                    ? setDone(true)
-                    : reset(index + 1)
-                }
-              />
-            </>
-          )}
-          <Text tone="muted" style={[styles.small, { textAlign: "center" }]}>
-            Sample positions · Your review progress is unchanged
+    <LessonScreen
+      title="Sample practice"
+      done={done ? 2 : index + (answered ? 1 : 0)}
+      total={2}
+      footer={footer}
+    >
+      {done ? (
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            gap: 16,
+          }}
+        >
+          <KnIcon glyph="check" size={64} />
+          <Text heading style={{ fontSize: 28, lineHeight: 34 }}>
+            Nicely done.
+          </Text>
+          <Text tone="muted" style={{ textAlign: "center" }}>
+            Two ideas to take into your next game.
           </Text>
         </View>
-      </ScrollView>
-    </SafeAreaView>
+      ) : (
+        <>
+          <LessonPrompt
+            tag="SAMPLE POSITION"
+            title={exercise.title}
+            detail="White to move · Find checkmate in one."
+          />
+          <LessonBoard>
+            <Board
+              key={index}
+              flash={flash}
+              lastMove={lastMove}
+              fen={playedFen ?? exercise.fen}
+              selected={selected}
+              targets={targets}
+              flipped={flipped}
+              hintSquare={
+                hint && !answered ? exercise.solution.slice(0, 2) : undefined
+              }
+              hintMove={hints >= 2 && !answered ? exercise.solution : undefined}
+              disabled={answered || returning}
+              onSquare={onSquare}
+            />
+          </LessonBoard>
+        </>
+      )}
+    </LessonScreen>
   );
 }
-const styles = StyleSheet.create({
-  safe: { flex: 1 },
-  scroll: { flexGrow: 1, padding: 20, alignItems: "center" },
-  column: { width: "100%", maxWidth: 440, gap: 16 },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  theme: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  row: { flexDirection: "row", alignItems: "center", gap: 12 },
-  rowBetween: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  small: { fontSize: 12, lineHeight: 18 },
-  grow: { flex: 1 },
-  title: { fontSize: 29, lineHeight: 36 },
-  finished: { gap: 24, paddingVertical: 32, alignItems: "stretch" },
-});

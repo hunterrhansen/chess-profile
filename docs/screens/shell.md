@@ -13,6 +13,13 @@ Play, Progress). The current tab is outlined in sky. Lessons (Practice, Puzzles,
 Welcome) are full screen with no navigation; their ✕ goes back Home. Every desktop picture in
 this folder shows the sidebar; every phone picture shows the tab bar.
 
+**Mobile:** `mobile/src/components/app-shell.tsx` implements the four phone tabs,
+Settings gear and Home goal counters with Expo Router headless tabs and shared
+React Native SVG icons. Wide web windows use a sidebar with the same routes.
+The account status/menu described below is still pending in the Expo client.
+The phone shell and Settings/back were verified in the local iPhone simulator
+on October 9, 2026; the current capture is in [Home](home.md).
+
 ## The account row
 
 ![The chosen account row](img/shell-accounts-chosen.png)
@@ -50,3 +57,20 @@ status). Chosen: A with C's status line.
 One quiet button with the gold bulb (`KnIcon hint`), the same two steps in Practice, the review
 lesson, Puzzles and Play. Marks show a paler green for "found with a hint". Details and grading
 in [practice.md](practice.md).
+
+## Compact goals header
+
+![Compact goals in the iPhone simulator](img/home-ios-preview.png)
+
+The floating blue gear in this Expo Go capture is its development tools overlay,
+which covers the app’s smaller Settings gear. Settings was checked separately.
+
+The native header uses the approved [Compact goals direction](../header-design-study.md).
+Home keeps the Knightly wordmark, labeled Review and Practice counters, and a quiet
+Settings gear. Counts use the loaded Nunito 800 font; completed goals show checks.
+Narrow screens and larger text move the goal summaries into a second row. Other
+tabs use their page title with Settings. Desktop uses its existing goal panel.
+
+Verified standard and accessibility-large text plus Practice launch and Home return
+on the iPhone simulator on October 9, 2026. Loading/error summaries are unavailable
+rather than false zero counts; no due practice cannot launch an empty session.

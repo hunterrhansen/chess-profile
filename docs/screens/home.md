@@ -6,6 +6,17 @@ and why it's the thing that will help most.
 **Code:** `web/src/pages/home.tsx`, `components/home-cards.tsx`, `components/path-node.tsx`;
 data from `/api/home` and `units.py`. **Built.** Rules in design.md › Home.
 
+**Mobile:** the unit banner, learning path, current lesson card and goal counters
+are implemented in `mobile/src/screens/home.tsx`, using `/api/home` for signed-in
+accounts. The unconfigured app labels its example data as a design preview.
+Verified in the iPhone 18 Pro simulator on October 9, 2026; rating history and
+one-time unit-complete celebrations are still pending.
+
+![Current native Home preview](img/home-ios-preview.png)
+
+The floating blue gear in this capture is Expo Go's development tools overlay;
+Knightly's Settings gear underneath was verified separately.
+
 ![Home on desktop](img/home-path.png)
 
 | Phone | The four states |
@@ -58,3 +69,7 @@ Every mistake, miss and blunder where one move was clearly better becomes a posi
 Practice schedules them with FSRS (see [practice.md](practice.md)). After each answer: a
 one-line why and when it comes back. Mistakes are tagged by tactic (loose piece, fork, back
 rank…); the weakest tactic adds Lichess puzzles of that type to the path.
+
+The native top bar now follows the approved [Compact goals header](../header-design-study.md):
+Review and Practice have visible labels, bold counters, and checks when complete.
+Larger text and narrow screens reflow them below the wordmark and Settings.
