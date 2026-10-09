@@ -1,22 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { router } from "expo-router";
 import { Chess, type Square } from "chess.js";
+import { AccessibilityInfo, Platform, View } from "react-native";
+import { Board } from "@/components/board";
+import { Text } from "@/components/ui";
+import { KnIcon } from "@/components/kn-icon";
 import {
-  AccessibilityInfo,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Board } from "../components/board";
-import { HelpDialog } from "../components/help-dialog";
-import { Button, Text, Card, Progress } from "../components/ui";
-import { legalTargets } from "../lib/practice";
-import { type DeckToday, type DeckCard, type DeckAnswer } from "../lib/api";
-import { useSession } from "../lib/session";
-import { useTheme } from "../lib/theme";
-import SamplePractice from "../screens/sample-practice";
+  LessonScreen,
+  LessonPrompt,
+  LessonBoard,
+  LessonBar,
+  LessonAction,
+} from "@/components/lesson-screen";
+import { legalTargets } from "@/lib/practice";
+import { type DeckToday, type DeckCard, type DeckAnswer } from "@/lib/api";
+import { useSession } from "@/lib/session";
+import { useTheme } from "@/lib/theme";
+import SamplePractice from "@/screens/sample-practice";
 export default function Practice() {
   const { connected } = useSession();
   return connected ? <DailyPractice /> : <SamplePractice />;
@@ -56,82 +56,108 @@ function DailyPractice() {
       setRefresh((n) => n + 1);
     }
   }
+  if (!loading && !error && deck && card)
+    return (
+      <Position
+        key={`${card.game_id}-${card.ply}-${redo ? "redo" : "first"}`}
+        card={card}
+        deck={deck}
+        redo={redo}
+        onNext={next}
+      />
+    );
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.page }}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.column}>
-          <View style={styles.header}>
-            <Button
-              label="Home"
-              variant="secondary"
-              onPress={() => router.replace("/")}
-            />
-            <HelpDialog />
-          </View>
-          {loading ? (
-            <Text>Loading your practice…</Text>
-          ) : error ? (
-            <Card>
-              <Text tone="danger" accessibilityRole="alert">
-                {error}
-              </Text>
-              <Button
-                label="Try again"
-                onPress={() => {
-                  setLoading(true);
-                  setError(undefined);
-                  setRefresh((n) => n + 1);
-                }}
-              />
-            </Card>
-          ) : deck && card ? (
-            <Position
-              key={`${card.game_id}-${card.ply}-${redo ? "redo" : "first"}`}
-              card={card}
-              deck={deck}
-              redo={redo}
-              onNext={next}
+    <LessonScreen
+      done={deck?.today.done ?? 0}
+      total={deck?.today.total ?? 0}
+      footer={
+        <LessonBar
+          detail={
+            loading
+              ? "Picking your due positions…"
+              : error
+                ? "Couldn’t load your positions. Try again."
+                : "Your next review dates are saved to your account."
+          }
+        >
+          {error ? (
+            <LessonAction
+              label="Try again"
+              onPress={() => {
+                setLoading(true);
+                setError(undefined);
+                setRefresh((n) => n + 1);
+              }}
             />
           ) : (
-            deck && (
-              <>
-                <Text heading accessibilityRole="header" style={styles.title}>
-                  {deck.total === 0 ? "No positions yet" : "Done for today"}
-                </Text>
-                <Text tone="muted">
-                  {deck.total === 0
-                    ? "Your practice positions come from analysed games. Import and analyse games in Knightly on the web, then come back."
-                    : `${deck.today.done} positions reviewed. Your next review dates are saved to your Knightly account.`}
-                </Text>
-                {deck.results.map((result, index) => (
-                  <Card key={`${result.game_id}-${result.ply}`}>
-                    <Text>
-                      Position {index + 1} · {result.san} ·{" "}
-                      {result.opponent ?? "opponent"}
-                    </Text>
-                    <Text tone="muted">
-                      {result.mark === "found"
-                        ? "Found"
-                        : result.mark === "helped"
-                          ? "With help"
-                          : result.mark === "good"
-                            ? "Good move"
-                            : "Shown"}
-                    </Text>
-                  </Card>
-                ))}
-                <Text>
-                  {deck.mastered} mastered · {deck.learning} learning ·{" "}
-                  {deck.new} new
-                </Text>
-              </>
-            )
+            <LessonAction
+              label="Back home"
+              onPress={() => router.dismissTo("/")}
+            />
           )}
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+        </LessonBar>
+      }
+    >
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          gap: 16,
+        }}
+      >
+        {loading ? (
+          <Text>Loading your practice…</Text>
+        ) : error ? (
+          <Text tone="danger" accessibilityRole="alert">
+            {error}
+          </Text>
+        ) : (
+          deck && (
+            <>
+              <KnIcon glyph="check" size={64} />
+              <Text heading style={{ fontSize: 28, lineHeight: 34 }}>
+                {deck.total === 0 ? "No positions yet" : "Done for today"}
+              </Text>
+              <Text tone="muted" style={{ textAlign: "center" }}>
+                {deck.total === 0
+                  ? "Review an analysed game to build your practice deck."
+                  : `${deck.today.done} positions reviewed.`}
+              </Text>
+              <View
+                style={{ flexDirection: "row", gap: 4, alignSelf: "stretch" }}
+              >
+                {deck.results.map((result) => (
+                  <View
+                    key={`${result.game_id}-${result.ply}`}
+                    accessible
+                    accessibilityLabel={`${result.san}: ${result.mark}`}
+                    style={{
+                      flex: 1,
+                      height: 20,
+                      borderRadius: 6,
+                      backgroundColor:
+                        result.mark === "found" || result.mark === "good"
+                          ? colors.brand
+                          : result.mark === "helped"
+                            ? colors.sky
+                            : colors.danger,
+                    }}
+                  />
+                ))}
+              </View>
+              <Text tone="muted" style={{ textAlign: "center" }}>
+                {deck.mastered} mastered · {deck.learning} learning · {deck.new}{" "}
+                new
+              </Text>
+            </>
+          )
+        )}
+      </View>
+    </LessonScreen>
   );
 }
+
 function Position({
   card,
   deck,
@@ -163,6 +189,11 @@ function Position({
   const [returning, setReturning] = useState(false);
   const [why, setWhy] = useState<string>();
   const [started] = useState(() => Date.now());
+  const [hintReady, setHintReady] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setHintReady(true), 2000);
+    return () => clearTimeout(timer);
+  }, []);
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -304,117 +335,118 @@ function Position({
     }
   }
   const done = deck.today.done + (!redo && first ? 1 : 0);
+  const right = !!outcome && outcome !== "shown";
+  const title =
+    outcome === "shown"
+      ? `The move was ${first?.best_san ?? "…"}`
+      : outcome === "good"
+        ? `Good move! Best was ${first?.best_san ?? "…"}`
+        : outcome === "helped"
+          ? "Found it, with help!"
+          : outcome
+            ? "You found it!"
+            : busy
+              ? "Checking…"
+              : flash?.tone === "wrong"
+                ? "Not quite"
+                : undefined;
+  const detail = outcome
+    ? (why ??
+      (outcome === "shown"
+        ? "Try this position again at the end of the session."
+        : "A stronger move for this position."))
+    : hints >= 2 && hintMove
+      ? "The arrow shows the move. Play it."
+      : hints > 0 && hintMove
+        ? `Look at the piece on ${hintMove.slice(0, 2)}.`
+        : flash?.tone === "wrong"
+          ? "Try again, or use a hint."
+          : selected
+            ? "Now pick where it goes."
+            : "Tap a piece, then where it goes.";
   return (
-    <>
-      <Text tone="muted">
-        {redo
-          ? "One more go · Ungraded"
-          : `${done} of ${deck.today.total} today`}
-      </Text>
-      <Progress value={done} total={Math.max(1, deck.today.total)} />
-      <Text heading accessibilityRole="header" style={styles.title}>
-        You played {card.san} here. Find a better move.
-      </Text>
-      <Text tone="muted">
-        {card.color === "white" ? "White" : "Black"} to move · vs{" "}
-        {card.opponent ?? "opponent"} · move {card.move_number}
-      </Text>
-      <Board
-        fen={fen}
-        selected={selected}
-        targets={selected ? legalTargets(card.fen_before, selected) : []}
-        flipped={flipped}
-        hintMove={!outcome && hints >= 2 ? hintMove : undefined}
-        hintSquare={!outcome && hints > 0 ? hintMove?.slice(0, 2) : undefined}
-        disabled={busy || !!outcome || returning}
-        onSquare={onSquare}
-        flash={flash}
-        lastMove={lastMove}
+    <LessonScreen
+      done={done}
+      total={Math.max(1, deck.today.total)}
+      footer={
+        <LessonBar
+          tone={
+            outcome
+              ? right
+                ? "right"
+                : "wrong"
+              : flash?.tone === "wrong"
+                ? "retry"
+                : "idle"
+          }
+          title={title}
+          detail={error ?? detail}
+          note={
+            redo
+              ? "One more go · Your schedule is unchanged"
+              : outcome && first
+                ? first.due
+                  ? `Next review: ${first.due}`
+                  : "Your first answer is saved."
+                : undefined
+          }
+        >
+          {outcome ? (
+            <LessonAction
+              label="Continue"
+              danger={!right}
+              onPress={() => onNext(outcome)}
+            />
+          ) : (
+            <>
+              <LessonAction
+                quiet
+                glyph="hint"
+                label={
+                  hints === 0
+                    ? "Hint"
+                    : hints === 1
+                      ? "Show move"
+                      : "Hint shown"
+                }
+                disabled={!hintReady || busy || returning || hints >= 2}
+                onPress={() => void hint()}
+              />
+              <LessonAction
+                quiet
+                label="Show me"
+                disabled={busy || returning}
+                onPress={() => void submit("0000")}
+              />
+              <LessonAction
+                quiet
+                label="Flip"
+                onPress={() => setFlipped((value) => !value)}
+              />
+            </>
+          )}
+        </LessonBar>
+      }
+    >
+      <LessonPrompt
+        tag={`${redo ? "ONE MORE GO" : card.reviews === 0 ? "NEW" : "REVIEW"} · vs ${card.opponent ?? "opponent"} · move ${card.move_number}`}
+        title={`You played ${card.san} here. Find a better move.`}
+        detail={`${card.color === "white" ? "White" : "Black"} to move${card.win_pct_before === null ? "" : ` · Winning chance was ${Math.round(card.win_pct_before)}%`}`}
       />
-      {error && (
-        <Text tone="danger" accessibilityRole="alert">
-          {error}
-        </Text>
-      )}
-      <View style={styles.actions}>
-        <View style={styles.grow}>
-          <Button
-            label={
-              hints === 0
-                ? "Hint"
-                : hints === 1
-                  ? "Show the move"
-                  : "Hint shown"
-            }
-            variant="secondary"
-            disabled={busy || !!outcome || returning || hints >= 2}
-            onPress={hint}
-          />
-        </View>
-        <View style={styles.grow}>
-          <Button
-            label="Flip board"
-            variant="secondary"
-            onPress={() => setFlipped((value) => !value)}
-          />
-        </View>
-      </View>
-      <Card>
-        <Text heading style={{ fontSize: 22 }}>
-          {outcome === "shown"
-            ? "Here's the move"
-            : outcome
-              ? "You found it!"
-              : busy
-                ? "Checking…"
-                : flash?.tone === "wrong"
-                  ? "Try another move"
-                  : "Your move"}
-        </Text>
-        <Text tone="muted">
-          {outcome
-            ? (why ??
-              (outcome === "shown"
-                ? `Best move: ${first?.best_san}. Try this position again at the end of the session.`
-                : "A stronger move for this position."))
-            : hints >= 2 && hintMove
-              ? `Try ${hintMove.slice(0, 2)} → ${hintMove.slice(2, 4)}.`
-              : hints > 0 && hintMove
-                ? `Look at the piece on ${hintMove.slice(0, 2)}.`
-                : "Tap a piece to see its legal moves."}
-        </Text>
-        {outcome && first && (
-          <Text tone="muted">
-            {redo
-              ? "For learning; your schedule is unchanged."
-              : first.due
-                ? `Next review: ${first.due}`
-                : "Your first answer is saved."}
-          </Text>
-        )}
-      </Card>
-      {outcome ? (
-        <Button label="Next position" onPress={() => onNext(outcome)} />
-      ) : (
-        <Button
-          label="Show me"
-          variant="secondary"
-          disabled={busy || returning}
-          onPress={() => void submit("0000")}
+      <LessonBoard>
+        <Board
+          fen={fen}
+          selected={selected}
+          targets={selected ? legalTargets(card.fen_before, selected) : []}
+          flipped={flipped}
+          hintMove={!outcome && hints >= 2 ? hintMove : undefined}
+          hintSquare={!outcome && hints > 0 ? hintMove?.slice(0, 2) : undefined}
+          disabled={busy || !!outcome || returning}
+          onSquare={onSquare}
+          flash={flash}
+          lastMove={lastMove}
         />
-      )}
-    </>
+      </LessonBoard>
+    </LessonScreen>
   );
 }
-const styles = StyleSheet.create({
-  scroll: { flexGrow: 1, padding: 20, alignItems: "center" },
-  column: { width: "100%", maxWidth: 440, gap: 16 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  title: { fontSize: 29, lineHeight: 36 },
-  actions: { flexDirection: "row", gap: 12, alignItems: "center" },
-  grow: { flex: 1 },
-});

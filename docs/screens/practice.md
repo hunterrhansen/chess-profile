@@ -62,3 +62,59 @@ Puzzles (nothing is sent to Lichess).
 
 The Done for today picture still says "mastered after 4 right in a row"; that line predates
 FSRS, so take the wording from the app.
+
+## Expo lesson shell — October 9, 2026
+
+Sample and connected practice now share `mobile/src/components/lesson-screen.tsx`.
+The active lesson is a full-height flex layout with no ScrollView: × exits to Home,
+the header contains session progress, the prompt sits above the board, and feedback
+and actions stay in a full-width band above the bottom safe area. The board fits
+both available width and remaining height, including its 4px ledge. The prompt
+and Hint provide guidance without a header question mark. Appearance
+controls remain in Settings.
+
+Hint (with the brand bulb), Show me and Flip live in the idle/retry band. Correct
+answers replace them with a green verdict and Continue; showing the move uses the
+red verdict and Continue. Hints unlock after two seconds. The connected flow keeps
+the existing server answer/hint calls, first-attempt grading and end-of-session
+redo queue. Sample practice is explicitly local and never updates the real deck.
+Completion uses a concise summary and result marks instead of a scrolling list.
+
+| iPhone: before answering | iPhone: larger text |
+| --- | --- |
+| ![Native practice lesson](img/practice-ios-preview.png) | ![Native practice with larger text](img/practice-ios-large-text.png) |
+
+The floating blue gear is Expo Go's development overlay, covering part of the header;
+it is not part of the lesson design. Native captures were checked at normal and
+accessibility-large text. Text in the bounded lesson chrome scales up to its local
+limit; it does not disable system text scaling globally.
+
+The shared flow was exercised through React Native Web at 390×844 and 320×568:
+wrong move and reset, recovery with the correct move, Continue, Show me, completion,
+and × exit to Home. The short-screen document height stayed at 568px, with actions
+inside the viewport. The same sample flow passed in the iPhone 18 Pro simulator:
+wrong move and automatic reset, correct recovery, Continue to the next position,
+Show me, completion, and × exit back to Home. Connected grading and network failure
+recovery were not replayed against an account.
+Lint, typecheck, all 16 existing tests and the Expo web export passed.
+
+![Native correct-answer feedback and fixed Continue button](img/practice-ios-right.png)
+
+### Motion follow-up
+
+The question mark is removed; the prompt and Hint provide lesson guidance.
+Practice keeps the default iOS push/pop transition and immediate feedback/progress
+updates. The experimental fade, verdict entrance and progress-fill animations
+were reverted after device review. Refine motion in a later design pass.
+
+### References checked
+
+- The web `LessonScreen`, `LessonBoard`, `LessonBar` and `FindBar`, plus the phone
+  screenshots above, are the direct layout reference and brand source.
+- [Duolingo's lesson examples](https://blog.duolingo.com/duolingo-101-how-to-learn-a-language-on-duolingo/)
+  provide the focused exercise and answer-control structure. Knightly retains its
+  own task, typography, icons and feedback rules.
+- [Chess.com's Daily Puzzle flow](https://support.chess.com/en/articles/8708990-how-does-the-daily-puzzle-work)
+  provides a board-centered solving and hint reference. Knightly's no-scroll,
+  bottom-band layout follows its existing practice specification; it does not add
+  Chess.com's hearts, subscriptions or puzzle economy.
