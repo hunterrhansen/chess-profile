@@ -34,8 +34,8 @@ the owner's password manager, under "Knightly deploy".
 - [x] **Supabase** (§3): the current dashboard lists `knightly-staging`
       (`mwkkgxrkhhvvagouvtmo`, us-east-2) and `knightly-prod`
       (`duvdkqvszkmljwwrhhfk`, us-west-2). Staging's Data API is off.
-      Both reset passwords connect successfully over TLS. Staging has five migrations and
-      the VM can switch to `knightly_app`; production has no public tables yet.
+      Both reset passwords connect successfully over TLS. Both environments have five
+      migrations; `knightly_app` isolation was verified against the restored production data.
 - [x] **Oracle machine** (§2): made with OpenTofu (`infra/oracle`, PHX-AD-1), bootstrapped,
       and the `knightly` deploy user logs in with `~/.ssh/knightly-deploy`. The IP:
       `tofu output public_ip` in `infra/oracle`, with state in `~/.knightly/oracle.tfstate` on
@@ -45,20 +45,22 @@ the owner's password manager, under "Knightly deploy".
       `knightly-cloudflare`) made the tunnels `knightly` and `knightly-staging`, their proxied
       DNS records, and the `knightly-backups` bucket (2026-10-08). `push-tokens.sh` put each
       tunnel's `TUNNEL_TOKEN` in its `.env`, and both tunnels connected healthy from the
-      machine. Staging serves the app; production waits for its first deploy.
+      machine. Both environments serve the app.
 - [x] **Backup key** (§7): an R2 token with *Object Read & Write* on `knightly-backups`
       only. Its Access Key ID (32 characters) and Secret Access Key (64) are in
       `/opt/knightly/backup.env`. The token value isn't used. Tested from the machine: upload,
       `rclone check`, delete. Ubuntu's rclone needs `RCLONE_S3_NO_HEAD` for R2, which
-      backup.sh sets. The nightly run itself waits for production's database URL.
-- [ ] **Clerk** (§4): set up a production instance for `knightlychess.app` (its DNS records go
+      backup.sh sets. The production backup service completed successfully, and `rclone check`
+      verified the first dump in R2. The nightly timer is enabled and active.
+- [x] **Clerk** (§4): set up a production instance for `knightlychess.app` (its DNS records go
       in Cloudflare). Add a `user.deleted` webhook on both instances, and allow users to delete
       their own accounts.
       Production instance created (2026-10-08), all five DNS CNAMEs are managed in
       `infra/cloudflare/clerk.tf` and verified by Clerk. Both deletion webhooks exist;
       production allows self-service deletion. Email sign-in is enabled. Google sign-in
       still needs custom OAuth credentials. Both webhook signing secrets are saved in the
-      matching server env files; delivery and account deletion need testing after deployment.
+      matching server env files. Both deployments accept signed no-op webhook requests and
+      reject invalid signatures. Real account deletion remains an end-to-end acceptance test.
 - [x] **Fill in `.env` on the machine** (§6, §7): `/opt/knightly/{staging,production}/.env`
       and `/opt/knightly/backup.env` are configured. The owner authorized direct secret transfer.
       Both allowed origins are set to their real domains. Staging's existing development
@@ -72,17 +74,22 @@ the owner's password manager, under "Knightly deploy".
       `production` environments. Make the GHCR package public.
       The deploy key is saved, both environments exist, production requires the owner's
       review, and GHCR is public (2026-10-08). `DEPLOY_HOST` is set to the VM's IP.
-- [ ] **Staging:** push to `main`, then check `https://staging.knightlychess.app` and
+- [x] **Staging:** push to `main`, then check `https://staging.knightlychess.app` and
       `/api/health`, and sign up with a test account.
       GitHub Actions run `37882431397` deployed `sha-0ba6ab5` successfully. The public health
       check passes, the worker runs, runtime config matches staging, protected routes return
       401 without sign-in, and the browser displays Clerk sign-in. A signed no-op webhook
-      is accepted and an invalid signature rejected. A real sign-up/deletion test remains.
+      is accepted and an invalid signature rejected. The owner signed in and confirmed that
+      Chess.com onboarding imports games successfully. A throwaway deletion test remains.
 - [ ] **Production:** move the Mac data in (§3: migrate, then a data-only restore), deploy the
       staging tag (§9), and sign in as the owner. Run the backup by hand once (§7).
-      A data-only export is prepared on the Mac at
-      `backups/first-deploy-data-2026-10-08.dump`, excluding migration history. Refresh the
-      export before restoring if the Mac data has changed; do not restore it twice.
+      GitHub Actions run `37883614272` deployed `sha-0ba6ab5` with the owner's approval.
+      A fresh consistent snapshot was restored once; all 16 table counts matched, including
+      687 games and one user. The import archive is
+      `backups/production-import-2026-10-08-10c15118.dump`, with a matching JSON manifest.
+      Health, runtime config and unauthenticated-route checks pass; web is healthy and the
+      worker and tunnel run. The first backup, `knightly-2026-10-09.dump` (UTC filename),
+      is verified in R2. Remaining: owner production sign-in, history linking and admin ID.
 - [ ] **Done when** (architecture doc, Phases 4 and 5): a push to `main` reaches staging with
       no manual steps, and a friend can sign up, use Knightly and delete their account. Test
       the deletion in Safari with a throwaway account, since Clerk's captcha blocks automated
