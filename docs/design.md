@@ -22,6 +22,13 @@ be seen that small, so it's the knight alone (`public/favicon.svg` is that versi
 are the brand fills (`brand`, `brand-lip`, `on-brand`, `gold`); never recolor the mark. The
 design canvas's Brand page has the lockups and the other directions considered.
 
+Native launcher artwork lives in [`mobile/assets/app-icon/`](../mobile/assets/app-icon/README.md).
+The [standalone icon](../mobile/assets/app-icon/icon.png) uses the knight and moon
+on an opaque green square with the bottom ledge; iOS supplies the outer corners.
+Android's adaptive icon separates the padded knight and moon from a full green
+background so launcher masks retain the mark. Editable SVG sources accompany
+the 1024 × 1024 PNG assets, and `mobile/app.json` selects them for both platforms.
+
 The mark also carries the waits and the gaps:
 
 - **Loading a whole view:** `LogoLoader` (the mark hopping in place, with a short line like

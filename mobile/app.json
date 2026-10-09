@@ -23,7 +23,11 @@
       "bundler": "metro"
     },
     "android": {
-      "package": "app.knightly.preview"
+      "package": "app.knightly.preview",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/app-icon/adaptive-foreground.png",
+        "backgroundImage": "./assets/app-icon/adaptive-background.png"
+      }
     },
     "extra": {
       "router": {},
@@ -31,6 +35,7 @@
         "projectId": "aed64483-1b28-4038-bc55-766c0f64be9b"
       }
     },
-    "owner": "hunterhansen"
+    "owner": "hunterhansen",
+    "icon": "./assets/app-icon/icon.png"
   }
 }
