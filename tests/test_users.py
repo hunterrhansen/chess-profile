@@ -23,10 +23,12 @@ PUBLIC_PEM = KEY.public_key().public_bytes(serialization.Encoding.PEM,
 WEBHOOK_SECRET = "whsec_" + base64.b64encode(b"a secret of exactly 32 bytes!!!!").decode()
 
 
-def token(sub: str, key=KEY, **claims) -> str:
+def token(sub: str, key=KEY, *, omit_azp=False, **claims) -> str:
     now = int(time.time())
     body = {"sub": sub, "iss": f"https://{HOST}", "iat": now, "nbf": now - 5, "exp": now + 60,
             "azp": "https://knightly.example", **claims}
+    if omit_azp:
+        del body["azp"]
     return jwt.encode(body, key, algorithm="RS256")
 
 
@@ -192,6 +194,39 @@ def test_tokens_for_another_site_are_refused(two, monkeypatch, db_url):
     client = TestClient(api.create_app(db_url))
     assert client.get("/api/home", headers=as_user("user_alice")).status_code == 200
     assert client.get("/api/home", headers=as_user("user_alice", azp="https://evil.example")).status_code == 401
+
+
+def test_native_tokens_need_opt_in_and_keep_users_apart(two, monkeypatch, db_url):
+    monkeypatch.setenv("KNIGHTLY_ALLOWED_ORIGINS", "https://knightly.example")
+    native = as_user("user_alice", omit_azp=True)
+    client = TestClient(api.create_app(db_url))
+    assert client.get("/api/games", headers=native).status_code == 401
+    monkeypatch.setenv("KNIGHTLY_ALLOW_NATIVE_AUTH", "1")
+    client = TestClient(api.create_app(db_url))
+    for name, ids in (("alice", {100, 101, 102}), ("bob", {200, 201, 202})):
+        response = client.get("/api/games", headers=as_user(f"user_{name}", omit_azp=True))
+        assert response.status_code == 200
+        assert {game["id"] for game in response.json()["games"]} == ids
+    assert client.get("/api/games/201", headers=native).status_code == 404
+
+
+@pytest.mark.parametrize("claims", [
+    {"azp": "https://evil.example"}, {"azp": ""}, {"azp": None},
+    {"omit_azp": True, "exp": 1},
+    {"omit_azp": True, "iss": "https://evil.example"},
+    {"omit_azp": True, "nbf": int(time.time()) + 3600},
+])
+def test_native_opt_in_does_not_bypass_token_validation(claims):
+    checker = auth.Clerk(f"https://{HOST}", PUBLIC_PEM, ["https://knightly.example"], allow_native=True)
+    with pytest.raises(auth.Unauthorized):
+        checker.user(token("user_alice", **claims))
+
+
+def test_native_opt_in_still_checks_signature():
+    checker = auth.Clerk(f"https://{HOST}", PUBLIC_PEM, ["https://knightly.example"], allow_native=True)
+    other_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    with pytest.raises(auth.Unauthorized):
+        checker.user(token("user_alice", key=other_key, omit_azp=True))
 
 
 def test_linking_hands_the_local_users_data_to_a_clerk_account(db_url):
