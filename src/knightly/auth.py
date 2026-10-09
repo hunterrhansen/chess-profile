@@ -7,7 +7,8 @@ serving one person's data to everyone; KNIGHTLY_AUTH=local says so on purpose (l
 Clerk tokens are checked here, with no call to Clerk per request: the signature against
 Clerk's public keys (fetched once from the instance's JWKS URL, or given as CLERK_JWT_KEY),
 the expiry, the issuer (the instance's Frontend API, read from the publishable key) and, if
-KNIGHTLY_ALLOWED_ORIGINS is set, which site the token was made for (`azp`).
+KNIGHTLY_ALLOWED_ORIGINS is set, which site the token was made for (`azp`). Native
+tokens without `azp` need the explicit KNIGHTLY_ALLOW_NATIVE_AUTH=1 opt-in.
 """
 import base64
 import hashlib
@@ -36,8 +37,10 @@ def frontend_api(publishable_key: str) -> str:
 
 
 class Clerk:
-    def __init__(self, issuer: str, jwt_key: str | None = None, origins: list[str] | None = None):
+    def __init__(self, issuer: str, jwt_key: str | None = None, origins: list[str] | None = None,
+                 allow_native: bool = False):
         self.issuer, self.origins = issuer, origins
+        self.allow_native = allow_native
         self.key = jwt_key
         self.jwks = None if jwt_key else jwt.PyJWKClient(f"{issuer}/.well-known/jwks.json", cache_keys=True)
 
@@ -49,7 +52,10 @@ class Clerk:
                                 options={"require": ["exp", "iat", "sub"]})
         except jwt.PyJWTError as e:
             raise Unauthorized(str(e)) from None
-        if self.origins and claims.get("azp") not in self.origins:
+        # Clerk's native SDK can issue tokens without a browser Origin / azp.
+        # Only an absent claim gets this opt-in; present origins still need the allowlist.
+        native = self.allow_native and "azp" not in claims
+        if self.origins and not native and claims.get("azp") not in self.origins:
             raise Unauthorized("token made for another site")
         return claims["sub"]
 
@@ -69,7 +75,8 @@ def from_env() -> Clerk | None:
     if not publishable:
         raise SystemExit("KNIGHTLY_AUTH=clerk needs CLERK_PUBLISHABLE_KEY.")
     origins = [o.strip() for o in os.environ.get("KNIGHTLY_ALLOWED_ORIGINS", "").split(",") if o.strip()]
-    return Clerk(frontend_api(publishable), os.environ.get("CLERK_JWT_KEY"), origins or None)
+    return Clerk(frontend_api(publishable), os.environ.get("CLERK_JWT_KEY"), origins or None,
+                 allow_native=os.environ.get("KNIGHTLY_ALLOW_NATIVE_AUTH") == "1")
 
 
 def webhook(secret: str, headers, body: bytes, now: float | None = None) -> dict:

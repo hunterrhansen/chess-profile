@@ -213,6 +213,16 @@ your user row matches the new Clerk id.
   - Event: `user.deleted`
   - Copy its **Signing secret** (`whsec_…`) into `CLERK_WEBHOOK_SECRET`.
 - Set `KNIGHTLY_ALLOWED_ORIGINS` to the environment's address (`https://knightly.example.com`).
+- When serving the native app, also set `KNIGHTLY_ALLOW_NATIVE_AUTH=1` and recreate the web
+  container. This accepts signed tokens from that Clerk instance that omit the browser
+  origin (`azp`); tokens with an origin still must match `KNIGHTLY_ALLOWED_ORIGINS`.
+  Signature, issuer and expiry checks apply to both. Keep the flag off for web-only servers.
+  See [Clerk's JWT verification guide](https://clerk.com/docs/guides/sessions/manual-jwt-verification).
+- In the production Clerk instance's **Native applications** settings, register the iOS
+  app with Team ID `GSMAB6KXN9` and Bundle ID `app.knightly.preview`, and verify that
+  `app.knightly.preview://callback` appears in the mobile SSO redirect allowlist.
+  These entries were saved October 9, 2026. The mobile app reads this instance's key from
+  `/api/config`; a different bundle ID needs its own registration and callback.
 
 The web app reads the publishable key from the server (`/api/config`), so one image serves
 both environments. Nothing about Clerk is baked into the build.

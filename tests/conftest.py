@@ -52,6 +52,7 @@ def data_dir(tmp_path, monkeypatch):
     user (in server mode too, as on CI)."""
     monkeypatch.setenv("KNIGHTLY_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("KNIGHTLY_AUTH", "local")
-    for name in ("CLERK_PUBLISHABLE_KEY", "CLERK_JWT_KEY", "CLERK_WEBHOOK_SECRET", "KNIGHTLY_ALLOWED_ORIGINS"):
+    for name in ("CLERK_PUBLISHABLE_KEY", "CLERK_JWT_KEY", "CLERK_WEBHOOK_SECRET", "KNIGHTLY_ALLOWED_ORIGINS",
+                 "KNIGHTLY_ALLOW_NATIVE_AUTH"):
         monkeypatch.delenv(name, raising=False)
     return tmp_path
