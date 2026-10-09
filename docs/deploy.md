@@ -58,7 +58,9 @@ the owner's password manager, under "Knightly deploy".
       Production instance created (2026-10-08), all five DNS CNAMEs are managed in
       `infra/cloudflare/clerk.tf` and verified by Clerk. Both deletion webhooks exist;
       production allows self-service deletion. Email sign-in is enabled. Google sign-in
-      still needs custom OAuth credentials. Both webhook signing secrets are saved in the
+      is disabled in production until custom OAuth credentials are configured (the copied
+      connection had empty credentials and caused Google's missing-client-ID error).
+      Both webhook signing secrets are saved in the
       matching server env files. Both deployments accept signed no-op webhook requests and
       reject invalid signatures. Real account deletion remains an end-to-end acceptance test.
 - [x] **Fill in `.env` on the machine** (§6, §7): `/opt/knightly/{staging,production}/.env`
