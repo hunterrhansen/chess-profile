@@ -71,7 +71,7 @@ export function Piece({ kind, side }: { kind: PieceKind; side: PieceSide }) {
     strokeLinecap: "round",
   } as const;
   return (
-    <Svg width="88%" height="88%" viewBox="0 0 100 100" aria-hidden={true}>
+    <Svg width="96%" height="96%" viewBox="0 0 100 100" aria-hidden={true}>
       <Rect
         x="20"
         y="79"
