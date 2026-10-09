@@ -5,6 +5,7 @@
 - two tunnels, `knightly` (production) and `knightly-staging`, each carrying its hostname to
   the web container (`http://web:8000`), and anything else to a 404
 - their DNS records: `knightlychess.app` and `staging.knightlychess.app`, proxied
+- Clerk's five production CNAMEs for authentication, account portal and email, DNS-only
 - the `knightly-backups` R2 bucket, in western North America
 
 The machine is [`../oracle`](../oracle); what runs on it is [`deploy/`](../../deploy).
@@ -47,3 +48,6 @@ tofu apply
   & Write* on `knightly-backups` only. Its access key id, secret and the S3 endpoint go in
   `/opt/knightly/backup.env` on the machine (docs/deploy.md §7). A token that could make it
   here would need to be able to make any token.
+- **Clerk**: `clerk.tf` records the CNAMEs from the production instance's Domains page.
+  If the Clerk instance is replaced, update its email/DKIM targets from that page before
+  applying. Clerk verifies the records and issues its HTTPS certificates.
