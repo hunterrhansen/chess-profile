@@ -1,13 +1,32 @@
-import { Chess, type Square } from "chess.js";
+import { Chess, type Square, type Color } from "chess.js";
 import { Pressable, View, StyleSheet } from "react-native";
-import { boardSquares } from "../lib/practice";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useReducedMotion } from "react-native-reanimated";
+import { boardSquares, legalTargets } from "../lib/practice";
 import { useTheme } from "../lib/theme";
-import Svg, { Line, Polygon } from "react-native-svg";
-import { useState } from "react";
 import { MovingPiece } from "./board-piece";
 import { BoardFeedback } from "./board-feedback";
-import { piecesAt, transitionPieces, coordinates } from "../lib/board-motion";
+import {
+  BoardArrows,
+  BoardMark,
+  type BoardArrow,
+  type Classification,
+} from "./board-marks";
+import {
+  piecesAt,
+  transitionPieces,
+  checkSquares,
+  matePresentation,
+  canDrop,
+  moveBetween,
+  MOVE_MS,
+  type MoveSound,
+} from "../lib/board-motion";
+import { useBoardSound } from "../lib/board-sound";
+import { useBoardHaptics } from "../lib/board-haptics";
 import { Text } from "./ui";
+export type { BoardArrow, Classification } from "./board-marks";
 const names = {
   k: "king",
   q: "queen",
@@ -15,6 +34,14 @@ const names = {
   b: "bishop",
   n: "knight",
   p: "pawn",
+};
+const NO_ARROWS: BoardArrow[] = [];
+type Drop = {
+  from: Square;
+  to: Square;
+  fen: string;
+  phase: "select" | "wait" | "submitted";
+  busy: boolean;
 };
 export function Board({
   fen,
@@ -27,6 +54,14 @@ export function Board({
   onSquare,
   flash,
   lastMove,
+  arrows = NO_ARROWS,
+  badge,
+  inLine = false,
+  movable,
+  soundEnabled = true,
+  hapticsEnabled = true,
+  edgeInset = 0,
+  onMove,
 }: {
   fen: string;
   selected: Square | null;
@@ -38,73 +73,231 @@ export function Board({
   onSquare: (square: Square) => void;
   flash?: { square: string; tone: "right" | "wrong"; id: number };
   lastMove?: { from: string; to: string };
+  arrows?: BoardArrow[];
+  badge?: { square: Square; kind: Classification } | null;
+  inLine?: boolean;
+  movable?: Color;
+  soundEnabled?: boolean;
+  hapticsEnabled?: boolean;
+  /** Extend into the screen's horizontal padding while controls stay inset. */
+  edgeInset?: number;
+  /** Optional direct move callback; existing onSquare consumers also support drag. */
+  onMove?: (from: Square, to: Square) => boolean | void;
 }) {
   const { colors: c } = useTheme();
-  const chess = new Chess(fen);
-  const squares = boardSquares(flipped);
+  const chess = useMemo(() => new Chess(fen), [fen]);
+  const check = useMemo(() => checkSquares(fen), [fen]);
+  const moves = useMemo(() => {
+    const bySquare = new Map<Square, Square[]>();
+    for (const move of chess.moves({ verbose: true })) {
+      const targets = bySquare.get(move.from) ?? [];
+      if (!targets.includes(move.to)) targets.push(move.to);
+      bySquare.set(move.from, targets);
+    }
+    return bySquare;
+  }, [chess]);
+  const squares = useMemo(() => boardSquares(flipped), [flipped]);
+  const reduced = useReducedMotion();
   const [width, setWidth] = useState(0);
+  const [drag, setDrag] = useState<{ from: Square; fen: string } | null>(null);
+  const [drop, setDrop] = useState<Drop | null>(null);
+  const [dropped, setDropped] = useState<{
+    from: Square;
+    to: Square;
+    fen: string;
+  } | null>(null);
+  const [release, setRelease] = useState(0);
   const [shown, setShown] = useState(() => ({
     fen,
     pieces: piecesAt(fen),
     captured: [] as ReturnType<typeof piecesAt>,
     animate: false,
+    mate: matePresentation(fen, fen, []),
+    cue: null as { sound: MoveSound; delay: number; id: string } | null,
   }));
-  if (shown.fen !== fen)
-    setShown({ fen, ...transitionPieces(shown.pieces, shown.fen, fen) });
-  const mated = chess.isCheckmate()
-    ? chess.findPiece({ type: "k", color: chess.turn() })[0]
-    : undefined;
-  const winner = mated
-    ? chess.findPiece({ type: "k", color: chess.turn() === "w" ? "b" : "w" })[0]
-    : undefined;
+  if (shown.fen !== fen) {
+    const transition = transitionPieces(shown.pieces, shown.fen, fen);
+    const move =
+      dropped?.fen === shown.fen ? moveBetween(shown.fen, fen) : null;
+    const landed =
+      !!move && move.from === dropped?.from && move.to === dropped?.to;
+    setShown({
+      fen,
+      ...transition,
+      mate: matePresentation(shown.fen, fen, shown.mate.seen),
+      cue: transition.sound
+        ? {
+            sound: transition.sound,
+            delay: landed || reduced ? 0 : MOVE_MS,
+            id: fen,
+          }
+        : null,
+    });
+  }
+  useBoardSound(
+    shown.cue,
+    soundEnabled,
+    flash,
+    badge && (badge.kind === "brilliant" || badge.kind === "great")
+      ? { id: `${fen}-${badge.kind}`, delay: reduced ? 0 : MOVE_MS + 120 }
+      : null,
+  );
+  const pickup = useBoardHaptics(
+    hapticsEnabled,
+    flash,
+    reduced ? 0 : (shown.cue?.delay ?? MOVE_MS),
+  );
+  const onTapSquare = useCallback(
+    (square: Square) => {
+      if (disabled) return;
+      if (square !== selected && moves.has(square) &&
+          !(selected && targets.includes(square))) pickup();
+      onSquare(square);
+    },
+    [disabled, selected, moves, targets, pickup, onSquare],
+  );
+  // Bridge a drag to the existing controlled tap API, waiting for the source selection
+  // to render before sending the destination. Grading stays entirely with the caller.
+  useEffect(() => {
+    if (!drop) return;
+    const frame = requestAnimationFrame(() => {
+      if (drop.fen !== fen || (disabled && drop.phase !== "submitted")) {
+        setDrop(null);
+        return;
+      }
+      if (drop.phase === "submitted") {
+        if (disabled && !drop.busy) setDrop({ ...drop, busy: true });
+        else if (!disabled && drop.busy) setDrop(null);
+        return;
+      }
+      if (selected === drop.from) {
+        setDrop({ ...drop, phase: "submitted" });
+        onSquare(drop.to);
+      } else if (drop.phase === "select") {
+        setDrop({ ...drop, phase: "wait" });
+        onSquare(drop.from);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [drop, selected, fen, disabled, onSquare]);
+  useEffect(() => {
+    // A caller that declines an input must not leave a piece suspended forever.
+    if (!drop || disabled) return;
+    const timer = setTimeout(() => setDrop(null), 1500);
+    return () => clearTimeout(timer);
+  }, [drop, disabled]);
+  const activeDrag = drag?.fen === fen && !disabled ? drag.from : null;
+  const selection = activeDrag ?? selected;
+  const destinations = activeDrag ? legalTargets(fen, activeDrag) : targets;
+  const onDragStart = useCallback(
+    (from: Square) => {
+      pickup();
+      setDrag({ from, fen });
+    },
+    [fen, pickup],
+  );
+  const onDrop = useCallback(
+    (from: Square, to: Square | null) => {
+      setDrag(null);
+      setRelease((value) => value + 1);
+      if (disabled || !canDrop(fen, from, to)) return;
+      setDropped({ from, to: to!, fen });
+      if (onMove) {
+        if (onMove(from, to!) === false) {
+          setDropped(null);
+          return;
+        }
+        setDrop({ from, to: to!, fen, phase: "submitted", busy: false });
+      } else setDrop({ from, to: to!, fen, phase: "select", busy: false });
+    },
+    [disabled, fen, onMove],
+  );
+  const visibleArrows = hintMove
+    ? [
+        ...arrows,
+        {
+          from: hintMove.slice(0, 2),
+          to: hintMove.slice(2, 4),
+          tone: "best" as const,
+        },
+      ]
+    : arrows;
   return (
-    <View style={[styles.base, { backgroundColor: c.lip }]}>
+    <GestureHandlerRootView
+      style={[
+        styles.base,
+        edgeInset > 0 && { marginHorizontal: -edgeInset, borderRadius: 0 },
+        { backgroundColor: c.lip },
+        inLine && { borderColor: c.sky, borderWidth: 2 },
+      ]}
+    >
       <View
-        style={styles.grid}
+        style={[styles.grid, edgeInset > 0 && { borderRadius: 0 }]}
         onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
       >
         {Array.from({ length: 8 }, (_, row) => (
           <View key={row} style={styles.row}>
             {squares.slice(row * 8, row * 8 + 8).map((square, column) => {
-              const index = row * 8 + column;
-              const piece = chess.get(square);
-              const isLight = ((index % 8) + Math.floor(index / 8)) % 2 === 0;
-              const target = targets.includes(square);
+              const index = row * 8 + column,
+                piece = chess.get(square);
+              const isLight = (row + column) % 2 === 0;
+              const target = destinations.includes(square);
               const highlighted =
-                selected === square ||
-                hintSquare === square ||
+                selection === square ||
                 lastMove?.from === square ||
                 lastMove?.to === square;
               return (
                 <Pressable
                   key={square}
                   accessibilityRole="button"
-                  accessibilityLabel={`${square}${piece ? `, ${piece.color === "w" ? "white" : "black"} ${names[piece.type]}` : ", empty"}${target ? ", legal destination" : ""}`}
+                  accessibilityLabel={`${square}${piece ? `, ${piece.color === "w" ? "white" : "black"} ${names[piece.type]}` : ", empty"}${target ? ", legal destination" : ""}${check?.king === square ? ", in check" : ""}`}
                   accessibilityState={{
-                    selected: selected === square,
+                    selected: selection === square,
                     disabled,
                   }}
                   disabled={disabled}
-                  onPress={() => onSquare(square)}
+                  onPress={() => onTapSquare(square)}
                   style={[
                     styles.square,
                     {
                       backgroundColor: highlighted
                         ? isLight
-                          ? c.boardHighlightLight
-                          : c.boardHighlightDark
+                          ? inLine
+                            ? c.lineHighlightLight
+                            : c.boardHighlightLight
+                          : inLine
+                            ? c.lineHighlightDark
+                            : c.boardHighlightDark
                         : isLight
                           ? c.boardLight
                           : c.boardDark,
                     },
                   ]}
                 >
+                  {check?.path.includes(square) && (
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        StyleSheet.absoluteFill,
+                        { backgroundColor: c.check, opacity: 0.38 },
+                      ]}
+                    />
+                  )}
+                  {check?.king === square && (
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        StyleSheet.absoluteFill,
+                        { backgroundColor: c.check },
+                      ]}
+                    />
+                  )}
                   {target && (
                     <View
                       pointerEvents="none"
                       style={
                         piece
-                          ? [styles.capture, { borderColor: c.selected }]
+                          ? [styles.capture, { borderColor: c.moveHint }]
                           : [styles.dot, { backgroundColor: c.moveHint }]
                       }
                     />
@@ -116,10 +309,12 @@ export function Board({
                     <BoardFeedback
                       key={flash.id}
                       color={flash.tone === "right" ? c.brand : c.danger}
+                      delay={shown.cue?.delay ?? MOVE_MS}
                     />
                   )}
                   {index % 8 === 0 && (
                     <Text
+                      allowFontScaling={false}
                       style={[
                         styles.rank,
                         { color: isLight ? c.boardDark : c.boardLight },
@@ -130,6 +325,7 @@ export function Board({
                   )}
                   {index >= 56 && (
                     <Text
+                      allowFontScaling={false}
                       style={[
                         styles.file,
                         { color: isLight ? c.boardDark : c.boardLight },
@@ -138,10 +334,13 @@ export function Board({
                       {square[0]}
                     </Text>
                   )}
-                  {selected === square && (
+                  {selection === square && (
                     <View
                       pointerEvents="none"
-                      style={[styles.selection, { borderColor: c.selected }]}
+                      style={[
+                        StyleSheet.absoluteFill,
+                        { borderWidth: 3, borderColor: c.selected },
+                      ]}
                     />
                   )}
                 </Pressable>
@@ -156,15 +355,34 @@ export function Board({
               piece={piece}
               cell={width / 8}
               flipped={flipped}
-              selected={selected === piece.square}
-              fallen={piece.square === mated}
+              selected={selection === piece.square}
+              fallen={piece.square === shown.mate.mated}
+              fall={shown.mate.fall}
               animate={shown.animate}
+              positionKey={fen}
+              releaseKey={release}
+              draggable={
+                !disabled &&
+                !drop &&
+                piece.side === (movable ?? chess.turn()) &&
+                !!moves.get(piece.square)?.length
+              }
+              destinations={moves.get(piece.square)}
+              landing={
+                drop?.fen === fen && drop.from === piece.square
+                  ? drop.to
+                  : undefined
+              }
+              onTap={disabled || drop ? undefined : onTapSquare}
+              landed={shown.cue?.delay === 0}
+              onDragStart={onDragStart}
+              onDrop={onDrop}
             />
           ))}
         {width > 0 &&
           shown.captured.map((piece) => (
             <MovingPiece
-              key={`captured-${shown.fen}-${piece.id}`}
+              key={`captured-${fen}-${piece.id}`}
               piece={piece}
               cell={width / 8}
               flipped={flipped}
@@ -172,55 +390,55 @@ export function Board({
               fallen={false}
               animate
               captured
+              positionKey={fen}
             />
           ))}
-        {width > 0 && hintMove && (
-          <HintArrow uci={hintMove} flipped={flipped} color={c.brandText} />
+        {width > 0 && <BoardArrows arrows={visibleArrows} flipped={flipped} />}
+        {width > 0 && hintSquare && /^[a-h][1-8]$/.test(hintSquare) && (
+          <BoardMark
+            square={hintSquare as Square}
+            cell={width / 8}
+            flipped={flipped}
+            kind="hint"
+          />
         )}
-        {width > 0 &&
-          [mated, winner].map(
-            (square, index) =>
-              square && (
-                <View
-                  key={square}
-                  pointerEvents="none"
-                  style={[
-                    styles.mateBadge,
-                    {
-                      top:
-                        (Math.floor(squares.indexOf(square) / 8) * width) / 8 +
-                        2,
-                      left:
-                        (((squares.indexOf(square) % 8) + 1) * width) / 8 - 22,
-                      backgroundColor: index === 0 ? c.danger : c.gold,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={{
-                      fontSize: 13,
-                      lineHeight: 18,
-                      color: index === 0 ? c.onDanger : c.onGold,
-                    }}
-                  >
-                    {index === 0 ? "#" : "♛"}
-                  </Text>
-                </View>
-              ),
-          )}
+        {width > 0 && badge && (
+          <BoardMark
+            key={`badge-${fen}-${badge.kind}`}
+            square={badge.square}
+            cell={width / 8}
+            flipped={flipped}
+            kind={badge.kind}
+            delay={reduced ? 0 : MOVE_MS}
+          />
+        )}
+        {width > 0 && shown.mate.mated && (
+          <BoardMark
+            key={`mate-${fen}`}
+            square={shown.mate.mated}
+            cell={width / 8}
+            flipped={flipped}
+            kind="mated"
+            delay={shown.mate.fall ? MOVE_MS + 820 : undefined}
+          />
+        )}
+        {width > 0 && shown.mate.winner && (
+          <BoardMark
+            key={`winner-${fen}`}
+            square={shown.mate.winner}
+            cell={width / 8}
+            flipped={flipped}
+            kind="winner"
+            delay={shown.mate.fall ? MOVE_MS + 980 : undefined}
+          />
+        )}
       </View>
-    </View>
+    </GestureHandlerRootView>
   );
 }
 const styles = StyleSheet.create({
   base: { paddingBottom: 4, borderRadius: 14 },
-  grid: {
-    width: "100%",
-    aspectRatio: 1,
-    overflow: "hidden",
-    borderRadius: 10,
-  },
-  // A fixed square board and eight equal rows keep empty cells independent of content.
+  grid: { width: "100%", aspectRatio: 1, overflow: "hidden", borderRadius: 10 },
   row: { flex: 1, flexDirection: "row", minHeight: 0 },
   square: {
     flex: 1,
@@ -228,39 +446,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  mateBadge: {
-    position: "absolute",
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 4,
-  },
-  piece: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  dot: { position: "absolute", width: "25%", height: "25%", borderRadius: 30 },
+  dot: { position: "absolute", width: "30%", height: "30%", borderRadius: 30 },
   capture: {
     position: "absolute",
-    width: "88%",
-    height: "88%",
+    width: "92%",
+    height: "92%",
     borderWidth: 3,
-    borderRadius: 30,
-  },
-  selection: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    borderWidth: 3,
+    borderRadius: 40,
   },
   rank: { position: "absolute", top: 0, left: 3, fontSize: 10, lineHeight: 13 },
   file: {
@@ -271,51 +463,3 @@ const styles = StyleSheet.create({
     lineHeight: 13,
   },
 });
-
-function HintArrow({
-  uci,
-  flipped,
-  color,
-}: {
-  uci: string;
-  flipped: boolean;
-  color: string;
-}) {
-  const from = coordinates(uci.slice(0, 2) as Square, flipped),
-    to = coordinates(uci.slice(2, 4) as Square, flipped);
-  const x1 = from.x + 0.5,
-    y1 = from.y + 0.5,
-    x2 = to.x + 0.5,
-    y2 = to.y + 0.5;
-  const distance = Math.hypot(x2 - x1, y2 - y1);
-  if (!distance) return null;
-  const dx = (x2 - x1) / distance,
-    dy = (y2 - y1) / distance;
-  const baseX = x2 - dx * 0.55,
-    baseY = y2 - dy * 0.55;
-  return (
-    <Svg
-      pointerEvents="none"
-      accessible={false}
-      width="100%"
-      height="100%"
-      viewBox="0 0 8 8"
-      style={{ position: "absolute", top: 0, left: 0, zIndex: 2 }}
-    >
-      <Line
-        x1={x1}
-        y1={y1}
-        x2={baseX}
-        y2={baseY}
-        stroke={color}
-        strokeWidth={0.16}
-        opacity={0.8}
-      />
-      <Polygon
-        points={`${x2},${y2} ${baseX - dy * 0.3},${baseY + dx * 0.3} ${baseX + dy * 0.3},${baseY - dx * 0.3}`}
-        fill={color}
-        opacity={0.8}
-      />
-    </Svg>
-  );
-}

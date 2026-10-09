@@ -320,6 +320,7 @@ function Position({
         {card.opponent ?? "opponent"} · move {card.move_number}
       </Text>
       <Board
+        edgeInset={20}
         fen={fen}
         selected={selected}
         targets={selected ? legalTargets(card.fen_before, selected) : []}

@@ -8,6 +8,7 @@ import {
   type ViewProps,
 } from "react-native";
 import { fonts, useTheme } from "../lib/theme";
+import { subtleHaptic } from "../lib/haptics";
 export function Text({
   style,
   tone = "default",
@@ -44,10 +45,13 @@ export function Button({
   variant = "brand",
   disabled,
   style,
+  onPressIn,
+  hapticsEnabled = true,
   ...props
 }: Omit<PressableProps, "children"> & {
   label: string;
   variant?: "brand" | "secondary" | "gold" | "danger";
+  hapticsEnabled?: boolean;
 }) {
   const { colors: c } = useTheme();
   const fill = disabled
@@ -78,6 +82,10 @@ export function Button({
       <Pressable
         {...props}
         disabled={disabled}
+        onPressIn={(event) => {
+          if (!disabled && hapticsEnabled) subtleHaptic();
+          onPressIn?.(event);
+        }}
         accessibilityRole="button"
         accessibilityState={{ disabled: !!disabled }}
         style={(state) => [

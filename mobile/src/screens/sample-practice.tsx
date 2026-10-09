@@ -155,6 +155,7 @@ export default function PracticePreview() {
                 <Text tone="muted">White to move · Find checkmate in one.</Text>
               </View>
               <Board
+                edgeInset={20}
                 key={index}
                 flash={flash}
                 lastMove={lastMove}
