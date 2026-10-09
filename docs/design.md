@@ -8,6 +8,8 @@ re-synced from this repo; when the two disagree, the code wins.
   allowed to contain a color.
 - **Living reference:** `/styleguide` in the app renders every token and component (Settings
   links to it). Check new UI there in both themes.
+- **Screens:** [`docs/screens/`](screens/README.md) has each screen's layout, states and
+  decisions, with pictures of the design.
 - **Guardrail:** `pnpm lint` runs `scripts/check-colors.mjs`, which fails on hex,
   `rgb()`/`oklch()` and Tailwind palette classes (`bg-blue-500`, `text-white`) anywhere else.
 
