@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "expo": {
+      "type": "http",
+      "url": "https://mcp.expo.dev/mcp"
+    },
+    "supabase-staging": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=mwkkgxrkhhvvagouvtmo&read_only=true&features=database,debugging,docs"
+    },
+    "supabase-prod": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=duvdkqvszkmljwwrhhfk&read_only=true&features=database,debugging,docs"
+    }
+  }
+}

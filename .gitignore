@@ -17,3 +17,9 @@ sounds/
 *.tfstate
 *.tfstate.*
 *.tfvars
+
+# Personal coding-agent settings and credentials stay on each machine.
+.claude/settings.local.json
+.codex/auth.json
+.codex/config.local.toml
+.mcp.local.json
