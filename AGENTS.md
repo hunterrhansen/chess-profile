@@ -15,6 +15,15 @@ connection checks. When the checkout includes the mobile migration, read
 - The mobile app uses the existing HTTPS backend and Clerk identity. Preserve
   server-side practice grading and user isolation when changing either client.
 
+## Design
+
+Before changing UI in `web/` or `mobile/`, read [`docs/design.md`](docs/design.md) (tokens,
+components, the board, lessons, motion) and the screen's spec in
+[`docs/screens/`](docs/screens/README.md) (what each screen holds, its states, the decisions
+behind it, and a picture of the design). Colors come only from tokens; in `web/`, `pnpm lint`
+fails on raw colors. When a screen's design changes, update its spec and picture in the same
+change.
+
 ## Tools and skills
 
 - Use the official Expo skills for native UI, data fetching, SDK upgrades and
