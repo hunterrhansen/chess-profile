@@ -57,9 +57,12 @@ the owner's password manager, under "Knightly deploy".
       their own accounts.
       Production instance created (2026-10-08), all five DNS CNAMEs are managed in
       `infra/cloudflare/clerk.tf` and verified by Clerk. Both deletion webhooks exist;
-      production allows self-service deletion. Email sign-in is enabled. Google sign-in
-      is disabled in production until custom OAuth credentials are configured (the copied
-      connection had empty credentials and caused Google's missing-client-ID error).
+      production allows self-service deletion. Email and Google sign-in are enabled. Google
+      OAuth uses the dedicated `knightly-chess-prod` project, a web client restricted to
+      `https://knightlychess.app` and the Clerk callback, with its credentials saved in Clerk.
+      The owner accepted Google's policy and approved credential creation and activation.
+      Publishing status is In production; the live flow reaches Google's account chooser
+      with the correct client ID. Owner completion of sign-in remains to be verified.
       Both webhook signing secrets are saved in the
       matching server env files. Both deployments accept signed no-op webhook requests and
       reject invalid signatures. Real account deletion remains an end-to-end acceptance test.
