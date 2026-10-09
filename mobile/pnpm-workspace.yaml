@@ -1,0 +1,4 @@
+allowBuilds:
+  unrs-resolver: true
+  browser-tabs-lock: false
+  core-js: false
