@@ -62,7 +62,7 @@ the owner's password manager, under "Knightly deploy".
       `https://knightlychess.app` and the Clerk callback, with its credentials saved in Clerk.
       The owner accepted Google's policy and approved credential creation and activation.
       Publishing status is In production; the live flow reaches Google's account chooser
-      with the correct client ID. Owner completion of sign-in remains to be verified.
+      with the correct client ID. The owner completed production Google sign-in successfully.
       Both webhook signing secrets are saved in the
       matching server env files. Both deployments accept signed no-op webhook requests and
       reject invalid signatures. Real account deletion remains an end-to-end acceptance test.
@@ -86,7 +86,7 @@ the owner's password manager, under "Knightly deploy".
       401 without sign-in, and the browser displays Clerk sign-in. A signed no-op webhook
       is accepted and an invalid signature rejected. The owner signed in and confirmed that
       Chess.com onboarding imports games successfully. A throwaway deletion test remains.
-- [ ] **Production:** move the Mac data in (§3: migrate, then a data-only restore), deploy the
+- [x] **Production:** move the Mac data in (§3: migrate, then a data-only restore), deploy the
       staging tag (§9), and sign in as the owner. Run the backup by hand once (§7).
       GitHub Actions run `37883614272` deployed `sha-0ba6ab5` with the owner's approval.
       A fresh consistent snapshot was restored once; all 16 table counts matched, including
@@ -94,7 +94,11 @@ the owner's password manager, under "Knightly deploy".
       `backups/production-import-2026-10-08-10c15118.dump`, with a matching JSON manifest.
       Health, runtime config and unauthenticated-route checks pass; web is healthy and the
       worker and tunnel run. The first backup, `knightly-2026-10-09.dump` (UTC filename),
-      is verified in R2. Remaining: owner production sign-in, history linking and admin ID.
+      is verified in R2. The owner completed Google sign-in; the restored user was linked
+      to the verified production Clerk account without merging game histories. Its 687 games
+      and both chess accounts remain accessible under row-level security. Production admin
+      and CLI owner IDs are configured, and all services restarted healthy. A fresh backup
+      after linking completed successfully and matched its R2 copy.
 - [ ] **Done when** (architecture doc, Phases 4 and 5): a push to `main` reaches staging with
       no manual steps, and a friend can sign up, use Knightly and delete their account. Test
       the deletion in Safari with a throwaway account, since Clerk's captcha blocks automated
