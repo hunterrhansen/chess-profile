@@ -133,6 +133,49 @@ def compute(fen_before: str, played_uci: str, opponent: str, analyse) -> dict:
     return out
 
 
+def preview(board: chess.Board, analyse) -> dict:
+    """One short continuation; all numbers describe the current position for White."""
+    outcome = board.outcome()
+    result = None
+    if outcome:
+        result = {
+            chess.Termination.CHECKMATE: "Checkmate",
+            chess.Termination.STALEMATE: "Draw by stalemate",
+            chess.Termination.INSUFFICIENT_MATERIAL: "Draw by insufficient material",
+            chess.Termination.FIVEFOLD_REPETITION: "Draw by repetition",
+            chess.Termination.SEVENTYFIVE_MOVES: "Draw by the seventy-five-move rule",
+        }.get(outcome.termination, "Draw")
+    elif board.is_repetition(3):
+        result = "Draw by repetition"
+    elif board.is_fifty_moves():
+        result = "Draw by the fifty-move rule"
+    if result:
+        winner = outcome.winner if outcome else None
+        return {"start_fen": board.fen(), "moves": [], "san": [],
+                "eval_cp": None if winner is not None else 0,
+                "mate": 0 if winner is not None else None,
+                "white_win": 100 if winner == chess.WHITE else 0 if winner == chess.BLACK else 50,
+                "result": result}
+    score, pv = analyse(board)
+    white = score.white()
+    cp = white.score(mate_score=MATE_CP)
+    mate = white.mate()
+    candidates = trim(board, pv)
+    moves = []
+    shown = board.copy()
+    san = []
+    for move in candidates:
+        san.append(shown.san(move))
+        shown.push(move)
+        moves.append(move)
+        if shown.is_game_over() or shown.is_repetition(3) or shown.is_fifty_moves():
+            break
+    return {"start_fen": board.fen(), "moves": [m.uci() for m in moves], "san": san,
+            "eval_cp": white.score(), "mate": mate,
+            "white_win": (100 if mate > 0 else 0) if mate is not None
+            else round(win_pct(cp), 1) if cp is not None else 50, "result": None}
+
+
 class Engine:
     """A short-lived Stockfish for on-demand lines (one request, two positions)."""
 

@@ -280,6 +280,11 @@ class BotMoveIn(BaseModel):
     elo: int | None = Field(None, ge=100, le=play.MAX_ELO)  # None: the best move, as a hint
 
 
+class PositionPreviewIn(BaseModel):
+    fen: str = Field(max_length=200)
+    moves: list[str] = Field(default=[], max_length=256)
+
+
 class PlayedGameIn(BaseModel):
     moves: list[str] = Field(min_length=1, max_length=1000)  # UCI, from the start position
     color: Literal["white", "black"]
@@ -539,6 +544,37 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
                             DO UPDATE SET data = excluded.data, created_at = iso_now()""",
                          (game_id, ply, depth, json.dumps(data)))
         return data
+
+    @api.post("/api/review/position", dependencies=[Depends(engine_quota)])
+    def position_preview(body: PositionPreviewIn):
+        """Free review exploration: a legal history, one bounded Stockfish preview."""
+        try:
+            board = chess.Board(body.fen)
+            if not board.is_valid():
+                raise ValueError("invalid position")
+            for uci in body.moves:
+                if board.is_game_over() or board.is_repetition(3) or board.is_fifty_moves():
+                    raise ValueError("the position is over")
+                move = chess.Move.from_uci(uci)
+                if move not in board.legal_moves:
+                    raise ValueError("illegal move")
+                board.push(move)
+        except ValueError:
+            raise HTTPException(400, "Not a valid position or legal continuation.") from None
+        try:
+            # Terminal positions need no process, including repetition in the supplied history.
+            if board.is_game_over() or board.is_repetition(3) or board.is_fifty_moves():
+                return lines.preview(board, None)
+            with chess.engine.SimpleEngine.popen_uci(find_engine(None)) as engine:
+                engine.configure({"Threads": 1, "Hash": 32})
+
+                def analyse(position):
+                    info = engine.analyse(position, chess.engine.Limit(depth=18, nodes=250_000, time=1.5))
+                    return info["score"], info.get("pv", [])
+
+                return lines.preview(board, analyse)
+        except (SystemExit, OSError, TimeoutError, chess.engine.EngineError):
+            raise HTTPException(503, "Stockfish is unavailable. You can still explore moves.") from None
 
     @api.post("/api/play/move", dependencies=[Depends(engine_quota)])
     def bot_move(body: BotMoveIn):

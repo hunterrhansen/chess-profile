@@ -57,6 +57,8 @@ import { BlunderWarning, BotSays } from '@/pages/play'
 import { WinGraph } from '@/pages/review-moves'
 import { AccountCard, FindingRow, SiteChoice } from '@/pages/welcome'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { ReviewBoard, VariationPanel } from '@/components/review-bits'
+import { usePositionPreview, useVariation } from '@/lib/variation'
 import { Segmented, Row as SettingRow, Section as SettingsSection } from '@/pages/settings'
 
 /**
@@ -275,6 +277,7 @@ export function StyleguidePage() {
       <MotionBlock />
 
       <BoardBlock />
+      <ReviewVariationBlock />
 
       <Block title="Eval bar" note="White's share of the win chance; the eval sits on the side that's ahead.">
         <Row>
@@ -302,6 +305,20 @@ export function StyleguidePage() {
         </div>
       </Block>
     </div>
+  )
+}
+
+function ReviewVariationBlock() {
+  const fen = 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3'
+  const variation = useVariation(fen, 'styleguide')
+  const preview = usePositionPreview(fen, variation.path.map((n) => n.uci!), !variation.result)
+  return (
+    <Block title="Review variations" note="Move a piece directly to branch. ReviewBoard and VariationPanel reuse the blue line state, MoveText, Badge and Button; one live Stockfish preview, with no lesson grading.">
+      <div className="grid items-start gap-4 sm:grid-cols-2">
+        <ReviewBoard fen={variation.chess.fen()} orientation="white" lastMove={variation.lastMove} palette={BOARDS.sage} showBest={false} inLine={variation.exploring} interaction={variation} />
+        <div className="panel"><VariationPanel variation={variation} preview={preview} onPreview={(moves) => variation.follow(moves)} /></div>
+      </div>
+    </Block>
   )
 }
 
