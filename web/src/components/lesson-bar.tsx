@@ -23,9 +23,9 @@ export function LessonScreen({ children }: { children: React.ReactNode }) {
 }
 
 /** The board in a lesson: as big as the space between the prompt and the bar allows. */
-export function LessonBoard({ children }: { children: React.ReactNode }) {
+export function LessonBoard({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className="relative min-h-48 flex-1 [container-type:size]">
+    <div className={cn('relative min-h-48 flex-1 [container-type:size]', className)}>
       <div className="mx-auto size-[min(100cqw,100cqh)]">{children}</div>
     </div>
   )

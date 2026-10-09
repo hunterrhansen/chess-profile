@@ -1,4 +1,4 @@
-import { CircleNotchIcon, ListIcon, XIcon } from '@phosphor-icons/react'
+import { CaretLeftIcon, CaretRightIcon, CircleNotchIcon, ListIcon, XIcon } from '@phosphor-icons/react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router'
 import { LoadingBlock } from '@/components/empty-state'
@@ -6,7 +6,7 @@ import { FindBar } from '@/components/find-bar'
 import { MoveBadge } from '@/components/move-badge'
 import { MarkedText, MoveText } from '@/components/move-text'
 import { LessonBar, LessonBoard, LessonScreen, LessonVerdict } from '@/components/lesson-bar'
-import { LinePanel, ReviewBoard } from '@/components/review-bits'
+import { LinePanel, NavButton, ReviewBoard, VariationPanel } from '@/components/review-bits'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -20,6 +20,7 @@ import { type FindOutcome, useFindMove } from '@/lib/find-move'
 import { BOARDS, usePreferences } from '@/lib/preferences'
 import { type Replay, type Side, useEngineLines, useLineView, useReplay } from '@/lib/replay'
 import { PlayBoard } from '@/pages/play'
+import { usePositionPreview, useVariation } from '@/lib/variation'
 
 /**
  * A game's review, as a lesson: one step per key moment, the way Practice and Puzzles work.
@@ -152,20 +153,6 @@ function Step({
     (s: number) => setLine((l) => (l ? { ...l, step: Math.max(1, Math.min(lineLength, s)) } : l)),
     [lineLength],
   )
-  // While a line is open the arrow keys step through it, as in All moves; Escape goes back.
-  useEffect(() => {
-    if (!line) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.metaKey || e.ctrlKey || e.altKey) return
-      if (e.key === 'Escape') setLine(null)
-      const to = { ArrowLeft: lineStep - 1, ArrowRight: lineStep + 1, Home: 1, End: lineLength }[e.key]
-      if (to !== undefined) setLineStep(to)
-      if (to !== undefined || e.key === 'Escape') e.preventDefault()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [line, lineStep, lineLength, setLineStep])
-
   const find = step.type === 'find'
   // Find steps work like Practice: try again after a miss, Hint, Show me; the first try is
   // that position's graded answer for the day (deck.py).
@@ -176,6 +163,36 @@ function Step({
     tactic: tacticHint(move.pattern, step.kind === 'miss' || step.short.startsWith('Missed') ? 'chance' : 'threat'),
   })
   const answered = !find || !!fm.outcome
+  const [beforeReviewed, setBeforeReviewed] = useState(false)
+  const baseFen = lineView?.fens[lineStep] ?? (beforeReviewed ? replay.fens[ply - 1] : find ? fm.shown.fen() : replay.fens[ply])
+  const variation = useVariation(baseFen, `${game.id}:${ply}`)
+  const preview = usePositionPreview(baseFen, variation.path.map((n) => n.uci!), (answered || variation.exploring) && !variation.result && (!line || variation.exploring))
+  useEffect(() => {
+    if (!line && !variation.exploring && !answered) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.metaKey || e.ctrlKey || e.altKey) return
+      if (variation.exploring) {
+        if (e.key === 'Escape') variation.back()
+        if (e.key === 'ArrowLeft') variation.previous()
+        if (e.key === 'ArrowRight') variation.next()
+        if (e.key === 'Home') variation.go(0)
+        if (['Escape', 'ArrowLeft', 'ArrowRight', 'Home'].includes(e.key)) e.preventDefault()
+        return
+      }
+      if (!line) {
+        if (e.key === 'ArrowLeft' && (!find || !!fm.played)) setBeforeReviewed(true)
+        if (e.key === 'ArrowRight') setBeforeReviewed(false)
+        if (['ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault()
+        return
+      }
+      if (e.key === 'Escape') setLine(null)
+      const to = { ArrowLeft: lineStep - 1, ArrowRight: lineStep + 1, Home: 1, End: lineLength }[e.key]
+      if (to !== undefined) setLineStep(to)
+      if (to !== undefined || e.key === 'Escape') e.preventDefault()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [line, lineStep, lineLength, setLineStep, variation, answered, find, fm.played])
   useEffect(() => {
     if (find && fm.outcome) onMark(FIND_MARK[fm.outcome])
   }, [find, fm.outcome, onMark])
@@ -206,6 +223,16 @@ function Step({
   const kind = CLASSIFICATION[step.kind]
   const done = index + (answered ? 1 : 0)
   const label = moveLabel(ply, san)
+  const positionPanel = (
+    <>
+      <div className="flex items-center gap-2 px-3 pt-2">
+        <NavButton label="Before the reviewed move" onClick={() => setBeforeReviewed(true)} disabled={beforeReviewed || (find && !fm.played)} icon={<CaretLeftIcon />} className="h-8 w-10 [&_svg]:size-4" />
+        <NavButton label={find ? 'After your answer' : 'After the reviewed move'} onClick={() => setBeforeReviewed(false)} disabled={!beforeReviewed} icon={<CaretRightIcon />} className="h-8 w-10 [&_svg]:size-4" />
+        <span className="text-xs text-muted-foreground">Move a piece to try a continuation.</span>
+      </div>
+      <VariationPanel variation={variation} preview={preview} onPreview={(moves) => variation.follow(moves)} />
+    </>
+  )
 
   return (
     <>
@@ -232,23 +259,27 @@ function Step({
           <Badge variant="secondary">
             vs {opponent} · {shortDate(game.played_at)} · move {Math.ceil(ply / 2)}
           </Badge>
-          <span className="flex items-center gap-1.5 text-sm font-bold" style={{ color: kind.color }}>
+          {!variation.exploring && <span className="flex items-center gap-1.5 text-sm font-bold" style={{ color: kind.color }}>
             <MoveBadge kind={step.kind} />
             {kind.label}
-          </span>
+          </span>}
         </div>
-        <h1 className="text-3xl font-bold text-balance">{prompt}</h1>
-        {sub && <p className="text-muted-foreground">{sub}</p>}
+        <h1 className="text-3xl font-bold text-balance">{variation.exploring ? 'What if you played…' : beforeReviewed && !line ? `Before ${san}` : find && answered && !line ? 'Try a continuation.' : prompt}</h1>
+        {sub && !answered && !variation.exploring && !beforeReviewed && <p className="text-muted-foreground">{sub}</p>}
       </div>
 
-      {line && (
+      {line && !variation.exploring && (
           <p className="flex items-center gap-2 rounded-lg bg-sky/15 px-3 py-2 text-sm font-extrabold">
             <span className="size-2.5 rounded-full bg-sky" /> Engine line, not the game.
             {lineView && ` Move ${lineStep} of ${lineLength}.`}
           </p>
       )}
-      <LessonBoard>
-        {line ? (
+      <LessonBoard className={answered && !line && !variation.exploring && !beforeReviewed ? 'min-h-32' : undefined}>
+        {variation.exploring ? (
+          <ReviewBoard fen={variation.chess.fen()} orientation={me} lastMove={variation.lastMove}
+            nextMove={preview.data?.moves[0] ? { from: preview.data.moves[0].slice(0, 2), to: preview.data.moves[0].slice(2, 4) } : undefined}
+            showBest={false} palette={BOARDS[prefs.board]} inLine interaction={variation} />
+        ) : line ? (
           <ReviewBoard
             fen={lineView ? lineView.fens[lineStep] : replay.fens[ply - 1]}
             orientation={me}
@@ -257,8 +288,9 @@ function Step({
             showBest={false}
             palette={BOARDS[prefs.board]}
             inLine
+            interaction={lineView ? variation : undefined}
           />
-        ) : find ? (
+        ) : find && !answered ? (
           <PlayBoard
             chess={fm.shown}
             orientation={me}
@@ -274,17 +306,32 @@ function Step({
           />
         ) : (
           <ReviewBoard
-            fen={replay.fens[ply]}
+            fen={baseFen}
             orientation={me}
-            lastMove={replay.squares[ply - 1]}
-            move={move}
-            showBest={step.type === 'look'}
+            lastMove={beforeReviewed ? replay.squares[ply - 2] : find ? fm.board.lastMove ?? replay.squares[ply - 2] : replay.squares[ply - 1]}
+            move={find || beforeReviewed ? undefined : move}
+            flash={find && !beforeReviewed ? fm.board.flash : undefined}
+            showBest={beforeReviewed && step.type === 'look'}
             palette={BOARDS[prefs.board]}
+            interaction={variation}
           />
         )}
       </LessonBoard>
 
-      {line ? (
+      {answered && !line && !variation.exploring && !beforeReviewed && (
+        <div className="panel max-h-28 shrink-0 overflow-y-auto">
+          {positionPanel}
+        </div>
+      )}
+      {variation.exploring ? (
+        <LessonBar tone="idle">
+          <div className="max-h-48 w-full overflow-y-auto">
+            <VariationPanel variation={variation} preview={preview} onPreview={(moves) => variation.follow(moves)} />
+          </div>
+        </LessonBar>
+      ) : beforeReviewed && !line ? (
+        <LessonBar tone="idle"><div className="max-h-48 w-full overflow-y-auto">{positionPanel}</div></LessonBar>
+      ) : line ? (
         <div className="panel overflow-hidden">
           <LinePanel
             kind={line.kind}
@@ -408,18 +455,18 @@ function Sheet({
         actions={
           <>
             {onLine && (
-              <Button size="lg" variant="outline" onClick={onLine}>
+              <Button size="lg" className="min-w-0 px-3 text-xs sm:px-6 sm:text-base" variant="outline" onClick={onLine}>
                 Show the line
               </Button>
             )}
-            <Button size="lg" variant={tone === 'right' ? 'default' : tone === 'wrong' ? 'danger' : 'gold'} onClick={onNext} disabled={busy}>
+            <Button size="lg" className="min-w-0 px-3 text-xs sm:px-6 sm:text-base" variant={tone === 'right' ? 'default' : tone === 'wrong' ? 'danger' : 'gold'} onClick={onNext} disabled={busy}>
               {busy && <CircleNotchIcon className="animate-spin" />}
               {next}
             </Button>
           </>
         }
       >
-        {children}
+        <div className="max-h-16 overflow-y-auto">{children}</div>
       </LessonVerdict>
     </LessonBar>
   )

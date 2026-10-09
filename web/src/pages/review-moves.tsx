@@ -1,11 +1,12 @@
 import { ArrowLeftIcon, ArrowSquareOutIcon, CaretLeftIcon, CaretLineLeftIcon, CaretLineRightIcon, CaretRightIcon, PlayIcon } from '@phosphor-icons/react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Chess } from 'chess.js'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { ResultBadge } from '@/components/game-bits'
 import { LoadingBlock } from '@/components/empty-state'
 import { MoveBadge } from '@/components/move-badge'
 import { MoveText } from '@/components/move-text'
-import { EvalBar, LinePanel, MoveList, NavButton, PlayerStrip, ReviewBoard } from '@/components/review-bits'
+import { EvalBar, LinePanel, MoveList, NavButton, PlayerStrip, ReviewBoard, VariationPanel } from '@/components/review-bits'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -18,6 +19,7 @@ import { useWide } from '@/lib/motion'
 import { BOARDS, usePreferences } from '@/lib/preferences'
 import { type Replay, type Side, clockAt, resultPhrase, useLineView, useReplay } from '@/lib/replay'
 import { cn } from '@/lib/utils'
+import { usePositionPreview, useVariation } from '@/lib/variation'
 
 /**
  * All moves: the whole game, to browse outside the lesson. The board with the eval bar and
@@ -49,9 +51,13 @@ export function AllMovesPage() {
     (s: number) => setLine((l) => (l ? { ...l, step: Math.max(1, Math.min(lineLength, s)) } : l)),
     [lineLength],
   )
+  const baseFen = lineView?.fens[step] ?? replay?.fens[ply] ?? new Chess().fen()
+  const variation = useVariation(baseFen, id ?? '')
+  const preview = usePositionPreview(baseFen, variation.path.map((n) => n.uci!), !!game && !variation.result && (!line || variation.exploring))
 
   const setPly = useCallback(
     (p: number) => {
+      variation.back()
       setLine(null)
       return setParams(
         (prev) => {
@@ -63,12 +69,20 @@ export function AllMovesPage() {
         { replace: true },
       )
     },
-    [setParams],
+    [setParams, variation],
   )
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.metaKey || e.ctrlKey || e.altKey) return
+      if (variation.exploring) {
+        if (e.key === 'Escape') variation.back()
+        if (e.key === 'ArrowLeft') variation.previous()
+        if (e.key === 'ArrowRight') variation.next()
+        if (e.key === 'Home') variation.go(0)
+        if (['Escape', 'ArrowLeft', 'ArrowRight', 'Home'].includes(e.key)) e.preventDefault()
+        return
+      }
       if (line) {
         // While a line is open the keys step through it; Escape goes back to the game.
         if (e.key === 'Escape') setLine(null)
@@ -84,7 +98,7 @@ export function AllMovesPage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [ply, last, setPly, line, step, lineLength, setStep])
+  }, [ply, last, setPly, line, step, lineLength, setStep, variation])
 
   if (error) return <p className="text-sm text-destructive">Couldn't load this game. {error}</p>
   if (!game || !replay) return <MovesSkeleton />
@@ -97,13 +111,24 @@ export function AllMovesPage() {
   // Your win chance (not the mover's): before the move, and at the end of the open line.
   const yours = (moverPct: number | null | undefined) =>
     moverPct == null ? null : Math.round(mine ? moverPct : 100 - moverPct)
-  const inLine = !!lineView
+  const inLine = !!lineView || variation.exploring
   const lineWhiteWin =
     lineView?.data.win_pct != null ? (moverWhite ? lineView.data.win_pct : 100 - lineView.data.win_pct) : null
   const hasLesson = moments.length > 0
   const stepAt = moments.findIndex((k) => k.ply === ply)
   const wrong = !!move && !isSound(move.classification) && !!move.best_san
-  const linePanel = line && move && san && (
+  const followPreview = (moves: string[]) => {
+    if (!line && !variation.exploring) {
+      try {
+        const probe = new Chess(baseFen)
+        const matches = moves.map((uci) => probe.move(uci).san).every((s, i) => s === game.san[ply + i])
+        if (matches) { setPly(ply + moves.length); return }
+      } catch { return }
+    }
+    variation.follow(moves)
+  }
+  const positionPanel = <VariationPanel variation={variation} preview={preview} controls={false} onPreview={followPreview} />
+  const linePanel = variation.exploring ? positionPanel : line && move && san && (
     <LinePanel
       kind={line.kind}
       view={lineView}
@@ -119,7 +144,20 @@ export function AllMovesPage() {
       onSwitch={() => setLine({ kind: line.kind === 'why' ? 'best' : 'why', step: 1 })}
     />
   )
-  const board = lineView ? (
+  const interaction = { ...variation, move: (from: string, to: string) => {
+    if (!line && !variation.exploring) {
+      try {
+        const moved = new Chess(baseFen).move({ from, to, promotion: 'q' })
+        if (moved.san === game.san[ply]) { setPly(ply + 1); return true }
+      } catch { return false }
+    }
+    return variation.move(from, to)
+  } }
+  const board = variation.exploring ? (
+    <ReviewBoard fen={variation.chess.fen()} orientation={me} lastMove={variation.lastMove ?? (lineView ? lineView.squares[step - 1] : replay.squares[ply - 1])}
+      nextMove={preview.data?.moves[0] ? { from: preview.data.moves[0].slice(0, 2), to: preview.data.moves[0].slice(2, 4) } : undefined}
+      showBest={false} palette={BOARDS[prefs.board]} inLine interaction={interaction} />
+  ) : lineView ? (
     <ReviewBoard
       fen={lineView.fens[step]}
       orientation={me}
@@ -128,6 +166,7 @@ export function AllMovesPage() {
       showBest={false}
       palette={BOARDS[prefs.board]}
       inLine
+      interaction={interaction}
     />
   ) : (
     <ReviewBoard
@@ -137,6 +176,7 @@ export function AllMovesPage() {
       move={move}
       showBest={showBest}
       palette={BOARDS[prefs.board]}
+      interaction={line ? undefined : interaction}
     />
   )
   const theirStrip = (inset: boolean) => (
@@ -145,10 +185,22 @@ export function AllMovesPage() {
       rating={me === 'white' ? game.black_elo : game.white_elo}
       seconds={clockAt(replay.moves, them, ply, replay.baseClock)}
       dim={inLine}
-      tag={inLine ? 'Engine line · not played' : undefined}
+      tag={variation.exploring ? 'Variation · not played' : inLine ? 'Engine line · not played' : undefined}
       inset={inset}
     />
   )
+
+  const previous = () => variation.exploring ? variation.previous() : line ? setStep(step - 1) : setPly(Math.max(0, ply - 1))
+  const next = () => variation.exploring ? variation.next() : line ? setStep(step + 1) : setPly(Math.min(last, ply + 1))
+  const start = () => variation.exploring ? variation.go(0) : line ? setStep(1) : setPly(0)
+  const end = () => {
+    if (variation.exploring) {
+      let node = variation.tree.nodes[variation.cursor]
+      while (node.children.length) node = variation.tree.nodes[node.preferred ?? node.children[0]]
+      variation.go(node.id)
+    } else if (line) setStep(lineLength)
+    else setPly(last)
+  }
   const yourStrip = (inset: boolean) => (
     <PlayerStrip
       name={me === 'white' ? game.white : game.black}
@@ -192,7 +244,7 @@ export function AllMovesPage() {
         </div>
 
         {linePanel ? (
-          <div className="panel mx-4 mt-1 shrink-0 overflow-hidden">{linePanel}</div>
+          <div className="panel mx-4 mt-1 max-h-48 shrink-0 overflow-y-auto">{linePanel}</div>
         ) : (
           <div className="px-4 pt-1">
             {ply && san ? (
@@ -231,21 +283,25 @@ export function AllMovesPage() {
           </div>
         )}
 
+        {!linePanel && <div className="mx-4 max-h-36 shrink-0 overflow-y-auto">{positionPanel}</div>}
+
         <MoveStrip san={game.san} moves={replay.moves} ply={ply} me={me} dim={inLine} onSelect={setPly} />
 
         <footer className="mt-2 flex gap-2 border-t-2 bg-card px-4 pt-2.5 pb-[max(14px,env(safe-area-inset-bottom))]">
           <NavButton
             label="Previous move"
-            onClick={() => (line ? setStep(step - 1) : setPly(Math.max(0, ply - 1)))}
+            onClick={previous}
+            disabled={variation.exploring && variation.cursor === 0}
             icon={<CaretLeftIcon />}
           />
           <NavButton
             label="Next move"
-            onClick={() => (line ? setStep(step + 1) : setPly(Math.min(last, ply + 1)))}
+            onClick={next}
+            disabled={variation.exploring && !variation.tree.nodes[variation.cursor].children.length}
             icon={<CaretRightIcon />}
           />
-          {line ? (
-            <Button className="flex-1" onClick={() => setLine(null)}>
+          {variation.exploring || line ? (
+            <Button className="flex-1" onClick={() => variation.exploring ? variation.back() : setLine(null)}>
               Back to the game
             </Button>
           ) : wrong ? (
@@ -311,7 +367,11 @@ export function AllMovesPage() {
         >
           {theirStrip(true)}
           <div className="flex gap-2">
-            {lineView ? (
+            {variation.exploring ? (
+              <EvalBar whiteWin={variation.terminalWhiteWin ?? preview.data?.white_win ?? 50}
+                label={variation.result ? variation.chess.isCheckmate() ? 'M0' : '0.0' : preview.data?.mate != null ? `M${preview.data.mate}` : preview.data?.eval_cp != null ? (preview.data.eval_cp / 100).toFixed(1) : null}
+                orientation={me} />
+            ) : lineView ? (
               <EvalBar
                 whiteWin={lineWhiteWin ?? replay.whiteWin[ply]}
                 label={lineView.data.mate != null ? `M${Math.abs(lineView.data.mate)}` : null}
@@ -325,26 +385,28 @@ export function AllMovesPage() {
           {yourStrip(true)}
           {/* While a line is open these step through the line instead of the game. */}
           <div className="mt-1 grid grid-cols-4 gap-2 pl-6">
-            <NavButton label="Start of the game" onClick={() => (line ? setStep(1) : setPly(0))} icon={<CaretLineLeftIcon />} />
+            <NavButton label={variation.exploring ? 'Start of the variation' : 'Start of the game'} onClick={start} icon={<CaretLineLeftIcon />} />
             <NavButton
               label="Previous move"
-              onClick={() => (line ? setStep(step - 1) : setPly(Math.max(0, ply - 1)))}
+              onClick={previous}
+              disabled={variation.exploring && variation.cursor === 0}
               icon={<CaretLeftIcon />}
             />
             <NavButton
               label="Next move"
-              onClick={() => (line ? setStep(step + 1) : setPly(Math.min(last, ply + 1)))}
+              onClick={next}
+              disabled={variation.exploring && !variation.tree.nodes[variation.cursor].children.length}
               icon={<CaretRightIcon />}
             />
-            <NavButton label="End of the game" onClick={() => (line ? setStep(lineLength) : setPly(last))} icon={<CaretLineRightIcon />} />
+            <NavButton label={variation.exploring ? 'End of the variation' : 'End of the game'} onClick={end} icon={<CaretLineRightIcon />} />
           </div>
         </section>
 
         <aside aria-label="Moves" className="flex min-w-0 flex-col gap-3.5 lg:min-h-0">
           {replay.moves.length > 0 && (
-            <WinGraph replay={replay} me={me} ply={ply} moments={moments} onSelect={setPly} />
+            <WinGraph replay={replay} me={me} ply={ply} moments={moments} onSelect={setPly} originalOnly={variation.exploring} />
           )}
-          <div className="panel overflow-hidden">
+          <div className="panel max-h-60 shrink-0 overflow-y-auto">
             {linePanel ? (
               linePanel
             ) : (
@@ -363,6 +425,8 @@ export function AllMovesPage() {
               />
             )}
           </div>
+          {!variation.exploring && !line && <div className="panel max-h-40 shrink-0 overflow-y-auto">{positionPanel}</div>}
+          {variation.exploring && <Button onClick={variation.back}>Back to game</Button>}
           <div className={cn('panel flex max-h-80 min-h-48 flex-col overflow-hidden transition-opacity lg:max-h-none lg:min-h-0 lg:flex-1', inLine && 'opacity-40')}>
             <MoveList san={game.san} moves={replay.moves} ply={ply} me={me} onSelect={setPly} />
           </div>
@@ -382,12 +446,14 @@ export function WinGraph({
   ply,
   moments,
   onSelect,
+  originalOnly = false,
 }: {
   replay: Replay
   me: Side
   ply: number
   moments: KeyMoment[]
   onSelect: (ply: number) => void
+  originalOnly?: boolean
 }) {
   const W = 400
   const H = 112
@@ -400,7 +466,7 @@ export function WinGraph({
   return (
     <section aria-label="Your winning chance" className="panel flex flex-col gap-2.5 px-4 py-3.5">
       <div className="flex items-baseline justify-between">
-        <span className="eyebrow">Your winning chance</span>
+        <span className="eyebrow">{originalOnly ? 'Original game · your chance' : 'Your winning chance'}</span>
         <span className="font-heading text-2xl font-bold tabular-nums">{Math.round(mine[ply])}%</span>
       </div>
       <div className="relative">

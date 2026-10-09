@@ -257,6 +257,56 @@ def test_engine_lines_are_computed_once_then_cached(db_url, client, tmp_path, mo
     assert client.get("/api/games/2/lines/99").status_code == 404
 
 
+def test_position_preview_validates_history_and_leaves_game_unchanged(client, monkeypatch):
+    import chess
+    import chess.engine
+    calls = []
+
+    class FakeEngine:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            pass
+
+        def configure(self, options):
+            assert options == {"Threads": 1, "Hash": 32}
+
+        def analyse(self, board, limit):
+            calls.append(board.fen())
+            assert limit.time == 1.5 and limit.nodes == 250_000 and limit.depth == 18
+            return {"score": chess.engine.PovScore(chess.engine.Cp(-25), chess.WHITE),
+                    "pv": [next(iter(board.legal_moves))]}
+
+    monkeypatch.setattr(api, "find_engine", lambda _: "fake")
+    monkeypatch.setattr(chess.engine.SimpleEngine, "popen_uci", lambda _: FakeEngine())
+    original = client.get("/api/games/2").json()
+    r = client.post("/api/review/position", json={"fen": chess.STARTING_FEN, "moves": ["e2e4", "c7c5"]})
+    assert r.status_code == 200 and r.json()["eval_cp"] == -25
+    assert r.json()["start_fen"] == calls[0]
+    assert client.get("/api/games/2").json() == original
+    for fen, moves in [("bad", []), ("8/8/8/8/8/8/8/8 w - - 0 1", []),
+                       (chess.STARTING_FEN, ["e2e5"]), (chess.STARTING_FEN, ["0000"]),
+                       (chess.STARTING_FEN, ["e2e4", "e2e4"])]:
+        assert client.post("/api/review/position", json={"fen": fen, "moves": moves}).status_code == 400
+    assert len(calls) == 1
+
+
+def test_terminal_preview_and_engine_unavailable(client, monkeypatch):
+    import chess
+
+    def missing(_):
+        raise SystemExit("not installed")
+
+    monkeypatch.setattr(api, "find_engine", missing)
+    moves = ["g1f3", "g8f6", "f3g1", "f6g8"] * 2
+    r = client.post("/api/review/position", json={"fen": chess.STARTING_FEN, "moves": moves})
+    assert r.status_code == 200 and r.json()["result"] == "Draw by repetition"
+    assert client.post("/api/review/position", json={"fen": chess.STARTING_FEN, "moves": moves + ["e2e4"]}).status_code == 400
+    assert client.post("/api/review/position", json={"fen": chess.STARTING_FEN}).status_code == 503
+    assert client.post("/api/review/position", json={"fen": chess.STARTING_FEN, "moves": ["e2e4"] * 257}).status_code == 422
+
+
 def test_finish_review(client):
     assert client.get("/api/games/1").json()["reviewed_at"] is None
     r = client.post("/api/games/1/review")

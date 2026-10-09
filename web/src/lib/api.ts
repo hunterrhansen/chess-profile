@@ -359,6 +359,17 @@ export interface EngineLine {
 
 export type EngineLines = Partial<Record<LineKind, EngineLine>>
 
+/** One principal variation and evaluation, always from White's perspective. */
+export interface PositionPreview {
+  start_fen: string
+  moves: string[]
+  san: string[]
+  eval_cp: number | null
+  mate: number | null
+  white_win: number
+  result: string | null
+}
+
 export interface GameDetail extends Game {
   account: string | null
   white: string

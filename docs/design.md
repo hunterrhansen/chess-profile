@@ -206,7 +206,12 @@ with help, red missed, gold a great move (review only). Each mark is a rounded b
   Reviewed (green check) or a Review chip.
 - **All moves** (`pages/review-moves.tsx`): `WinGraph`, your winning chance over the game as a
   green line and fill, the lesson's key moments as `MoveBadge`s on the line (tap one to jump),
-  and a sky line where you are.
+  and a sky line where you are. Moving a piece directly starts a variation; matching the next
+  recorded move continues the game. `VariationPanel` uses the existing blue line state,
+  `MoveText`, `Badge`, `Button` and `NavButton` for the path and a single Stockfish preview
+  (White's evaluation). Back to game restores the origin. The lesson uses the same pieces;
+  Find steps retain their graded attempt, then allow free exploration after the verdict.
+  [Review variations](review-variations.md) covers the scope and acceptance checks.
 - **Play** (`pages/play.tsx`): `BotSays`, the bot's avatar and a speech bubble (a spinner and
   "Thinking…" while it thinks, `danger-text` on an error). `BlunderWarning`, once a game when a
   move loses a lot: a card on a gold ledge with a gold "!" mark, "Blunder check", what the
