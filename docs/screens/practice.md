@@ -96,7 +96,8 @@ inside the viewport. The same sample flow passed in the iPhone 18 Pro simulator:
 wrong move and automatic reset, correct recovery, Continue to the next position,
 Show me, completion, and × exit back to Home. Connected grading and network failure
 recovery were not replayed against an account.
-Lint, typecheck, all 16 existing tests and the Expo web export passed.
+After integrating the latest main, lint, typecheck, token consistency, all 25
+existing tests, Expo Doctor (21/21), and iOS/web exports passed.
 
 ![Native correct-answer feedback and fixed Continue button](img/practice-ios-right.png)
 

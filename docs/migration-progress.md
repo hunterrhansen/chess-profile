@@ -176,8 +176,8 @@ Estimated implementation: 1–2 developer days, plus device checks.
   Home/Games after practice, import and foregrounding.
 - [ ] Test wrong answer, hint, Show me, network failure, session rejection and
   repeat taps without duplicate grading; test interrupted and resumed practice.
-- [ ] Check large text, Reduce Motion, VoiceOver square announcements, help-dialog
-  focus/dismissal and narrow-screen action reachability on iPhone.
+- [ ] Check large text, Reduce Motion, VoiceOver square announcements, lesson exit
+  and Hint controls and narrow-screen action reachability on iPhone.
 
 Acceptance: ordinary and underpromotion positions are playable; only intended
 graded answers affect scheduling; Home shows current progress after returning.
@@ -277,5 +277,5 @@ screens and outcomes for native acceptance; do not mark a route complete solely
 because it exports successfully.
 
 **Next bounded task:** review the clickable Home → Games → Game Review → Practice
-journey and the five-tab layout, then design the game-review interaction flow.
+journey and the four-tab layout, then design the game-review interaction flow.
 The promotion picker remains a practice-correctness task in milestone 1.
