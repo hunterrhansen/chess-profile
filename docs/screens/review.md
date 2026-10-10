@@ -72,3 +72,46 @@ Not in the lesson: nav, eval bar, clocks (they live in All moves).
   tiles with a colored band (Found green, Accuracy gold, To fix red), the marks row, one big
   button and Back home. The best-moment card and the unit bar are left out. Checked at 375 × 812
   and 375 × 667.
+
+
+## Mobile read-only replay — October 10, 2026
+
+**Code:** `mobile/src/screens/game-replay.tsx`, `mobile/src/lib/game-replay.ts`.
+Both `/games/[id]` and `/games/[id]/moves` open All moves for this first slice.
+Guided lessons and Review complete are still unfinished. Opening or stepping
+through a game does not submit answers or mark it reviewed.
+
+![Mobile replay, browser phone viewport](img/review-replay-phone.jpg)
+
+The phone layout has Games/All moves/Flip in its header, player names and the
+read-only board, the current move and half-move count, a horizontal selectable
+move strip, and pinned first/previous/next/last controls. The square board spans
+the full screen width with no rounded corners or bottom ledge; its size is not
+capped by screen height. Player names and other content keep their 16px inset.
+The move strip scrolls horizontally with its scrollbar hidden. Content can scroll on
+short screens while navigation stays reachable. Games exits to the library,
+including when replay was opened through a deep link. The initial board faces
+the user's side; Flip changes board orientation and player ordering.
+
+Authenticated replay uses the existing game-detail endpoint and its SAN list,
+which is present before analysis. Custom starting positions retain their side
+and full-move numbering. Last-move squares follow the selected position. Available
+classification and best-move text are shown for the matching analysed move.
+An unconfigured app offers a labeled sample game through Games. Failed account
+requests show an error/retry; they never switch to sample data.
+
+States include loading, invalid link/not found/API failure, empty recorded game,
+and content. A corrupt starting FEN shows an error without substituting another
+board. A malformed SAN move stops at the last valid position with an explanation.
+The screen intentionally defers clocks, evaluation/history graphs, engine lines,
+variations and guided review to follow-up slices.
+
+Browser interaction checks passed at 390×844, 320×568 and desktop width for navigation bounds,
+move selection, checkmate, flip, Games exit and small-screen action reachability.
+A temporary local fixture exercised failed loading followed by retry, Black's
+initial orientation, no moves, invalid links and invalid FEN; the fixture was
+removed. Chess-logic tests cover custom FEN/numbering, unanalysed replay, castling,
+en passant, underpromotion and malformed moves. Native simulator interaction
+could not run because the Mac was locked; connected account replay and physical
+accessibility remain acceptance checks. Mobile lint, typecheck, all 71 tests, token
+consistency and iOS/web exports passed. This picture is React Native Web.
