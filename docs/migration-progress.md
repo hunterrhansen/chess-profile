@@ -1,7 +1,22 @@
 # Mobile migration progress and next steps
 
-Audited October 9, 2026, against commit `13c6111`. Update this checklist as each
-flow is implemented and verified.
+Initial audit: October 9, 2026, commit `13c6111`. Historical sections below
+record earlier slices; the latest status is this Practice follow-up.
+
+Practice now has promotion choice (including required knight promotion), the
+tactic/piece/move hint ladder, classification and previous-move context, a
+clear completion summary, and durable hints/retries scoped by server/user/day.
+Lost-response recovery reconciles saved in-flight cards with server results.
+Browser checks cover stubbed connected answers and failures. The iPhone 18 Pro
+simulator sample passed hints, wrong/correct recovery, Show me, knight promotion,
+completion and Home exit. Connected on-device recovery and accessibility remain
+release checks. Appearance persistence and foreground
+refresh are separate unfinished work.
+
+Follow-up verification: 36 mobile tests, lint, types, tokens, Expo Doctor (21/21)
+and iOS/web exports passed. The real backend underpromotion regression passed.
+The full backend suite is blocked for database-dependent tests by unavailable
+local Postgres. The native sample interaction check passed; see the Practice spec.
 
 Knightly has an iPhone preview with account sign-in and server-backed daily
 practice. It is useful for an existing user whose games are already imported.
@@ -140,11 +155,11 @@ handoff, not proof of native parity.
 
 ## Gaps inside the existing mobile flows
 
-1. **Promotion choice:** `mobile/src/app/practice.tsx` always submits promotion
+1. **Promotion choice (resolved in the Practice follow-up):** the initial audit found that `mobile/src/app/practice.tsx` always submitted promotion
    to a queen. The piece-motion helper handles promotions, but the screen cannot
    submit a knight, bishop or rook promotion. Add a picker before submitting and
    cover an underpromotion practice position.
-2. **Teaching parity:** the web hint ladder includes a tactic hint when available,
+2. **Teaching parity (resolved in the Practice follow-up):** the web hint ladder includes a tactic hint when available,
    then piece and move hints. Mobile starts at the piece. Its practice view also
    omits the web's tactic explanation, classification, winning-chance context and
    initial previous-move highlight. Preserve server grading while restoring the
@@ -169,8 +184,8 @@ handoff, not proof of native parity.
 
 Estimated implementation: 1–2 developer days, plus device checks.
 
-- [ ] Add promotion selection and a regression test for a required underpromotion.
-- [ ] Restore tactic hints and post-answer teaching context; retain first-answer
+- [x] Add promotion selection and a regression test for a required underpromotion.
+- [x] Restore tactic hints and post-answer teaching context; retain first-answer
   grading and `redo` semantics on the server.
 - [ ] Persist appearance preferences and add a deliberate refresh policy for
   Home/Games after practice, import and foregrounding.
@@ -276,6 +291,6 @@ Expo Doctor and iOS export. Record the tested platform, account environment,
 screens and outcomes for native acceptance; do not mark a route complete solely
 because it exports successfully.
 
-**Next bounded task:** review the clickable Home → Games → Game Review → Practice
-journey and the four-tab layout, then design the game-review interaction flow.
-The promotion picker remains a practice-correctness task in milestone 1.
+**Next bounded task:** deliver these Practice changes through a PR and a fresh
+iPhone preview. Check connected recovery and accessibility on that preview; then
+port read-only game replay before the guided review lessons.

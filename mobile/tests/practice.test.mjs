@@ -13,6 +13,7 @@ test("every fixture solution is a legal checkmate", () => {
       exercise,
       exercise.solution.slice(0, 2),
       exercise.solution.slice(2, 4),
+      exercise.solution[4] ?? "q",
     );
     assert.equal(result.correct, true);
     assert.equal(new Chess(result.fen).isCheckmate(), true);
@@ -42,4 +43,14 @@ test("flipping reverses all squares without losing their identity", () => {
   assert.equal(normal[0], "a8");
   assert.equal(flipped[0], "h1");
   assert.deepEqual(flipped, [...normal].reverse());
+});
+
+test("underpromotion fixture requires a knight: queen stalemates", () => {
+  const exercise = exercises[2];
+  const knight = evaluateMove(exercise, "g7", "g8", "n");
+  const queen = evaluateMove(exercise, "g7", "g8", "q");
+  assert.equal(knight.correct, true);
+  assert.equal(new Chess(knight.fen).isCheckmate(), true);
+  assert.equal(queen.correct, false);
+  assert.equal(new Chess(queen.fen).isStalemate(), true);
 });

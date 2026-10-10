@@ -52,7 +52,7 @@ connection. Expo Go isn't an installed release of Knightly.
 
 ## Hosted account and real practice
 
-Without `EXPO_PUBLIC_API_URL`, the app opens the two-position sample practice.
+Without `EXPO_PUBLIC_API_URL`, the app opens the three-position sample practice.
 Sample answers never change real progress. To connect your account, put your
 existing hosted app's HTTPS origin in `.env.local` (production is
 `https://knightlychess.app`, from `infra/cloudflare/variables.tf`):
@@ -80,8 +80,9 @@ Connected screens:
 
 - Home: learning units, today's game, due positions, tactic puzzles and the bot
   path. Account, appearance and sign out are in Settings.
-- Practice: server cards, answers, two-step hints, Show me, next review dates,
-  ungraded end-of-session retries, and the daily summary. Only the server grades.
+- Practice: server cards, answers, tactic/piece/move hints, Show me, next review dates,
+  promotion selection, durable ungraded end-of-session retries and hints, and the
+  daily summary. Local state is scoped by server/user/day; only the server grades.
 - Games: paginated imported-game list. Full game review and importing/analysing
   games remain on the web while those screens are migrated.
 
@@ -138,25 +139,23 @@ sample move slides out and returns before another answer is accepted. Checkmate
 adds the king topple and result badges. Piece identity tracking supports castling,
 en passant and promotion; unrelated positions reset without flying pieces.
 Reanimated uses the system reduced-motion setting. Flipping/resizing snaps pieces
-to their new coordinates. The second real-practice hint draws the move arrow.
+to their new coordinates. The final practice hint draws the move arrow.
 
 Try on your phone:
 
-1. Select e1, then e2 in sample practice: observe the slide, red flash, and return.
-2. Tap Hint, Flip board, then play e1–e8: observe the rook slide and king topple.
-3. Finish both positions and restart. Toggle dark appearance and open/close `?`.
-4. Increase system text size: scroll to reach actions and scroll inside the help
-   dialog. Buttons have a 48pt minimum height; help has a 44pt target.
-5. Enable Reduce Motion and reload: avoid travel/topple motion, while outcomes stay
-   legible. Enable VoiceOver: squares announce position, piece and legal targets;
-   answers announce feedback. Verify dialog focus/escape on the physical device.
-6. With the hosted server configured, sign in using the existing web account,
-   check games/deck counts, answer a card, and verify the result on the web. Try
-   network interruption, sign-out/reopen and the retry flow.
+1. Play a wrong sample move, wait for the reset, and use Hint → Show piece → Show move.
+2. Reach the third sample position, play g7–g8, and choose Knight. Confirm the promotion.
+3. Increase system text size and enable Reduce Motion; check the bottom actions remain reachable.
+4. Enable VoiceOver; check square labels, hint announcements and promotion controls.
+5. With the hosted server configured, answer a card, exit/reopen Practice and finish
+   its retry. Check the saved result on the web; repeat with a network interruption.
 
-Native animation feel, VoiceOver behavior and text scaling need physical-device
-validation. The first sample-screen launch was confirmed on iPhone October 9, 2026. Drag gestures, sounds, a promotion picker, rich game review, importing,
-puzzles and the remaining settings screens are still migration work.
+The current follow-up was checked in the browser with sample and stubbed connected
+responses. The iPhone 18 Pro simulator also passed the sample hint ladder, wrong/correct
+recovery, Show me, knight promotion, completion and Home exit. Connected recovery,
+physical-device VoiceOver and text scaling still need an iPhone preview check. Game review, importing, puzzles and remaining Settings are still
+migration work. These new native dependencies require a new installed preview;
+the previous preview build does not contain this follow-up.
 
 ## Verification
 

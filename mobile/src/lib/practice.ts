@@ -15,6 +15,13 @@ export const exercises = [
     hint: "Look for a rook move that controls the eighth rank.",
     explanation: "Ra8# controls every escape square on the back rank.",
   },
+  {
+    fen: "8/6P1/5KBk/8/8/8/8/8 w - - 0 1",
+    solution: "g7g8n",
+    title: "Choose the right promotion",
+    hint: "A queen would leave their king with no legal move. Look for a knight check.",
+    explanation: "g8=N# is checkmate. Promoting to a queen would be stalemate.",
+  },
 ] as const;
 export type Exercise = (typeof exercises)[number];
 export function legalTargets(fen: string, from: Square): Square[] {

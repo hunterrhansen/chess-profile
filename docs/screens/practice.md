@@ -119,3 +119,62 @@ were reverted after device review. Refine motion in a later design pass.
   provides a board-centered solving and hint reference. Knightly's no-scroll,
   bottom-band layout follows its existing practice specification; it does not add
   Chess.com's hearts, subscriptions or puzzle economy.
+
+### Practice parity follow-up — October 9, 2026
+
+Connected and sample lessons now offer Queen, Rook, Bishop and Knight promotion
+choices in the bottom band. Selecting a piece does not submit an answer; the
+confirmation button sends the exact promotion UCI. The third sample position
+requires a knight: a queen stalemates. Server grading evaluates the chosen piece.
+
+Hints follow the web ladder: tactic idea (when recognized), highlighted piece,
+then move arrow. The prompt includes the move classification and previous move;
+feedback retains the server explanation and next review date. Completion separates
+independent answers, answers with help, and misses.
+
+Connected practice stores hints and unfinished retries on the device, scoped to
+the server, signed-in user and UTC day. In-flight cards are saved before answering;
+on reopening, server results recover misses/helped cards after a lost response.
+Completed retries are removed, and server results discard stale cards. The server
+continues to own first-answer grades and scheduling; retries use `redo: true`.
+Storage failure leaves the current session usable but cannot guarantee recovery.
+
+![Promotion choice in the Expo browser client at 390×844](img/practice-web-promotion.png)
+
+Browser checks used sample positions and stubbed connected API responses: hint
+ladder, wrong/correct recovery, exact knight payload, Show me, unchanged redo
+schedule, request failure/retry, sign-in rejection and repeated taps. At 320×568,
+actions stayed inside the viewport. The native follow-up check is recorded below; the earlier iPhone captures show
+the previous lesson shell.
+
+Follow-up checks: mobile lint, typecheck, token consistency, all 36 tests,
+Expo Doctor (21/21), and iOS/web exports pass. The backend underpromotion
+regression passes. The full backend run has 51 passing tests and 4 skips;
+95 database-dependent tests could not start because local Postgres is unavailable.
+No hosted database was used for tests. The installed iPhone preview does not include this follow-up.
+
+### Native follow-up verification — October 9, 2026
+
+On iPhone 18 Pro / iOS 27 in Expo Go SDK 57, the three-position sample passed:
+wrong move and automatic return, tactic/piece/move hint ladder, correct recovery,
+Show me, Continue, required knight promotion, session completion and Back home.
+Home now consistently labels the sample as three positions.
+
+The iOS promotion control uses a compact native segmented picker: Queen, Rook,
+Bishop and Knight are visible together. Choosing Knight updates the confirmation
+button without moving the pawn; confirmation produces the knight and checkmate.
+Android and web use the universal dropdown. During native automation the popup
+menu repeatedly surfaced an obstructing keyboard; the inline segmented control
+avoids that popup and preserves board space better than a wheel picker.
+
+![Native promotion with Knight selected](img/practice-ios-promotion.png)
+
+The screenshot shows the full board and reachable Cancel/confirmation controls.
+Expo Go's blue gear is a development overlay. Connected account grading and
+on-device retry persistence were not replayed; those have browser/API/helper
+coverage. Physical-device VoiceOver, large-text and Reduce Motion checks for the
+new promotion control, and Android interaction testing, remain release checks.
+
+After the final native selector and Home-copy changes, lint, typecheck, all 36
+mobile tests, token consistency and iOS/Android/web exports passed. Android
+export is compilation evidence; Android interaction acceptance remains pending.

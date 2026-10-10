@@ -21,12 +21,14 @@ type Session = {
   connected: boolean;
   api: Api;
   account: string;
+  practiceScope: string;
   signOut: () => Promise<void>;
 };
 const SessionContext = createContext<Session | null>(null);
 const demo: Session = {
   connected: false,
   account: "Sample practice",
+  practiceScope: "sample",
   signOut: async () => {},
   api: async () => {
     throw new Error("Real practice needs a configured Knightly server.");
@@ -105,6 +107,7 @@ function AccountSession({ children }: { children: ReactNode }) {
   const session = useMemo(
     () => ({
       connected: true,
+      practiceScope: `${serverUrl(configured!)}/${user?.id ?? "signed-out"}`,
       api,
       account:
         user?.primaryEmailAddress?.emailAddress ??

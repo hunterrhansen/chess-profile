@@ -26,8 +26,8 @@ const example: HomeData = {
     game: null,
     new_games: 0,
     reviewed_today: 1,
-    positions: { done: 0, total: 2 },
-    deck_total: 2,
+    positions: { done: 0, total: 3 },
+    deck_total: 3,
     puzzles: {
       theme: "hangingPiece",
       share: 0.43,
@@ -153,10 +153,10 @@ export default function Home() {
       href: "/practice",
       eyebrow: connected
         ? `YOUR REVIEW DECK · ABOUT ${Math.max(1, Math.round((left * 40) / 60))} MINUTES`
-        : "SAMPLE PRACTICE · 2 POSITIONS",
+        : "SAMPLE PRACTICE · 3 POSITIONS",
       body: connected
         ? `${left} positions from your own games are due. Found ones come back later and later; misses come back sooner.`
-        : "Find a better move in two sample positions. Your progress stays unchanged.",
+        : "Find a better move in three sample positions. Your progress stays unchanged.",
       cta: connected ? "Start practice" : "Start sample practice",
     });
   if (puzzles.available && puzzles.theme)

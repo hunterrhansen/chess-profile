@@ -104,7 +104,9 @@ export function LessonPrompt({
   tag,
   title,
   detail,
+  badge,
 }: {
+  badge?: ReactNode;
   tag: string;
   title: string;
   detail: string;
@@ -112,13 +114,23 @@ export function LessonPrompt({
   const { colors: c } = useTheme();
   return (
     <View style={{ gap: 4 }}>
-      <Text
-        tone="muted"
-        style={{ fontSize: 12, lineHeight: 18 }}
-        maxFontSizeMultiplier={1.4}
+      <View
+        style={{
+          flexDirection: "row",
+          flexWrap: "wrap",
+          alignItems: "center",
+          gap: 8,
+        }}
       >
-        {tag}
-      </Text>
+        {badge}
+        <Text
+          tone="muted"
+          style={{ fontSize: 12, lineHeight: 18 }}
+          maxFontSizeMultiplier={1.4}
+        >
+          {tag}
+        </Text>
+      </View>
       <Text
         heading
         accessibilityRole="header"

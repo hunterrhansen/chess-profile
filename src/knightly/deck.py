@@ -256,8 +256,7 @@ def judge(fen: str, uci: str, best_uci: str, eval_best: int | None) -> str:
     Needs Stockfish for anything but the engine's own move; without it, only that counts."""
     if uci == SKIP:
         return "shown"
-    # Promotions: the board always offers a queen, the engine might have wanted a knight.
-    if uci == best_uci or (len(uci) == 5 and uci[:4] == best_uci[:4]):
+    if uci == best_uci:
         return "best"
     board = chess.Board(fen)
     try:

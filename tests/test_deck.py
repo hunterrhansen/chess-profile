@@ -63,7 +63,7 @@ def no_engine(monkeypatch):
     def fake(fen, uci, best_uci, eval_best):
         if uci == deck.SKIP:
             return "shown"
-        if uci == best_uci or (len(uci) == 5 and uci[:4] == best_uci[:4]):
+        if uci == best_uci:
             return "best"
         return "good" if uci == "d7d5" else "wrong"
     monkeypatch.setattr(deck, "judge", fake)
@@ -157,11 +157,11 @@ def test_queue_serves_due_cards_before_new_ones(conn):
     assert [r["ply"] for r in deck.queue(conn)] == [4, 2]
 
 
-def test_promotion_to_a_queen_counts_for_any_promotion(conn):
-    add_game(conn, 1)
-    add_move(conn, 1, 2, best_uci="b2b1n")
-    deck.sync(conn)
-    assert deck.answer(conn, 1, 2, "b2b1q")["correct"]
+def test_judge_preserves_required_underpromotion(monkeypatch):
+    monkeypatch.undo()  # Exercise the real judge, without needing an engine.
+    fen = "8/6P1/5KBk/8/8/8/8/8 w - - 0 1"
+    assert deck.judge(fen, "g7g8n", "g7g8n", None) == "best"
+    assert deck.judge(fen, "g7g8q", "g7g8n", None) == "wrong"
 
 
 def test_api_serves_a_card_and_grades_it(db_url, tmp_path):

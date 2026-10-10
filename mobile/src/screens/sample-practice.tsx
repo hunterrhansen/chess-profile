@@ -12,12 +12,19 @@ import {
   LessonAction,
 } from "@/components/lesson-screen";
 import { exercises, legalTargets, evaluateMove } from "@/lib/practice";
+import { PromotionChoice } from "@/components/promotion-choice";
+import { promotionChoices, type Promotion } from "@/lib/practice-flow";
 import { KnIcon } from "@/components/kn-icon";
 export default function PracticePreview() {
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<Square | null>(null);
   const [flipped, setFlipped] = useState(false);
   const [hints, setHints] = useState(0);
+  const [promotion, setPromotion] = useState<{
+    from: Square;
+    to: Square;
+    choices: Promotion[];
+  } | null>(null);
   const hint = hints > 0;
   const [hintReady, setHintReady] = useState(false);
   const [shown, setShown] = useState(false);
@@ -53,6 +60,7 @@ export default function PracticePreview() {
     setHintReady(false);
     setSelected(null);
     setHints(0);
+    setPromotion(null);
     setShown(false);
     setCorrect(false);
     setWrong(false);
@@ -63,7 +71,7 @@ export default function PracticePreview() {
     setDone(false);
   };
   function onSquare(square: Square) {
-    if (correct || shown || returning) return;
+    if (correct || shown || returning || promotion) return;
     const chess = new Chess(exercise.fen);
     const piece = chess.get(square);
     if (piece?.color === chess.turn()) {
@@ -72,7 +80,16 @@ export default function PracticePreview() {
       return;
     }
     if (!selected || !targets.includes(square)) return;
-    const answer = evaluateMove(exercise, selected, square);
+    const choices = promotionChoices(exercise.fen, selected, square);
+    if (choices.length) {
+      setPromotion({ from: selected, to: square, choices });
+      setSelected(null);
+      return;
+    }
+    answerMove(selected, square);
+  }
+  function answerMove(from: Square, square: Square, piece: Promotion = "q") {
+    const answer = evaluateMove(exercise, from, square, piece);
     setSelected(null);
     setWrong(!answer.correct);
     if (Platform.OS !== "web")
@@ -86,7 +103,7 @@ export default function PracticePreview() {
       tone: answer.correct ? "right" : "wrong",
       id: Date.now(),
     });
-    setLastMove({ from: selected, to: square });
+    setLastMove({ from, to: square });
     setPlayedFen(answer.fen);
     if (!answer.correct) setReturning(true);
     if (answer.correct) {
@@ -103,7 +120,7 @@ export default function PracticePreview() {
     const chess = new Chess(exercise.fen);
     const from = exercise.solution.slice(0, 2),
       to = exercise.solution.slice(2, 4);
-    chess.move({ from, to });
+    chess.move({ from, to, promotion: exercise.solution[4] });
     setPlayedFen(chess.fen());
     setLastMove({ from, to });
     setShown(true);
@@ -118,32 +135,47 @@ export default function PracticePreview() {
     <LessonBar
       tone={correct ? "right" : shown ? "wrong" : wrong ? "retry" : "idle"}
       title={
-        correct
-          ? hint
-            ? "Found it, with help!"
-            : "You found it!"
-          : shown
-            ? "Here's the move"
-            : wrong
-              ? "Not quite"
-              : undefined
+        promotion
+          ? "Promote your pawn"
+          : correct
+            ? hint
+              ? "Found it, with help!"
+              : "You found it!"
+            : shown
+              ? "Here's the move"
+              : wrong
+                ? "Not quite"
+                : undefined
       }
       detail={
-        answered
-          ? exercise.explanation
-          : wrong
-            ? "Try again, or use a hint."
-            : hint
-              ? hints === 1
-                ? exercise.hint
-                : "The arrow shows the move. Play it."
-              : selected
-                ? `${selected} selected. Tap a highlighted square.`
-                : "Tap a piece, then where it goes."
+        promotion
+          ? "Choose the piece your pawn becomes."
+          : answered
+            ? exercise.explanation
+            : wrong
+              ? "Try again, or use a hint."
+              : hint
+                ? hints === 1
+                  ? exercise.hint
+                  : hints === 2
+                    ? `Look at the piece on ${exercise.solution.slice(0, 2)}.`
+                    : "The arrow shows the move. Play it."
+                : selected
+                  ? `${selected} selected. Tap a highlighted square.`
+                  : "Tap a piece, then where it goes."
       }
       note="Sample positions · Your review progress is unchanged"
     >
-      {answered ? (
+      {promotion ? (
+        <PromotionChoice
+          choices={promotion.choices}
+          onCancel={() => setPromotion(null)}
+          onChoose={(kind) => {
+            answerMove(promotion.from, promotion.to, kind);
+            setPromotion(null);
+          }}
+        />
+      ) : answered ? (
         <LessonAction label="Continue" danger={shown} onPress={next} />
       ) : (
         <>
@@ -151,9 +183,15 @@ export default function PracticePreview() {
             quiet
             glyph="hint"
             label={
-              hints === 0 ? "Hint" : hints === 1 ? "Show move" : "Hint shown"
+              hints === 0
+                ? "Hint"
+                : hints === 1
+                  ? "Show piece"
+                  : hints === 2
+                    ? "Show move"
+                    : "Hint shown"
             }
-            disabled={!hintReady || hints >= 2 || returning}
+            disabled={!hintReady || hints >= 3 || returning}
             onPress={() => {
               setHints((n) => n + 1);
               setWrong(false);
@@ -177,8 +215,8 @@ export default function PracticePreview() {
   return (
     <LessonScreen
       title="Sample practice"
-      done={done ? 2 : index + (answered ? 1 : 0)}
-      total={2}
+      done={done ? exercises.length : index + (answered ? 1 : 0)}
+      total={exercises.length}
       footer={footer}
     >
       {done ? (
@@ -195,7 +233,7 @@ export default function PracticePreview() {
             Nicely done.
           </Text>
           <Text tone="muted" style={{ textAlign: "center" }}>
-            Two ideas to take into your next game.
+            Three ideas to take into your next game.
           </Text>
         </View>
       ) : (
@@ -215,10 +253,12 @@ export default function PracticePreview() {
               targets={targets}
               flipped={flipped}
               hintSquare={
-                hint && !answered ? exercise.solution.slice(0, 2) : undefined
+                hints === 2 && !answered
+                  ? exercise.solution.slice(0, 2)
+                  : undefined
               }
-              hintMove={hints >= 2 && !answered ? exercise.solution : undefined}
-              disabled={answered || returning}
+              hintMove={hints >= 3 && !answered ? exercise.solution : undefined}
+              disabled={answered || returning || !!promotion}
               onSquare={onSquare}
             />
           </LessonBoard>
