@@ -1,27 +1,22 @@
-import { useState } from "react";
 import * as Dialog from "@rn-primitives/dialog";
 import { StyleSheet, View, Pressable, ScrollView } from "react-native";
 import { fonts, useTheme } from "../lib/theme";
 import { Button, Text } from "./ui";
 export function HelpDialog({ label = "How to practice", title = "Make your move", description = "Tap a piece of the side to move, then a highlighted square. Find the strongest move. Hint helps you see the idea; Flip lets you inspect the other side.", textTrigger = false }: { label?: string; title?: string; description?: string; textTrigger?: boolean }) {
   const { colors: c } = useTheme();
-  const [pressed, setPressed] = useState(false);
   // Radix on web merges styles as CSS objects; flatten RN arrays at this boundary.
   return (
-    <Dialog.Root style={textTrigger ? StyleSheet.flatten([styles.textTriggerBase, { backgroundColor: c.line }]) : undefined}>
+    <Dialog.Root>
       <Dialog.Trigger asChild>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={label}
-          onPressIn={() => setPressed(true)}
-          onPressOut={() => setPressed(false)}
           style={StyleSheet.flatten([
             textTrigger ? styles.textTrigger : styles.trigger,
-            { borderColor: c.line, backgroundColor: c.surface },
-            textTrigger && { transform: [{ translateY: pressed ? 4 : 0 }] },
+            !textTrigger && { borderColor: c.line, backgroundColor: c.surface },
           ])}
         >
-          <Text maxFontSizeMultiplier={textTrigger ? undefined : 1.4} style={{ fontFamily: fonts.bold, textAlign: "center", fontSize: 13, lineHeight: 18 }}>{textTrigger ? label.toUpperCase() : "?"}</Text>
+          <Text maxFontSizeMultiplier={1.4} style={{ fontFamily: textTrigger ? fonts.body : fonts.bold, color: c.inkMuted, textAlign: textTrigger ? "left" : "center", textDecorationLine: textTrigger ? "underline" : "none", fontSize: 14, lineHeight: 20 }}>{textTrigger ? label : "?"}</Text>
         </Pressable>
       </Dialog.Trigger>
       <Dialog.Portal>
@@ -64,8 +59,7 @@ export function HelpDialog({ label = "How to practice", title = "Make your move"
   );
 }
 const styles = StyleSheet.create({
-  textTriggerBase: { flex: 1, paddingBottom: 4, borderRadius: 16 },
-  textTrigger: { flexGrow: 1, minHeight: 48, paddingHorizontal: 8, paddingVertical: 10, borderWidth: 2, borderRadius: 16, justifyContent: "center", alignItems: "center" },
+  textTrigger: { minHeight: 44, alignSelf: "flex-start", justifyContent: "center" },
   trigger: {
     width: 44,
     height: 44,

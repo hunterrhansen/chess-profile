@@ -7,10 +7,12 @@ import { KnIcon, type Glyph } from "./kn-icon";
 import { Text } from "./ui";
 
 /** Shared geometry for every state of a lesson, including its completion. */
-export function BottomActions({ primary, secondary, feedback, tone = "idle" }: {
+export function BottomActions({ primary, secondary, feedback, tone = "idle", reservedHeight = 160, primaryFullWidth = false }: {
   primary: ReactNode;
   secondary?: ReactNode;
   feedback?: ReactNode;
+  reservedHeight?: number;
+  primaryFullWidth?: boolean;
   tone?: "idle" | "retry" | "right" | "wrong";
 }) {
   const { colors: c } = useTheme();
@@ -19,15 +21,15 @@ export function BottomActions({ primary, secondary, feedback, tone = "idle" }: {
   const actionHeight = bottomActionBandHeight(width, fontScale);
   const feedbackExtra = Math.ceil(48 * (Math.max(1, Math.min(fontScale, 1.4)) - 1));
   const bottomPadding = Math.max(16, bottom);
-  return <View style={{ flexShrink: 0, height: 160 + actionHeight - 64 + feedbackExtra + bottomPadding - 16,
+  return <View style={{ flexShrink: 0, height: reservedHeight + actionHeight - 64 + feedbackExtra + bottomPadding - 16,
     backgroundColor: tone === "right" ? `${c.brand}33` : tone === "wrong" || tone === "retry" ? `${c.danger}1a` : c.page }}>
     <View style={{ flex: 1, width: "100%", maxWidth: 560, alignSelf: "center", paddingHorizontal: 16, paddingTop: 16,
       paddingBottom: bottomPadding, gap: 12 }}>
-      <ScrollView bounces={false} style={{ flex: 1, minHeight: 0 }} contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end" }}>
+      <ScrollView bounces={false} style={{ flex: 1, minHeight: 0 }} contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-start" }}>
         {feedback}
       </ScrollView>
       <View style={{ height: actionHeight, flexShrink: 0, flexDirection: "row", gap: 8 }}>
-        <View style={{ flex: 1, minWidth: 0 }}>{secondary}</View>
+        {!primaryFullWidth && <View style={{ flex: 1, minWidth: 0 }}>{secondary}</View>}
         <View style={{ flex: 1, minWidth: 0 }}>{primary}</View>
       </View>
     </View>

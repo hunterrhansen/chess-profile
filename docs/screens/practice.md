@@ -119,7 +119,7 @@ System Reduce Motion, VoiceOver, physical-device feel and release-build frame
 performance remain acceptance checks. Expo Go's floating gear is development UI.
 The earlier browser checks cover emulated Reduce Motion; this native check does
 not claim authenticated completion or deck-view parity.
-Mobile lint, typecheck and all 59 tests passed after these native fixes.
+Mobile lint, typecheck and all 64 tests passed after these native fixes.
 
 ## Forgiving practice (decided Oct 7, replaces "one answer a day")
 
@@ -505,15 +505,15 @@ success, explanation open/close, next puzzle and promotion open/cancel with the
 remain physical-device acceptance checks.
 
 
-The “Why this move?” trigger fills the action band through the dialog root and
-uses the same 4px ledge, padding and press offset as the other lesson buttons.
-Browser measurements at 390×844 and 320×568 confirm both result buttons have
-60px faces inside 64px bases, with identical top edges. Explanation open/close
-and focus restoration remain functional.
+The earlier two-button result row below was replaced by the approved reference
+layout described in the next section.
 
 ![Matching result button heights](img/practice-matched-buttons-phone.png)
 
 ## Shared bottom actions — October 10, 2026
+
+The later approved reference layout below replaces the practice result slots;
+the shared footer geometry and completion controls described here are retained.
 
 The bottom actions now keep the same size and location from solving through
 completion. `BottomActions` owns two equal-width slots, safe-area spacing,
@@ -555,3 +555,50 @@ and large-text sizing changes. The five added geometry tests cover the default
 the shared band reserves 136px/230px respectively.
 
 ![Earlier full completion capture before divider removal](img/practice-complete-pinned-actions-web.png)
+
+## Approved reference layout — October 10, 2026
+
+The owner approved a practice layout following Chess.com's mobile puzzle
+hierarchy and Duolingo's lesson feedback pattern. Sample and connected Expo
+practice use a single header row: exit, green progress bar, count and Flip. The lesson
+title remains in the progress accessibility label. The side-to-move prompt and
+short task stay directly above the square board; game context remains available
+after answering through the explanation dialog.
+
+The full-width feedback band keeps a fixed 208px reservation and 64px action
+row. After an answer, the underlined “Why this move?” trigger sits beneath the
+verdict and Continue is the only button in the bottom row, spanning its width.
+The feedback begins 16px below the board. Its scrollable content starts at the
+top so wrapped verdicts and longer status messages cannot disappear above the
+viewport. The reservation includes room for the title, a short status message,
+the explanation target and the gap above the action row, in every answer state.
+The trigger has a 44px minimum touch height; its dialog retains close and focus
+restoration. The idle/retry Hint and Show me occupy the two action slots;
+Flip remains the header utility added by the shared-footer change.
+Sample independent answers name the solution (for example “Found it: Re8#”);
+connected practice says “Found it!” so an accepted alternative move is not
+mislabeled as the engine's preferred move. Helped and good-move verdicts retain
+their existing wording. Server grading, hint timing, retries, promotion and
+completion behavior are unchanged.
+
+| Before answering | Correct answer |
+| --- | --- |
+| ![Approved practice layout, browser phone viewport](img/practice-reference-idle-phone.jpg) | ![Full-width Continue and inline explanation action, browser phone viewport](img/practice-reference-right-phone.jpg) |
+
+These are actual sample-practice screenshots from React Native Web at 390×844,
+not generated mockups or native captures. Browser checks covered a wrong move
+and reset, hint, helped answer, independent Re8# answer, explanation open/close
+and focus restoration, Continue, and Show me at 320×568. The 390px board stays at
+y=246 and action faces at y=764 across idle and answered states; Continue is 358px
+wide with the usual 16px insets. At 320×568 the page fits without horizontal or
+vertical overflow. The dark theme also keeps the verdict and explanation legible.
+Native interaction verification is pending because computer-use access reported
+the Mac locked. No connected account was used for these browser checks.
+Mobile lint, typecheck, token consistency, all 64 tests, and iOS/web exports pass.
+Exports confirm compilation, not native interaction or physical-device behavior.
+
+The feedback-spacing correction was checked at 390×844, 320×568 and 320×460.
+The verdict starts 16px below the board and the explanation remains fully inside
+the feedback viewport. Explanation open/close and focus restoration still work.
+Lint, typecheck and all 64 tests pass after the correction. Native confirmation
+remains pending.

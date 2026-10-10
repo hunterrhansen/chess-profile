@@ -120,13 +120,13 @@ export function Card({ style, containerStyle, ...props }: ViewProps & { containe
     </View>
   );
 }
-export function Progress({ value, total }: { value: number; total: number }) {
+export function Progress({ value, total, label = "Practice progress" }: { value: number; total: number; label?: string }) {
   const { colors: c } = useTheme();
   return (
     <View
       accessible
       accessibilityRole="progressbar"
-      accessibilityLabel="Practice progress"
+      accessibilityLabel={label}
       accessibilityValue={{
         min: 0,
         max: total,

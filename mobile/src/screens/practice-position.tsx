@@ -336,7 +336,7 @@ export default function PracticePosition({
         : outcome === "helped"
           ? "Found it, with help!"
           : outcome
-            ? "You found it!"
+            ? "Found it!"
             : busy
               ? previewQuality ? (previewQuality === "wrong" ? "Not quite" : "Good move!") : "Checking…"
               : flash?.tone === "wrong"
@@ -371,10 +371,11 @@ export default function PracticePosition({
           detail={
             advanceError ?? (busy ? (previewQuality ? "Saving your attempt…" : "Checking move…") : (error ?? detail))
           }
-          secondary={outcome ? (
+          explanation={outcome && (
             <HelpDialog textTrigger label="Why this move?" title={first?.best_san ? `Best move: ${first.best_san}` : "Why this move?"}
                   description={`${why ?? "A stronger move for this position."}\n\nYou played ${card.san} against ${card.opponent ?? "your opponent"}, move ${card.move_number}.${card.win_pct_before === null ? "" : ` Winning chance: ${Math.round(card.win_pct_before)}%.`}\n\n${redo ? `One more go · ${againLeft} remaining. Your schedule is unchanged.` : first?.due ? `Next review: ${first.due}` : "Your first answer is saved."}`} />
-          ) : (
+          )}
+          secondary={!outcome && (
             <LessonAction quiet glyph="hint" label={guidance.label}
               disabled={!!promotion || !hintReady || busy || returning || !guidance.next} onPress={() => void hint()} />
           )}
