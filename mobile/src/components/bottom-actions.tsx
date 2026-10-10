@@ -2,6 +2,7 @@ import { type ReactNode } from "react";
 import { Pressable, ScrollView, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fonts, useTheme } from "@/lib/theme";
+import { bottomActionBandHeight } from "@/lib/bottom-action-layout";
 import { KnIcon, type Glyph } from "./kn-icon";
 import { Text } from "./ui";
 
@@ -14,17 +15,18 @@ export function BottomActions({ primary, secondary, feedback, tone = "idle" }: {
 }) {
   const { colors: c } = useTheme();
   const { bottom } = useSafeAreaInsets();
-  const { fontScale } = useWindowDimensions();
-  const extra = Math.ceil(36 * (Math.max(1, fontScale) - 1));
+  const { width, fontScale } = useWindowDimensions();
+  const actionHeight = bottomActionBandHeight(width, fontScale);
+  const feedbackExtra = Math.ceil(48 * (Math.max(1, Math.min(fontScale, 1.4)) - 1));
   const bottomPadding = Math.max(16, bottom);
-  return <View style={{ flexShrink: 0, height: 160 + extra * 2 + bottomPadding - 16,
+  return <View style={{ flexShrink: 0, height: 160 + actionHeight - 64 + feedbackExtra + bottomPadding - 16,
     backgroundColor: tone === "right" ? `${c.brand}33` : tone === "wrong" || tone === "retry" ? `${c.danger}1a` : c.page }}>
     <View style={{ flex: 1, width: "100%", maxWidth: 560, alignSelf: "center", paddingHorizontal: 16, paddingTop: 16,
       paddingBottom: bottomPadding, gap: 12 }}>
       <ScrollView bounces={false} style={{ flex: 1, minHeight: 0 }} contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end" }}>
         {feedback}
       </ScrollView>
-      <View style={{ height: 64 + extra, flexShrink: 0, flexDirection: "row", gap: 8 }}>
+      <View style={{ height: actionHeight, flexShrink: 0, flexDirection: "row", gap: 8 }}>
         <View style={{ flex: 1, minWidth: 0 }}>{secondary}</View>
         <View style={{ flex: 1, minWidth: 0 }}>{primary}</View>
       </View>

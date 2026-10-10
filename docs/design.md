@@ -413,7 +413,10 @@ the left slot, and the forward/finish action owns the right; an absent secondary
 leaves its slot empty rather than resizing or moving the primary action. Both
 slots have equal width, an 8px gap, 16px screen margins and a 64px button band
 including the 4px ledge at default text size. Bottom spacing is the greater of
-16px or the device safe area. Font scaling expands the shared band consistently.
+16px or the device safe area. Font scaling expands the shared band consistently:
+`bottom-action-layout.ts` reserves enough lines for the widest supported label
+at the current slot width using Nunito bold font metrics. Keep its label list in
+sync when adding footer actions; the calculation is shared across all states.
 Feedback scrolls above the actions; wording, outcomes and entrance animations
 never reposition buttons. Flip is a header utility, preserving two stable slots.
 Use `BottomAction` for the shared appearance; dialog triggers match its geometry,

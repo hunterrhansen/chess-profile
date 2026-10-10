@@ -529,6 +529,9 @@ including the 4px ledge; margins are 16px and the slot gap is 8px. Shared button
 and the explanation trigger allow system font scaling; the band grows with it.
 Animations affect content above the controls, preserving immediate access.
 The footer uses whitespace alone to separate actions from content; no divider.
+The band grows using width-aware label wrapping, including hint icons and long
+words, instead of assuming at most two lines. Geometry regression tests cover
+320px phones at 2× and 2.8× text scale; system Dynamic Type remains unverified.
 
 ![Completion without a divider, browser phone viewport](img/practice-complete-no-divider-web.png)
 
@@ -546,6 +549,9 @@ System Dynamic Type, VoiceOver and physical-device ergonomics remain acceptance
 checks. Connected grading is unchanged; authenticated interaction was not tested.
 Browser interaction also verified header Flip changes board orientation and the
 explanation dialog opens/closes without moving Continue. Mobile lint, typecheck,
-all 59 tests and the web export passed after the shared-footer changes.
+token consistency, all 64 tests and iOS/web exports passed after the shared-footer
+and large-text sizing changes. The five added geometry tests cover the default
+64px band and label wrapping at larger font scales; at 320px and 2×/2.8× scale,
+the shared band reserves 136px/230px respectively.
 
 ![Earlier full completion capture before divider removal](img/practice-complete-pinned-actions-web.png)
