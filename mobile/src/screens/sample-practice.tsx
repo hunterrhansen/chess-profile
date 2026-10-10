@@ -1,10 +1,8 @@
-import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Chess, type Square } from "chess.js";
 import { View, AccessibilityInfo, Platform } from "react-native";
 import { HelpDialog } from "@/components/help-dialog";
 import { Board } from "@/components/board";
-import { Text } from "@/components/ui";
 import {
   LessonScreen,
   LessonPrompt,
@@ -15,10 +13,12 @@ import {
 import { exercises, legalTargets, evaluateMove } from "@/lib/practice";
 import { promotionChoices, type Promotion } from "@/lib/practice-flow";
 import { useVerdictHaptics } from "@/lib/board-haptics";
-import { KnIcon } from "@/components/kn-icon";
+import PracticeComplete from "@/screens/practice-complete";
+import { sampleCompletionMark, type CompletionResult } from "@/lib/practice-completion";
 export default function PracticePreview() {
   const acknowledge = useVerdictHaptics();
   const [index, setIndex] = useState(0);
+  const [results, setResults] = useState<CompletionResult[]>([]);
   const [selected, setSelected] = useState<Square | null>(null);
   const [flipped, setFlipped] = useState(false);
   const [hints, setHints] = useState(0);
@@ -32,6 +32,7 @@ export default function PracticePreview() {
   const [shown, setShown] = useState(false);
   const [correct, setCorrect] = useState(false);
   const [wrong, setWrong] = useState(false);
+  const [hadWrong, setHadWrong] = useState(false);
   const [done, setDone] = useState(false);
   const exercise = exercises[index];
   useEffect(() => {
@@ -66,6 +67,7 @@ export default function PracticePreview() {
     setShown(false);
     setCorrect(false);
     setWrong(false);
+    setHadWrong(false);
     setPlayedFen(null);
     setFlash(undefined);
     setLastMove(undefined);
@@ -109,7 +111,10 @@ export default function PracticePreview() {
       );
     setLastMove({ from, to: square });
     setPlayedFen(answer.fen);
-    if (!answer.correct) setReturning(true);
+    if (!answer.correct) {
+      setReturning(true);
+      setHadWrong(true);
+    }
     if (answer.correct) {
       setCorrect(true);
       setPlayedFen(answer.fen);
@@ -117,6 +122,18 @@ export default function PracticePreview() {
   }
   const answered = correct || shown;
   function next() {
+    const solution = new Chess(exercise.fen).move({
+      from: exercise.solution.slice(0, 2),
+      to: exercise.solution.slice(2, 4),
+      promotion: exercise.solution[4],
+    });
+    setResults((previous) => [...previous, {
+      mark: sampleCompletionMark(shown, hint, hadWrong),
+      name: `Position ${index + 1}`,
+      ply: 1,
+      san: solution.san,
+      opponent: null,
+    }]);
     if (index === exercises.length - 1) setDone(true);
     else reset(index + 1);
   }
@@ -130,12 +147,7 @@ export default function PracticePreview() {
     setShown(true);
     setWrong(false);
   }
-  const footer = done ? (
-    <LessonBar reservedHeight={160} detail="Sample positions · Your review progress is unchanged">
-      <LessonAction quiet label="Practice again" onPress={() => reset()} />
-      <LessonAction label="Back home" onPress={() => router.dismissTo("/")} />
-    </LessonBar>
-  ) : (
+  const footer = (
     <LessonBar
       feedbackKey={flash?.id}
       reservedHeight={160}
@@ -208,32 +220,24 @@ export default function PracticePreview() {
       )}
     </LessonBar>
   );
+  if (done) return (
+    <PracticeComplete
+      done={exercises.length}
+      results={results}
+      onRestart={() => {
+        setResults([]);
+        reset();
+      }}
+    />
+  );
   return (
     <LessonScreen
       title="Sample practice"
-      done={done ? exercises.length : index + (answered ? 1 : 0)}
+      done={index + (answered ? 1 : 0)}
       total={exercises.length}
       footer={footer}
     >
-      {done ? (
-        <View
-          style={{
-            flex: 1,
-            justifyContent: "center",
-            alignItems: "center",
-            gap: 16,
-          }}
-        >
-          <KnIcon glyph="check" size={64} />
-          <Text heading style={{ fontSize: 28, lineHeight: 34 }}>
-            Nicely done.
-          </Text>
-          <Text tone="muted" style={{ textAlign: "center" }}>
-            Three ideas to take into your next game.
-          </Text>
-        </View>
-      ) : (
-        <>
+      <>
           <LessonBoard ledge={false} prompt={
             <LessonPrompt title="White to move" detail="Find checkmate." />
           }>
@@ -265,8 +269,7 @@ export default function PracticePreview() {
               onSquare={onSquare}
             />
           </LessonBoard>
-        </>
-      )}
+      </>
     </LessonScreen>
   );
 }

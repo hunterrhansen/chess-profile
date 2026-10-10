@@ -3,19 +3,18 @@ import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { View } from "react-native";
 import { Text } from "@/components/ui";
-import { KnIcon } from "@/components/kn-icon";
 import {
   LessonScreen,
   LessonGeometry,
   LessonBar,
   LessonAction,
 } from "@/components/lesson-screen";
-import { PracticeSession, practiceSummary } from "@/lib/practice-flow";
+import { PracticeSession } from "@/lib/practice-flow";
 import { type DeckToday, type DeckCard } from "@/lib/api";
 import { useSession } from "@/lib/session";
-import { useTheme } from "@/lib/theme";
 import PracticePosition from "@/screens/practice-position";
 import SamplePractice from "@/screens/sample-practice";
+import PracticeComplete from "@/screens/practice-complete";
 export default function Practice() {
   const { connected } = useSession();
   return <LessonGeometry>{connected ? <DailyPractice /> : <SamplePractice />}</LessonGeometry>;
@@ -38,7 +37,6 @@ function DailyPractice() {
   const [missed, setMissed] = useState<DeckCard[]>([]);
 
   const [refresh, setRefresh] = useState(0);
-  const { colors } = useTheme();
   useEffect(() => {
     const abort = new AbortController();
     const checkpoint = practice.checkpoint();
@@ -63,7 +61,6 @@ function DailyPractice() {
   }, [api, refresh, practice]);
   const redo = !!deck && !deck.card && missed.length > 0;
   const card = deck?.card ?? (redo ? missed[0] : null);
-  const summary = practiceSummary(deck?.results ?? []);
   function next(position: { fen: string; flipped: boolean }) {
     setPreviousPosition(position);
     if (redo && card) {
@@ -91,6 +88,8 @@ function DailyPractice() {
         againLeft={missed.length}
       />
     );
+  if (deck && !loading && !error && deck.total > 0)
+    return <PracticeComplete done={deck.today.done} results={deck.results} stats={deck} />;
   return (
     <LessonScreen
       done={deck?.today.done ?? 0}
@@ -142,40 +141,11 @@ function DailyPractice() {
         ) : (
           deck && (
             <>
-              <KnIcon glyph="check" size={64} />
               <Text heading style={{ fontSize: 28, lineHeight: 34 }}>
-                {deck.total === 0 ? "No positions yet" : "Done for today"}
+                No positions yet
               </Text>
               <Text tone="muted" style={{ textAlign: "center" }}>
-                {deck.total === 0
-                  ? "Review an analysed game to build your practice deck."
-                  : `${deck.today.done} positions reviewed · ${summary.found} found, ${summary.helped} with help, ${summary.missed} missed.`}
-              </Text>
-              <View
-                style={{ flexDirection: "row", gap: 4, alignSelf: "stretch" }}
-              >
-                {deck.results.map((result) => (
-                  <View
-                    key={`${result.game_id}-${result.ply}`}
-                    accessible
-                    accessibilityLabel={`${result.san}: ${result.mark}`}
-                    style={{
-                      flex: 1,
-                      height: 20,
-                      borderRadius: 6,
-                      backgroundColor:
-                        result.mark === "found" || result.mark === "good"
-                          ? colors.brand
-                          : result.mark === "helped"
-                            ? colors.sky
-                            : colors.danger,
-                    }}
-                  />
-                ))}
-              </View>
-              <Text tone="muted" style={{ textAlign: "center" }}>
-                {deck.mastered} mastered · {deck.learning} learning · {deck.new}{" "}
-                new
+                Review an analysed game to build your practice deck.
               </Text>
             </>
           )

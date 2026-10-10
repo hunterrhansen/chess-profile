@@ -31,6 +31,68 @@ navigation. Puzzles (`/puzzles`) use the same screen and rules.
   of marks with the misses named, and tiles for Mastered, Learning, Not seen yet. See your deck
   and Back home.
 
+## Expo completion parity — October 10, 2026
+
+`mobile/src/screens/practice-complete.tsx` ports the web's phone completion page:
+a 96px gold check medal on its solid ledge, centered title and first-attempt
+summary, a “Today, one by one” card with accessible result bars and the original
+game moves to revisit, and three equal-width Mastered / Learning / Not seen yet
+tiles. The FSRS explanation uses the current web wording. Filled green Back home
+and outlined See your deck actions follow a divider. Completion removes the
+active lesson's exit/progress header. Theme colors come from the shared tokens.
+
+Completion scrolls within the safe area when result text, system text size or a
+short viewport needs more room. The solving screen keeps its bounded board and
+fixed footer. Connected results and deck counts come from the existing API;
+redo attempts do not overwrite first-attempt marks. Empty decks, loading and
+request failures retain their existing separate states.
+
+Sample practice shares the completion styling and records its actual local
+outcomes. It labels the page “Sample complete,” omits account deck totals and
+offers Practice again. Recovering after a wrong sample attempt stays marked as
+helped, matching connected practice; hints are also counted as help. Sample moves to revisit are named by position
+because they have no source game.
+
+![Expo completion in a dark 390×844 browser phone viewport](img/practice-complete-phone.jpg)
+
+This capture uses a temporary local fixture matching the supplied web phone
+reference (10 reviewed, 5 found, 4 with help, 1 missed); the fixture was removed.
+Browser checks verified See your deck → Progress, Back home → Home, no horizontal
+overflow at 320×568, and all three sample positions through Show me, completion
+and Practice again. Progress currently remains a mobile placeholder, so the deck
+link preserves the web destination without claiming deck-view parity.
+Native interaction and accessibility acceptance remain pending: the Mac was
+locked during this check. This picture is React Native Web, not an iOS capture.
+Mobile lint, typecheck, token consistency, all 58 tests, and iOS/web exports
+passed. Exports confirm compilation; they do not replace native interaction checks.
+
+### Completion motion parity
+
+Completion now copies the web's `bounce-in`, `rise` and confetti keyframes and
+`--ease-out` curve (0.22, 1, 0.36, 1). The medal bounces through scales
+0.3 → 1.12 → 0.92 → 1.04 → 1 across 900ms. A seeded 36-piece burst uses the
+same theme colors, shapes, spin, upward/falling paths and 1–1.6s durations as
+`web/src/components/confetti.tsx`. It fires once per completion mount.
+
+The heading rises 10px at 360ms, the results card at 405ms, and stat tiles at
+450 / 530 / 610ms; each rise takes 300ms. Counts use the web's 400ms cubic
+ease-out and start with their tile entrance so the counting remains visible.
+Native counts update text through Reanimated on the UI thread; the browser uses
+the web's requestAnimationFrame counter. Accessibility exposes final counts.
+Reduce Motion skips all entrances and confetti and shows final numbers immediately.
+Actions stay available throughout; only transforms and opacity animate layout.
+
+![Completion during its entrance, browser phone viewport](img/practice-complete-motion-phone.jpg)
+
+The capture crops out a temporary fixture's Replay control. Browser inspection
+confirmed the above computed durations/delays, 36 particles, final count values,
+and zero animations with emulated Reduce Motion. The fixture was removed.
+Native animation feel and count rendering still need an unlocked simulator or
+device; the Mac remained locked during verification. This pass adds visual motion;
+the web completion fanfare is not included.
+Final mobile lint, typecheck, token consistency, 58 tests and iOS/web exports
+passed after the motion changes.
+
 ## Forgiving practice (decided Oct 7, replaces "one answer a day")
 
 Why: learning beats engagement. Only 1 of the first 10 Practice answers was right, and each
