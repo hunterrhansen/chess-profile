@@ -8,3 +8,8 @@ export function answerSound(
   if (!tone || (tone === "right" && move === "checkmate")) return null;
   return tone;
 }
+
+/** A graded interaction acknowledges now; replay sounds may follow the piece. */
+export function moveSoundDelay(tone: "right" | "wrong" | undefined, animationDelay: number) {
+  return tone ? 0 : animationDelay;
+}

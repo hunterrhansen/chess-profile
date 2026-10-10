@@ -10,6 +10,7 @@ cards and answers.
 """
 import functools
 import json
+import logging
 import os
 import re
 import shutil
@@ -22,7 +23,7 @@ from pathlib import Path
 
 import chess
 import chess.engine
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from typing import Literal
@@ -30,7 +31,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from . import auth, config, db, deck, export, jobs, limits, lines, lookup, monitoring, patterns, play, positions, puzzles, schedule, units, update, users
+from . import auth, config, db, deck, export, jobs, limits, lines, lookup, monitoring, patterns, play, positions, practice_grades, puzzles, schedule, timing, units, update, users
 from .analyze import THRESHOLDS, find_engine
 
 # A position counts as "winning" once the user's win chance reaches this after one of
@@ -662,17 +663,39 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
             )
             card = dict(rows[0])
             with connect() as conn:
-                card["fen_before"] = positions.fen_before(conn, card["game_id"], card["ply"])
+                row, fen = practice_grades.load(conn, card["game_id"], card["ply"])
+                card["fen_before"] = fen
+                card["feedback"] = practice_grades.cached(row, fen) if row else None
+                if card["feedback"] is None:
+                    jobs.enqueue(conn, "practice", {"game_id": card["game_id"], "ply": card["ply"]},
+                                 priority=practice_grades.PRIORITY)
         return {**info, "card": card}
 
+    @api.get("/api/deck/feedback/{game_id}/{ply}")
+    def deck_feedback(game_id: int, ply: int):
+        """Poll a worker-prepared map; never run Stockfish or grade a card here."""
+        with connect() as conn:
+            if not conn.execute("SELECT 1 FROM cards WHERE game_id = ? AND ply = ?", (game_id, ply)).fetchone():
+                raise HTTPException(404, "No card for that position.")
+            row, fen = practice_grades.load(conn, game_id, ply)
+            return {"feedback": practice_grades.cached(row, fen) if row else None}
+
     @api.post("/api/deck/answer")
-    def deck_answer(body: AnswerIn):
-        with write() as conn, conn:
+    def deck_answer(body: AnswerIn, response: Response):
+        with timing.collect() as sample:
             try:
-                return deck.answer(conn, body.game_id, body.ply, body.uci, hinted=body.hinted, redo=body.redo,
-                                   seconds=body.seconds)
+                with timing.stage("answer_total"), write() as conn, conn:
+                    result = timing.call("answer", deck.answer, conn, body.game_id, body.ply,
+                                         body.uci, hinted=body.hinted, redo=body.redo, seconds=body.seconds)
             except KeyError:
                 raise HTTPException(404, "No card for that position.") from None
+            except deck.GradeUnavailable as error:
+                raise HTTPException(503, str(error)) from None
+            finally:
+                logging.getLogger("uvicorn.error").info("Practice answer timing %s",
+                                                        {k: round(v, 2) for k, v in sample.items()})
+        response.headers["Server-Timing"] = ", ".join(f"{key};dur={value:.2f}" for key, value in sample.items())
+        return result
 
     @api.post("/api/deck/hint")
     def deck_hint(body: HintIn):

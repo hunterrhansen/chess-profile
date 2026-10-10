@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Chess, type Square } from "chess.js";
 import { View, AccessibilityInfo, Platform } from "react-native";
+import { HelpDialog } from "@/components/help-dialog";
 import { Board } from "@/components/board";
 import { Text } from "@/components/ui";
 import {
@@ -133,6 +134,8 @@ export default function PracticePreview() {
     </LessonBar>
   ) : (
     <LessonBar
+      feedbackKey={flash?.id}
+      reservedHeight={160}
       tone={correct ? "right" : shown ? "wrong" : wrong ? "retry" : "idle"}
       title={
         promotion
@@ -151,7 +154,7 @@ export default function PracticePreview() {
         promotion
           ? "Choose the piece your pawn becomes."
           : answered
-            ? exercise.explanation
+            ? ""
             : wrong
               ? "Try again, or use a hint."
               : hint
@@ -160,11 +163,8 @@ export default function PracticePreview() {
                   : hints === 2
                     ? `Look at the piece on ${exercise.solution.slice(0, 2)}.`
                     : "The arrow shows the move. Play it."
-                : selected
-                  ? `${selected} selected. Tap a highlighted square.`
-                  : "Tap a piece, then where it goes."
+                : ""
       }
-      note="Sample positions · Your review progress is unchanged"
     >
       {promotion ? (
         <PromotionChoice
@@ -176,7 +176,12 @@ export default function PracticePreview() {
           }}
         />
       ) : answered ? (
-        <LessonAction label="Continue" danger={shown} onPress={next} />
+        <>
+          <View style={{ flex: 1 }}>
+            <HelpDialog textTrigger label="Why this move?" title="The idea" description={exercise.explanation} />
+          </View>
+          <LessonAction label="Continue" danger={shown} onPress={next} />
+        </>
       ) : (
         <>
           <LessonAction
@@ -238,14 +243,12 @@ export default function PracticePreview() {
         </View>
       ) : (
         <>
-          <LessonPrompt
-            tag="SAMPLE POSITION"
-            title={exercise.title}
-            detail="White to move · Find checkmate in one."
-          />
-          <LessonBoard>
+          <LessonBoard ledge={false} prompt={
+            <LessonPrompt title="White to move" detail="Find checkmate." />
+          }>
             <Board
-              key={index}
+              ledge={false}
+          animatePositions
               flash={flash}
               lastMove={lastMove}
               fen={playedFen ?? exercise.fen}

@@ -101,7 +101,12 @@ function AccountSession({ children }: { children: ReactNode }) {
   const { signOut } = useClerk();
   const { user } = useUser();
   const api = useMemo(
-    () => createApi(serverUrl(configured!), () => getToken()),
+    () => createApi(
+      serverUrl(configured!),
+      () => getToken(),
+      fetch,
+      __DEV__ ? (sample) => console.info("Practice API timing", sample) : undefined,
+    ),
     [getToken],
   );
   const session = useMemo(

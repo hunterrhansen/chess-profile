@@ -106,6 +106,11 @@ which are the same in both themes. Its states, each on `/styleguide`:
 
 `PlayBoard` (`pages/play.tsx`) wraps it for making moves (Play, Practice).
 
+The Expo board uses square outer corners (0px radius). Phone practice keeps the
+board full-width when height permits, with the prompt directly above it and its
+top around the lower third of the viewport. Longer explanations open on demand
+through “Why this move?” after answering; hints and errors stay visible.
+
 ## Icons
 
 - **KnIcon** (`components/kn-icon.tsx`): Knightly's own two-tone icons on a ledge (home, games,
@@ -383,3 +388,7 @@ Rules:
 - **Never surprising.** Nothing plays on page load (a finished game you come back to is
   quiet), in a background tab, or with sounds off. Reduced motion doesn't mute sound.
 - New sound? Add it to `SOUNDS` in `lib/sound.ts` and to the Sounds demo on `/styleguide`.
+
+Mobile practice omits the board’s 4px ledge so its last rank is the footer
+boundary. Position rearrangements use the web board’s 200ms CSS ease curve,
+movement-pattern matching, and end-of-slide addition/removal without extra fades.

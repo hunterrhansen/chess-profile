@@ -45,6 +45,10 @@ type Drop = {
 };
 export function Board({
   fen,
+  initialFen,
+  initialFlipped,
+  animatePositions = false,
+  ledge = true,
   selected,
   targets,
   flipped,
@@ -64,6 +68,10 @@ export function Board({
   onMove,
 }: {
   fen: string;
+  initialFen?: string;
+  initialFlipped?: boolean;
+  animatePositions?: boolean;
+  ledge?: boolean;
   selected: Square | null;
   targets: Square[];
   flipped: boolean;
@@ -108,21 +116,23 @@ export function Board({
   } | null>(null);
   const [release, setRelease] = useState(0);
   const [shown, setShown] = useState(() => ({
-    fen,
-    pieces: piecesAt(fen),
+    fen: initialFen ?? fen,
+    fromPrevious: !!initialFen && initialFen !== fen,
+    pieces: piecesAt(initialFen ?? fen),
     captured: [] as ReturnType<typeof piecesAt>,
     animate: false,
     mate: matePresentation(fen, fen, []),
     cue: null as { sound: MoveSound; delay: number; id: string } | null,
   }));
   if (shown.fen !== fen) {
-    const transition = transitionPieces(shown.pieces, shown.fen, fen);
+    const transition = transitionPieces(shown.pieces, shown.fen, fen, shown.fromPrevious ? "always" : animatePositions);
     const move =
       dropped?.fen === shown.fen ? moveBetween(shown.fen, fen) : null;
     const landed =
       !!move && move.from === dropped?.from && move.to === dropped?.to;
     setShown({
       fen,
+      fromPrevious: false,
       ...transition,
       mate: matePresentation(shown.fen, fen, shown.mate.seen),
       cue: transition.sound
@@ -145,7 +155,6 @@ export function Board({
   const pickup = useBoardHaptics(
     hapticsEnabled,
     flash,
-    reduced ? 0 : (shown.cue?.delay ?? MOVE_MS),
   );
   const onTapSquare = useCallback(
     (square: Square) => {
@@ -226,6 +235,7 @@ export function Board({
     <GestureHandlerRootView
       style={[
         styles.base,
+        !ledge && { paddingBottom: 0 },
         edgeInset > 0 && { marginHorizontal: -edgeInset, borderRadius: 0 },
         { backgroundColor: c.lip },
         inLine && { borderColor: c.sky, borderWidth: 2 },
@@ -353,6 +363,7 @@ export function Board({
             <MovingPiece
               key={piece.id}
               piece={piece}
+              initialFlipped={initialFlipped}
               cell={width / 8}
               flipped={flipped}
               selected={selection === piece.square}
@@ -384,6 +395,7 @@ export function Board({
             <MovingPiece
               key={`captured-${fen}-${piece.id}`}
               piece={piece}
+              initialFlipped={initialFlipped}
               cell={width / 8}
               flipped={flipped}
               selected={false}
@@ -437,8 +449,8 @@ export function Board({
   );
 }
 const styles = StyleSheet.create({
-  base: { paddingBottom: 4, borderRadius: 14 },
-  grid: { width: "100%", aspectRatio: 1, overflow: "hidden", borderRadius: 10 },
+  base: { paddingBottom: 4, borderRadius: 0 },
+  grid: { width: "100%", aspectRatio: 1, overflow: "hidden", borderRadius: 0 },
   row: { flex: 1, flexDirection: "row", minHeight: 0 },
   square: {
     flex: 1,

@@ -2,20 +2,21 @@ import * as Dialog from "@rn-primitives/dialog";
 import { StyleSheet, View, Pressable, ScrollView } from "react-native";
 import { fonts, useTheme } from "../lib/theme";
 import { Button, Text } from "./ui";
-export function HelpDialog() {
+export function HelpDialog({ label = "How to practice", title = "Make your move", description = "Tap a piece of the side to move, then a highlighted square. Find the strongest move. Hint helps you see the idea; Flip lets you inspect the other side.", textTrigger = false }: { label?: string; title?: string; description?: string; textTrigger?: boolean }) {
   const { colors: c } = useTheme();
   // Radix on web merges styles as CSS objects; flatten RN arrays at this boundary.
   return (
     <Dialog.Root>
       <Dialog.Trigger asChild>
         <Pressable
-          accessibilityLabel="How to practice"
+          accessibilityRole="button"
+          accessibilityLabel={label}
           style={StyleSheet.flatten([
-            styles.trigger,
+            textTrigger ? styles.textTrigger : styles.trigger,
             { borderColor: c.line, backgroundColor: c.surface },
           ])}
         >
-          <Text style={{ fontFamily: fonts.bold }}>?</Text>
+          <Text style={{ fontFamily: fonts.bold, textAlign: "center", fontSize: 13 }}>{textTrigger ? label : "?"}</Text>
         </Pressable>
       </Dialog.Trigger>
       <Dialog.Portal>
@@ -35,7 +36,7 @@ export function HelpDialog() {
               <Dialog.Title
                 style={StyleSheet.flatten([styles.title, { color: c.ink }])}
               >
-                Make your move
+                {title}
               </Dialog.Title>
               <Dialog.Description
                 style={StyleSheet.flatten([
@@ -43,9 +44,7 @@ export function HelpDialog() {
                   { color: c.inkMuted },
                 ])}
               >
-                Tap a piece of the side to move, then a highlighted square. Find
-                the strongest move. Hint helps you see the idea; Flip lets you
-                inspect the other side.
+                {description}
               </Dialog.Description>
               <View style={{ marginTop: 12 }}>
                 <Dialog.Close asChild>
@@ -60,6 +59,7 @@ export function HelpDialog() {
   );
 }
 const styles = StyleSheet.create({
+  textTrigger: { minHeight: 48, paddingHorizontal: 12, borderWidth: 2, borderRadius: 16, justifyContent: "center", alignItems: "center" },
   trigger: {
     width: 44,
     height: 44,

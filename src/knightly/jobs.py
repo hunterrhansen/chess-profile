@@ -20,7 +20,7 @@ import threading
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 
-from . import analyze, config, db, limits, monitoring, update
+from . import analyze, config, db, limits, monitoring, practice_grades, update
 
 FIRST_BATCH = 50   # games an update analyses: the newest first
 BATCH = 50         # games a backfill job analyses
@@ -161,6 +161,9 @@ def run(url: str, job, workers: int | None = None, log=print) -> list[tuple[str,
     marked done, as (kind, priority): a backfill while games are left to analyse."""
     payload = json.loads(job["payload"] or "{}")
     with closing(db.connect(url, migrate=False, user_id=job["user_id"])) as conn:
+        if job["kind"] == "practice":
+            more = practice_grades.prepare_due(conn, payload if 'game_id' in payload else None)
+            return [("practice", practice_grades.PRIORITY)] if more else []
         nodes = db.analysis_nodes(conn)
         if job["kind"] == "update":
             update.run(conn, _token(), workers=workers, nodes=nodes, log=log,
@@ -172,6 +175,11 @@ def run(url: str, job, workers: int | None = None, log=print) -> list[tuple[str,
                            analyse_limit=BATCH if room is None else min(BATCH, room), sync=False)
         else:
             raise ValueError(f"unknown job kind {job['kind']!r}")
+        from . import deck
+        with conn:
+            deck.sync(conn)
+        if practice_grades.candidates(conn):
+            enqueue(conn, "practice", priority=practice_grades.PRIORITY)
         more = analyze.unanalysed(conn) and backfill_room(conn) != 0
         return [("backfill", BACKFILL_PRIORITY)] if more else []
 

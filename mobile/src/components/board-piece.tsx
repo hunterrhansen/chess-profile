@@ -16,6 +16,7 @@ import Animated, {
 import {
   type BoardPiece,
   coordinates,
+  pieceCoordinates,
   resolveDrop,
   MOVE_MS,
 } from "../lib/board-motion";
@@ -24,6 +25,7 @@ import { Piece } from "./piece";
 
 export function MovingPiece({
   piece,
+  initialFlipped,
   cell,
   flipped,
   selected,
@@ -42,6 +44,7 @@ export function MovingPiece({
   onDrop,
 }: {
   piece: BoardPiece;
+  initialFlipped?: boolean;
   cell: number;
   flipped: boolean;
   selected: boolean;
@@ -59,16 +62,16 @@ export function MovingPiece({
   onDragStart?: (square: Square) => void;
   onDrop?: (from: Square, to: Square | null) => void;
 }) {
-  const point = coordinates(piece.square, flipped);
-  const x = useSharedValue(point.x * cell),
-    y = useSharedValue(point.y * cell);
+  const { point, origin } = pieceCoordinates(piece, flipped, initialFlipped, captured);
+  const x = useSharedValue(origin.x * cell),
+    y = useSharedValue(origin.y * cell);
   const dx = useSharedValue(0),
     dy = useSharedValue(0),
     dragging = useSharedValue(false);
   const grabX = useSharedValue(0),
     grabY = useSharedValue(0);
   const scale = useSharedValue(1),
-    opacity = useSharedValue(1);
+    opacity = useSharedValue(animate && !captured && !piece.fromSquare ? 0 : 1);
   const angle = useSharedValue(fallen && !fall ? -90 : 0);
   const previousCell = useSharedValue(cell),
     previousFlipped = useSharedValue(flipped);
@@ -81,7 +84,7 @@ export function MovingPiece({
       previousFlipped.get() !== flipped;
     const config = {
       duration: MOVE_MS,
-      easing: Easing.bezier(0.65, 0, 0.35, 1),
+      easing: Easing.bezier(0.25, 0.1, 0.25, 1),
       reduceMotion: ReduceMotion.System,
     };
     x.set(snap ? point.x * cell : withTiming(point.x * cell, config));
@@ -146,7 +149,7 @@ export function MovingPiece({
   useEffect(() => {
     const moved = previousSquare.current !== piece.square;
     previousSquare.current = piece.square;
-    if (!moved || !animate || captured || fallen || selected) return;
+    if (!moved || !animate || captured || fallen || selected || piece.positionTransition) return;
     // Only the moving piece settles; replay jumps and stationary pieces stay still.
     scale.set(withSequence(
       withDelay(landed ? 0 : MOVE_MS,
@@ -154,17 +157,22 @@ export function MovingPiece({
         ReduceMotion.System),
       withTiming(1, { duration: 110, reduceMotion: ReduceMotion.System }),
     ));
-  }, [piece.square, animate, captured, fallen, selected, landed, scale]);
+  }, [piece.square, animate, captured, fallen, selected, landed, piece.positionTransition, scale]);
   useEffect(() => {
     opacity.set(
-      captured
+      piece.positionTransition
+        ? withDelay(MOVE_MS, withTiming(captured ? 0 : 1, {
+            duration: 0,
+            reduceMotion: ReduceMotion.System,
+          }), ReduceMotion.System)
+        : captured
         ? withDelay(MOVE_MS - 60, withTiming(0, {
             duration: 100,
             reduceMotion: ReduceMotion.System,
           }), ReduceMotion.System)
-        : 1,
+        : withTiming(1, { duration: MOVE_MS, reduceMotion: ReduceMotion.System }),
     );
-  }, [captured, opacity]);
+  }, [captured, piece.positionTransition, positionKey, opacity]);
   useEffect(() => {
     angle.set(
       fallen

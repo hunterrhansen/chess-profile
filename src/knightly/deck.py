@@ -28,7 +28,7 @@ import chess
 import chess.engine
 from fsrs import Card, Rating, ReviewLog, Scheduler
 
-from . import db, positions
+from . import db, positions, timing
 from .analyze import find_engine, win_pct
 from .brilliance import GREAT_GAP
 
@@ -250,6 +250,16 @@ def today_results(conn, today: date | None = None) -> list[dict]:
     return out
 
 
+class GradeUnavailable(RuntimeError):
+    """Engine work failed; do not turn uncertainty into a scheduled failure."""
+
+
+def quality_from_score(mover, eval_best, after):
+    sign = 1 if mover == chess.WHITE else -1
+    drop = win_pct(sign * eval_best) - win_pct(sign * after)
+    return "excellent" if drop <= GOOD_DROP else "good" if drop <= HARD_DROP else "wrong"
+
+
 def judge(fen: str, uci: str, best_uci: str, eval_best: int | None) -> str:
     """How good an answer is: 'best' (the engine's move, or any mate), 'excellent' (within
     GOOD_DROP points of win chance), 'good' (within HARD_DROP), 'wrong', or 'shown' (no move).
@@ -272,14 +282,12 @@ def judge(fen: str, uci: str, best_uci: str, eval_best: int | None) -> str:
     if eval_best is None:
         return "wrong"
     try:
-        with chess.engine.SimpleEngine.popen_uci(find_engine(None)) as engine:
-            info = engine.analyse(board, chess.engine.Limit(depth=JUDGE_DEPTH))
-    except (SystemExit, chess.engine.EngineError, OSError):
-        return "wrong"
+        with timing.call("engine_startup", chess.engine.SimpleEngine.popen_uci, find_engine(None)) as engine:
+            info = timing.call("engine_search", engine.analyse, board, chess.engine.Limit(depth=JUDGE_DEPTH))
+    except (SystemExit, chess.engine.EngineError, OSError, TimeoutError) as error:
+        raise GradeUnavailable("Could not check this move. Try again.") from error
     after = info["score"].white().score(mate_score=10000)
-    sign = 1 if mover == chess.WHITE else -1
-    drop = win_pct(sign * eval_best) - win_pct(sign * after)
-    return "excellent" if drop <= GOOD_DROP else "good" if drop <= HARD_DROP else "wrong"
+    return quality_from_score(mover, eval_best, after)
 
 
 def answer(conn, game_id: int, ply: int, uci: str, *, hinted: bool = False, redo: bool = False,
@@ -293,59 +301,65 @@ def answer(conn, game_id: int, ply: int, uci: str, *, hinted: bool = False, redo
 
     def load():
         return conn.execute(
-            """SELECT c.fsrs, c.due, c.reviews, m.best_uci, m.best_san, m.eval_before
+            """SELECT c.fsrs, c.due, c.reviews, m.best_uci, m.best_san, m.eval_before, m.practice_grades
                FROM cards c JOIN moves m ON m.game_id = c.game_id AND m.ply = c.ply
                WHERE c.game_id = ? AND c.ply = ?""",
             (game_id, ply),
         ).fetchone()
 
-    card = load()
+    card = timing.call("card_load", load)
     if card is None:
         # Game review asks before Finish review has added the game's cards: add them now.
         sync(conn)
-        card = load()
+        card = timing.call("card_load", load)
     if card is None:
         raise KeyError((game_id, ply))
-    quality = judge(positions.fen_before(conn, game_id, ply), uci, card["best_uci"], card["eval_before"])  # module-level, so tests can swap it
-    passed = quality in ("best", "excellent", "good")
-    state = Card.from_dict(json.loads(card["fsrs"])) if card["fsrs"] else Card()
-    rating = None
-    if (game_id, ply) not in _reviewed_today(conn, today):
-        rating = "again" if hinted or not passed else "hard" if quality == "good" else "good"
-        if rating == "good" and quality == "best" and seconds is not None and seconds <= EASY_SECONDS:
-            rating = "easy"
-        when = now or datetime.now(timezone.utc)
-        duration = round(seconds * 1000) if seconds is not None else None
-        state, _ = scheduler(conn).review_card(state, RATING[rating], when, review_duration=duration)
-        stamp = when.strftime("%Y-%m-%dT%H:%M:%SZ")
-        conn.execute(
-            """UPDATE cards SET fsrs = ?, due = ?, reviews = reviews + 1, lapses = lapses + ?,
-                      last_reviewed_at = ? WHERE game_id = ? AND ply = ?""",
-            (json.dumps(state.to_dict()), _local_date(state.due), int(rating == "again"), stamp, game_id, ply),
-        )
-        conn.execute(
-            """INSERT INTO card_reviews (game_id, ply, reviewed_at, answer_uci, correct, rating, quality, solved)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (game_id, ply, stamp, uci, int(passed and not hinted), rating, quality, int(passed)),
-        )
-    elif passed and not redo:
-        # Found on a retry: it still counts as Again, but the done screen says "with help".
-        conn.execute(
-            """UPDATE card_reviews SET solved = 1 WHERE id = (
-                 SELECT id FROM card_reviews WHERE game_id = ? AND ply = ?
-                   AND reviewed_at >= ? AND reviewed_at < ? ORDER BY reviewed_at, id LIMIT 1)""",
-            (game_id, ply, *db.day_range(today)),
-        )
-    due = _local_date(state.due) if card["fsrs"] or rating else None
-    return {
-        "correct": passed,
-        "quality": quality,
-        "rating": rating,
-        "best_uci": card["best_uci"],
-        "best_san": card["best_san"],
-        "due": due,
-        "mastered": (state.stability or 0) >= MASTERED_DAYS,
-    }
+    fen = timing.call("position", positions.fen_before, conn, game_id, ply)
+    from . import practice_grades
+    prepared = practice_grades.cached(card, fen)
+    quality = prepared['grades'].get(uci) if prepared else None
+    if quality is None:
+        quality = timing.call("grade", judge, fen, uci, card["best_uci"], card["eval_before"])
+    with timing.stage("schedule_save"):
+        passed = quality in ("best", "excellent", "good")
+        state = Card.from_dict(json.loads(card["fsrs"])) if card["fsrs"] else Card()
+        rating = None
+        if (game_id, ply) not in _reviewed_today(conn, today):
+            rating = "again" if hinted or not passed else "hard" if quality == "good" else "good"
+            if rating == "good" and quality == "best" and seconds is not None and seconds <= EASY_SECONDS:
+                rating = "easy"
+            when = now or datetime.now(timezone.utc)
+            duration = round(seconds * 1000) if seconds is not None else None
+            state, _ = scheduler(conn).review_card(state, RATING[rating], when, review_duration=duration)
+            stamp = when.strftime("%Y-%m-%dT%H:%M:%SZ")
+            conn.execute(
+                """UPDATE cards SET fsrs = ?, due = ?, reviews = reviews + 1, lapses = lapses + ?,
+                          last_reviewed_at = ? WHERE game_id = ? AND ply = ?""",
+                (json.dumps(state.to_dict()), _local_date(state.due), int(rating == "again"), stamp, game_id, ply),
+            )
+            conn.execute(
+                """INSERT INTO card_reviews (game_id, ply, reviewed_at, answer_uci, correct, rating, quality, solved)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (game_id, ply, stamp, uci, int(passed and not hinted), rating, quality, int(passed)),
+            )
+        elif passed and not redo:
+            # Found on a retry: it still counts as Again, but the done screen says "with help".
+            conn.execute(
+                """UPDATE card_reviews SET solved = 1 WHERE id = (
+                     SELECT id FROM card_reviews WHERE game_id = ? AND ply = ?
+                       AND reviewed_at >= ? AND reviewed_at < ? ORDER BY reviewed_at, id LIMIT 1)""",
+                (game_id, ply, *db.day_range(today)),
+            )
+        due = _local_date(state.due) if card["fsrs"] or rating else None
+        return {
+            "correct": passed,
+            "quality": quality,
+            "rating": rating,
+            "best_uci": card["best_uci"],
+            "best_san": card["best_san"],
+            "due": due,
+            "mastered": (state.stability or 0) >= MASTERED_DAYS,
+        }
 
 
 def hint(conn, game_id: int, ply: int) -> dict:

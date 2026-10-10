@@ -4,6 +4,7 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
+import Animated, { FadeIn, FadeInUp, Easing, ReduceMotion, useReducedMotion } from "react-native-reanimated";
 import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
 import { fonts, useTheme } from "@/lib/theme";
@@ -38,13 +39,19 @@ export function LessonScreen({
           alignSelf: "center",
           flex: 1,
           minHeight: 0,
-          paddingHorizontal: 16,
           paddingTop: 8,
-          paddingBottom: 16,
+          paddingBottom: 0,
           gap: 12,
         }}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+        <View
+          style={{
+            paddingHorizontal: 16,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Exit practice"
@@ -107,14 +114,14 @@ export function LessonPrompt({
   badge,
 }: {
   badge?: ReactNode;
-  tag: string;
+  tag?: string;
   title: string;
-  detail: string;
+  detail?: string;
 }) {
   const { colors: c } = useTheme();
   return (
-    <View style={{ gap: 4 }}>
-      <View
+    <View style={{ paddingHorizontal: 16, gap: 4 }}>
+      {!!(tag || badge) && <View
         style={{
           flexDirection: "row",
           flexWrap: "wrap",
@@ -130,7 +137,7 @@ export function LessonPrompt({
         >
           {tag}
         </Text>
-      </View>
+      </View>}
       <Text
         heading
         accessibilityRole="header"
@@ -139,21 +146,22 @@ export function LessonPrompt({
       >
         {title}
       </Text>
-      <Text
+      {!!detail && <Text
         style={{ color: c.inkMuted, fontSize: 14, lineHeight: 20 }}
         maxFontSizeMultiplier={1.4}
       >
         {detail}
-      </Text>
+      </Text>}
     </View>
   );
 }
-export function LessonBoard({ children }: { children: ReactNode }) {
+export function LessonBoard({ children, prompt, ledge = true }: { children: ReactNode; prompt?: ReactNode; ledge?: boolean }) {
   const [bounds, setBounds] = useState({ width: 0, height: 0 });
-  const size = Math.max(0, Math.min(bounds.width, bounds.height - 4));
+  const [promptHeight, setPromptHeight] = useState(0);
+  const size = Math.max(0, Math.min(bounds.width, bounds.height - (ledge ? 4 : 0) - (prompt ? promptHeight + 12 : 0)));
   return (
     <View
-      style={{ flex: 1, minHeight: 0, alignItems: "center" }}
+      style={{ flex: 1, minHeight: 0, alignItems: "center", justifyContent: "flex-end" }}
       onLayout={({ nativeEvent }) => {
         const { width, height } = nativeEvent.layout;
         setBounds((old) =>
@@ -163,17 +171,22 @@ export function LessonBoard({ children }: { children: ReactNode }) {
         );
       }}
     >
+      {prompt && <View style={{ width: "100%", marginBottom: 12 }} onLayout={({ nativeEvent }) => setPromptHeight(nativeEvent.layout.height)}>{prompt}</View>}
       {size > 0 && <View style={{ width: size }}>{children}</View>}
     </View>
   );
 }
 export function LessonBar({
+  feedbackKey,
+  reservedHeight = 0,
   tone = "idle",
   title,
   detail,
   note,
   children,
 }: {
+  feedbackKey?: number;
+  reservedHeight?: number;
   tone?: "idle" | "retry" | "right" | "wrong";
   title?: string;
   detail: string;
@@ -182,6 +195,9 @@ export function LessonBar({
 }) {
   const { colors: c } = useTheme();
   const inset = useSafeAreaInsets();
+  const reduced = useReducedMotion();
+  const entrance = (reduced ? FadeIn.duration(180) : FadeInUp.duration(180).withInitialValues({ opacity: 0, transform: [{ translateY: 12 }] }))
+    .easing(Easing.bezier(0.23, 1, 0.32, 1)).reduceMotion(ReduceMotion.System);
   const right = tone === "right",
     wrong = tone === "wrong" || tone === "retry";
   const color = right ? c.brandText : wrong ? c.dangerText : c.inkMuted;
@@ -189,13 +205,14 @@ export function LessonBar({
     <View
       style={{
         flexShrink: 0,
+        minHeight: reservedHeight,
         backgroundColor: c.page,
-        borderTopWidth: 2,
-        borderColor: right ? c.brand : wrong ? c.danger : c.line,
       }}
     >
       <View
         style={{
+          flexGrow: 1,
+          justifyContent: "flex-end",
           backgroundColor: right
             ? `${c.brand}33`
             : wrong
@@ -204,7 +221,9 @@ export function LessonBar({
           paddingBottom: Math.max(16, inset.bottom),
         }}
       >
-        <View
+        <Animated.View
+          key={feedbackKey ?? "idle"}
+          entering={feedbackKey === undefined ? undefined : entrance}
           accessibilityLiveRegion="polite"
           style={{
             width: "100%",
@@ -215,7 +234,7 @@ export function LessonBar({
             gap: 12,
           }}
         >
-          <View
+          {!!(title || detail || note) && <View
             style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}
           >
             {right && <KnIcon glyph="check" size={36} />}
@@ -229,12 +248,12 @@ export function LessonBar({
                   {title}
                 </Text>
               )}
-              <Text
+              {!!detail && <Text
                 style={{ color, fontSize: 14, lineHeight: 20 }}
                 maxFontSizeMultiplier={1.4}
               >
                 {detail}
-              </Text>
+              </Text>}
               {note && (
                 <Text
                   tone="muted"
@@ -245,9 +264,9 @@ export function LessonBar({
                 </Text>
               )}
             </View>
-          </View>
+          </View>}
           <View style={{ flexDirection: "row", gap: 8 }}>{children}</View>
-        </View>
+        </Animated.View>
       </View>
     </View>
   );

@@ -14,6 +14,8 @@ export type BoardPiece = {
   square: Square;
   kind: PieceSymbol;
   side: Color;
+  fromSquare?: Square;
+  positionTransition?: boolean;
 };
 export function piecesAt(fen: string): BoardPiece[] {
   return new Chess(fen).board().flatMap((row) =>
@@ -46,16 +48,18 @@ function soundForMove(move: Move): MoveSound {
   if (move.isCapture() || move.isEnPassant()) return "capture";
   return "move";
 }
-/** Preserve piece identity for a legal move (including castles and promotion).
- * Unrelated positions reset immediately instead of sending every piece across the board. */
+/** Preserve legal-move identity; practice may also rearrange unrelated positions. */
 export function transitionPieces(
   previous: BoardPiece[],
   from: string,
   to: string,
+  rearrange: boolean | "always" = false,
 ) {
+  if (rearrange === "always") return rearrangePieces(previous, to);
   const move = moveBetween(from, to);
   const undo = move ? null : moveBetween(to, from);
   const changed = move ?? undo;
+  if (!changed && rearrange) return rearrangePieces(previous, to);
   if (!changed)
     return {
       pieces: piecesAt(to),
@@ -81,15 +85,67 @@ export function transitionPieces(
   });
   return {
     pieces,
-    captured: previous.filter((p) => !pieces.some((next) => next.id === p.id)),
+    captured: previous.filter((p) => !pieces.some((next) => next.id === p.id)).map(currentPiece),
     animate: true,
     sound: move ? soundForMove(move) : ("move" as MoveSound),
   };
+}
+/** Capture fades use the current square after any earlier rearrangement. */
+function currentPiece(piece: BoardPiece): BoardPiece {
+  return { id: piece.id, square: piece.square, kind: piece.kind, side: piece.side };
+}
+/** Match web board movement preferences, without reusing an identity twice. */
+function rearrangePieces(previous: BoardPiece[], to: string) {
+  const next = piecesAt(to);
+  const available = new Set(previous);
+  const paired = new Map<BoardPiece, BoardPiece>();
+  for (const piece of next) {
+    const old = previous.find(p => p.square === piece.square && p.side === piece.side && p.kind === piece.kind);
+    if (old) { paired.set(piece, old); available.delete(old); }
+  }
+  for (const piece of next) {
+    if (paired.has(piece)) continue;
+    const candidates = [...available].filter(p => p.side === piece.side && p.kind === piece.kind);
+    const old = candidates.find(p => {
+      const dx = Math.abs(p.square.charCodeAt(0) - piece.square.charCodeAt(0));
+      const dy = Math.abs(Number(p.square[1]) - Number(piece.square[1]));
+      switch (piece.kind) {
+        case "p": return dx === 0;
+        case "n": return (dx === 2 && dy === 1) || (dx === 1 && dy === 2);
+        case "b": return dx === dy;
+        case "r": return dx === 0 || dy === 0;
+        case "q": return dx === 0 || dy === 0 || dx === dy;
+        case "k": return dx <= 1 && dy <= 1;
+      }
+    }) ?? candidates[0];
+    if (old) { paired.set(piece, old); available.delete(old); }
+  }
+  const ids = new Set(previous.map(p => p.id));
+  const pieces = next.map(piece => {
+    const old = paired.get(piece);
+    if (old) return { ...piece, id: old.id, fromSquare: old.square, positionTransition: true };
+    let id = piece.id;
+    while (ids.has(id)) id += "-new";
+    ids.add(id);
+    return { ...piece, id, positionTransition: true };
+  });
+  return { pieces, captured: [...available].map(p => ({ ...currentPiece(p), positionTransition: true })), animate: true, sound: null as MoveSound | null };
 }
 export function coordinates(square: Square, flipped: boolean) {
   const file = square.charCodeAt(0) - 97,
     rank = 8 - Number(square[1]);
   return flipped ? { x: 7 - file, y: 7 - rank } : { x: file, y: rank };
+}
+
+/** Removed seed pieces stay at their old screen position until the slide finishes. */
+export function pieceCoordinates(piece: BoardPiece, flipped: boolean, initialFlipped?: boolean, captured = false) {
+  const oldOrientation = initialFlipped ?? flipped;
+  const staysAtOrigin = captured && !!piece.positionTransition;
+  return {
+    point: coordinates(piece.square, staysAtOrigin ? oldOrientation : flipped),
+    origin: coordinates(piece.fromSquare ?? piece.square,
+      piece.fromSquare || staysAtOrigin ? oldOrientation : flipped),
+  };
 }
 
 /** Board-local touch point. Edges outside the grid never become a destination. */
