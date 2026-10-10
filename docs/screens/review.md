@@ -37,7 +37,7 @@ Not in the lesson: nav, eval bar, clocks (they live in All moves).
 
 1. Finding the move counts as that position's first answer in the deck (found → back in
    3 days, missed → tomorrow).
-2. The opponent's misses are not lesson steps; they show in All moves.
+2. An opponent's ≥20-point win-chance drop creates a lesson at your reply, describing whether you punished it or let it slide. The reply appears once; the opponent's move itself stays in All moves.
 3. Review complete gets one mark per key moment (gold for a great move) and "3 of 4 found".
 4. All moves is full screen.
 
@@ -77,8 +77,7 @@ Not in the lesson: nav, eval bar, clocks (they live in All moves).
 ## Mobile read-only replay — October 10, 2026
 
 **Code:** `mobile/src/screens/game-replay.tsx`, `mobile/src/lib/game-replay.ts`.
-Both `/games/[id]` and `/games/[id]/moves` open All moves for this first slice.
-Guided lessons and Review complete are still unfinished. Opening or stepping
+The initial replay slice opened All moves on both game routes. The guided slice below now owns `/games/[id]`; `/moves` retains replay. Opening or stepping
 through a game does not submit answers or mark it reviewed.
 
 ![Mobile replay, browser phone viewport](img/review-replay-phone.jpg)
@@ -104,7 +103,7 @@ States include loading, invalid link/not found/API failure, empty recorded game,
 and content. A corrupt starting FEN shows an error without substituting another
 board. A malformed SAN move stops at the last valid position with an explanation.
 The screen intentionally defers clocks, evaluation/history graphs, engine lines,
-variations and guided review to follow-up slices.
+variations to follow-up slices.
 
 Browser interaction checks passed at 390×844, 320×568 and desktop width for navigation bounds,
 move selection, checkmate, flip, Games exit and small-screen action reachability.
@@ -115,3 +114,53 @@ en passant, underpromotion and malformed moves. Native simulator interaction
 could not run because the Mac was locked; connected account replay and physical
 accessibility remain acceptance checks. Mobile lint, typecheck, all 71 tests, token
 consistency and iOS/web exports passed. This picture is React Native Web.
+
+
+## Mobile guided review — October 10, 2026
+
+**Code:** `mobile/src/screens/game-review.tsx`, `review-position.tsx`,
+`game-review-done.tsx`; `mobile/src/lib/review-{lesson,session,attempt,flow,completion}.ts`.
+
+| Guided lesson (browser, 390×844) | Saved results (browser, 390×844) |
+| --- | --- |
+| ![Hinted find](img/review-guided-mobile-browser.jpg) | ![Saved review](img/review-results-mobile-browser.jpg) |
+
+The game route selects find/look/praise steps with the web's two-pass algorithm.
+Find uses the position before the move, with an answer-free prompt; look and
+praise use the played position. The board stays square, full width, without a
+radius or ledge. Content scrolls while the hint/answer/Continue footer stays pinned.
+All moves opens at the lesson ply and returns to the same lesson without advancing.
+Exit returns to Games and retains unfinished progress.
+
+Tap or drag a legal move; promotion offers Queen, Knight, Rook and Bishop.
+Only the server decides correctness. A wrong answer leaves the original position
+and permits retry. Hints appear after two seconds and advance tactic/piece/move;
+failed hint requests retry the same rung. Show me submits the existing `0000`
+answer. Accepted first answers become found/good; help or earlier attempts become
+helped; Show me becomes missed. Praise/seen are recorded only on Continue.
+An optional engine summary loads after resolution or on look; failure offers retry
+and never blocks continuing. Interactive engine lines remain deferred.
+
+Progress is stored by API/user, game and exact analysis fingerprint. Interrupted
+answers resume conservatively, with help/attempt history retained; they cannot
+become first-try successes. An unresolved old-day position requires Restart.
+Storage failures leave a visible warning and permit solving in memory. Finish
+requires storing the exact pending marks before sending; if local storage is
+unavailable, it retains those marks in memory and exposes retry.
+
+Only **Finish review** saves the game. An ambiguous save is accepted only when a
+fresh detail read has identical ordered marks and a changed review timestamp.
+Otherwise the lesson remains open for retry. The Done route only reads saved
+detail; it never writes. Results show Found/Accuracy/To fix and labeled marks,
+including helped/missed separately. Celebration follows confirmed Finish and
+respects Reduce Motion. Quiet games explicitly finish with an empty mark set.
+Missing analysis, unknown side or inconsistent SAN/analysis retain replay access
+and block grading/completion. Sample mode remains a labeled read-only replay.
+
+Verification: browser fixtures exercised wrong→hint→solve, All moves return,
+reload/resume, praise/look→Finish→saved results, and knight underpromotion with all
+four choices visible. Fixtures and session overrides were removed. Native Device
+Hub controls did not respond; no guided native or real-account journey is claimed.
+Physical-device drag, VoiceOver, large text, Reduce Motion and connected
+lost-response recovery remain release acceptance checks. The backend must ship
+`server_day` and the backward-compatible `expected_day` guard before this client.

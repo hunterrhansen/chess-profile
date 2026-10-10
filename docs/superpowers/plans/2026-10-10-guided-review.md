@@ -1,8 +1,8 @@
 # Guided Mobile Game Review Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
-**Status:** Proposed; review the scope before implementation. No implementation has started.
+**Status:** Approved and implemented on `feat/mobile-guided-review`. Automated checks and browser fixture journeys pass; native/live acceptance remains pending.
 
 **Goal:** Complete a saved, resumable find/look/praise game-review journey on iPhone.
 
@@ -52,10 +52,10 @@ label:string, headline:string, fenBefore:string, fenAfter:string}`;
 `review_marks`, `reviewed_at`, `accuracy` and typed analysis rows. Update sample
 and existing tests with explicit empty fields, preserving replay behavior.
 
-- [ ] Add fixed fixture data for White, Black, custom Black-to-move FEN, quiet,
+- [x] Add fixed fixture data for White, Black, custom Black-to-move FEN, quiet,
   unanalysed and incomplete analysis. Start with a legal SAN sequence and derive
   its UCI/color from chess.js; overlay classifications/deck membership explicitly.
-- [ ] Write failing selection tests. At minimum:
+- [x] Write failing selection tests. At minimum:
 
 ```js
 import assert from 'node:assert/strict';
@@ -73,13 +73,13 @@ test('bad deck move is find; praise and non-card mistake are separate steps', ()
   deduplication, >=20 threshold, custom numbering, correct before/after positions,
   null color, malformed SAN, per-ply SAN/UCI/color mismatch, no moments and >200
   steps. Fingerprint changes when SAN/start FEN/analysis/deck membership changes.
-- [ ] Run `cd mobile && node --experimental-strip-types --test tests/review-lesson.test.mjs`;
+- [x] Run `cd mobile && node --experimental-strip-types --test tests/review-lesson.test.mjs`;
   confirm failure before adding implementation.
-- [ ] Port the two-pass algorithm from `web/src/lib/key-moments.ts`, including
+- [x] Port the two-pass algorithm from `web/src/lib/key-moments.ts`, including
   sound null-classification handling and response deduplication. Use actual replay
   labels; refuse unsafe alignment rather than deriving a lesson from partial rows.
   Generate fingerprint from the ordered lesson inputs, without adding a dependency.
-- [ ] Rerun selection and existing replay tests; commit `feat: derive mobile review lessons`.
+- [x] Rerun selection and existing replay tests; commit `feat: derive mobile review lessons`.
 
 ### Task 2: Scoped review state and interrupted-write recovery
 
@@ -97,7 +97,7 @@ finish `{marks,baselineReviewedAt}`. Pure
 `completionConfirmed(game,pending):boolean` requires equal ordered marks and a
 non-null timestamp changed from the baseline. Version and validate persisted data.
 
-- [ ] Add backend tests for GET deck `server_day`, answer with matching day,
+- [x] Add backend tests for GET deck `server_day`, answer with matching day,
   mismatched day returning 409 without a scheduling mutation, and absent
   expected_day retaining current behavior. Extend AnswerIn with
   `expected_day: date | None = None`; capture `today = date.today()` once, check
@@ -105,7 +105,7 @@ non-null timestamp changed from the baseline. Version and validate persisted dat
   GET deck captures one day for stats/results/queue too. Add required `server_day`
   to mobile DeckToday and update its fixtures. Fail clearly if a configured
   backend lacks this field; deploy the backward-compatible backend before the client.
-- [ ] Write in-memory-storage tests for load/save/clear, corrupt JSON, scope/game/
+- [x] Write in-memory-storage tests for load/save/clear, corrupt JSON, scope/game/
   fingerprint isolation, serialized write order and storage failures. Assert that
   pending finish is preserved after save failure and old marks alone do not confirm
   completion:
@@ -118,18 +118,18 @@ test('old saved marks do not confirm the new finish', () => {
 });
 ```
 
-- [ ] Run the session test file and observe failure; implement validated storage
+- [x] Run the session test file and observe failure; implement validated storage
   with keys including version/scope/game/fingerprint and serialized writes.
-- [ ] Add recovery tests for pending answer with/without today's deck result,
+- [x] Add recovery tests for pending answer with/without today's deck result,
   yesterday's unresolved attempt, hint used before app exit, and previous identity
   response arriving late. Recovery never fabricates the exact DeckAnswer.
-- [ ] Integrate shared Practice pending/hint bookkeeping using real card data
+- [x] Integrate shared Practice pending/hint bookkeeping using real card data
   derived from Task 1 (no fake daily counts). Keep review marks in ReviewSession.
   Expose unresolved answer as a visible solve-again state; resumed success is helped.
   Use fresh server_day for answer expected_day. On a 409/date boundary require
   explicit restart after fresh deck read. Resolved review
   steps remain resumable across dates.
-- [ ] Rerun session and Practice flow tests plus backend day-guard tests using
+- [x] Rerun session and Practice flow tests plus backend day-guard tests using
   a dedicated test database as configured by the test suite; commit `feat: persist scoped review progress`.
 
 ### Task 3: Server-checked find position runner
@@ -146,7 +146,7 @@ accepted server response and recovery-settlement attempt; exported pure
 `reviewOutcome({uci,answer,hadHelp,hadFirstAttempt})` returns
 `'found'|'good'|'helped'|'missed'|null` (wrong returns null).
 
-- [ ] Test accepted best/excellent/good alternatives, wrong→retry, hint→solve,
+- [x] Test accepted best/excellent/good alternatives, wrong→retry, hint→solve,
   Show me, `rating:null` and pending-response recovery. Example:
 
 ```js
@@ -156,18 +156,18 @@ test('a later accepted answer cannot become a first-try mark', () => {
 });
 ```
 
-- [ ] Use fake Api/storage tests to assert exact request body and ordering:
+- [x] Use fake Api/storage tests to assert exact request body and ordering:
   persist pending → POST `/api/deck/answer` → settle → resolve. Check double taps,
   offline/lost response, unmount/identity change and finite 0–86400 thinking time and expected_day from the deck preflight.
   Run tests and confirm red before implementation.
-- [ ] Implement board tap/drag legality and all four promotion choices using
+- [x] Implement board tap/drag legality and all four promotion choices using
   existing helpers. Hint delays two seconds, advances tactic/piece/move, persists
   help, and loads `/api/deck/hint` only when needed. Show me submits `0000`.
   Wrong move returns to fenBefore; checking/error states never enable Continue.
-- [ ] Implement outcome/mark mapping with server-authoritative correctness. A
+- [x] Implement outcome/mark mapping with server-authoritative correctness. A
   prepared verdict is optional preview only; do not build that optimization here.
   Keep help history through failed writes and navigation.
-- [ ] Rerun attempt and existing Practice tests; commit `feat: solve guided review positions`.
+- [x] Rerun attempt and existing Practice tests; commit `feat: solve guided review positions`.
 
 ### Task 4: Guided screen and replay round-trip
 
@@ -181,21 +181,21 @@ quiet/replay-only/error states; ordered marks with no unresolved find step.
 `assembleReviewMarks(steps,marks)` rejects missing/unresolved marks. Explicit
 Continue records praise/seen for informational steps; it cannot skip find.
 
-- [ ] Test next/final transitions, no skip of unresolved find, ordered marks,
+- [x] Test next/final transitions, no skip of unresolved find, ordered marks,
   quiet-game empty mark set, restored step bounds and blocked completion for
   unsafe analysis. Run the test file and confirm failure.
-- [ ] Compose review-owned header and full-width scrolling board with shared
+- [x] Compose review-owned header and full-width scrolling board with shared
   native prompt/footer components. Do not use LessonScreen's capped/shrinking
   geometry unchanged. Exit goes to Games; All moves pushes `/moves?ply=N` and
   returns via back to the mounted lesson. Replay direct-link exit stays Games.
-- [ ] Wire find, look and praise. Protect unresolved prompts from best-SAN/headline
+- [x] Wire find, look and praise. Protect unresolved prompts from best-SAN/headline
   spoilers. Add cancellable, scope/game/ply-keyed explanation-summary requests
   after resolution/on look, with retry/factual fallback; omit interactive line UI.
   Test summary request suppression before resolution, quota/503 failure, explicit
   retry and stale scope/ply response handling with fake Api calls.
 - [ ] Check browser round-trip, progress, wrong answer reset, pinned actions and
   320px/390px/large-text layouts; check iPhone tap/drag/promotion and accessibility.
-- [ ] Run tests/types/lint; commit `feat: add guided mobile review journey`.
+- [x] Run tests/types/lint; commit `feat: add guided mobile review journey`.
 
 ### Task 5: Explicit finish and saved results
 
@@ -211,18 +211,18 @@ pending before POST; reconciles ambiguous failure through GET detail; clears onl
 on confirmed success. `reviewResults(game)` counts found/good, helped/missed and
 praise/seen separately. Done never writes completion itself.
 
-- [ ] Test duplicate finish, failure/retry, lost response with newly saved exact
+- [x] Test duplicate finish, failure/retry, lost response with newly saved exact
   marks, old matching review, differing marks, stale identity and zero-moment
   completion. Test results counts and absent saved-review state.
-- [ ] Run completion tests, confirm red; implement persistence → POST → clear →
+- [x] Run completion tests, confirm red; implement persistence → POST → clear →
   replace-to-done order. On ambiguous GET evidence, retain pending and visible
   retry; no automatic resubmit. Network failure must not show a success screen.
-- [ ] Build saved-results view with Found/Accuracy/To fix, labeled marks, Practice
+- [x] Build saved-results view with Found/Accuracy/To fix, labeled marks, Practice
   and Home actions; use existing tokens/icons/celebration components. Celebration
   is only for confirmed Finish arrival and obeys Reduce Motion.
-- [ ] Update the review spec's opponent-response wording and add native/browser
+- [x] Update the review spec's opponent-response wording and add native/browser
   pictures. Record actual evidence; do not call browser pictures native evidence.
-- [ ] Run `pnpm tokens:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`,
+- [x] Run `pnpm tokens:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`,
   `pnpm export:ios`, and `pnpm export:web` from mobile. Confirm scripts exist before
   execution; use `pnpm exec expo export --platform web` if no web script exists.
   No Expo Doctor needed unless native dependencies/config change. Run backend
@@ -240,3 +240,32 @@ is not authorization to start implementation or spawn agents.
 
 First action after scope approval: create the typed fixtures and failing
 `review-lesson.test.mjs` tests in Task 1.
+
+
+## Execution evidence — October 10, 2026
+
+- Mobile: 99 tests pass; lint (zero warnings), typecheck, tokens and iOS/web exports pass.
+- Backend: 166 tests pass using an isolated local Postgres database on port 55432;
+  ten existing dependency deprecation warnings. No hosted database writes.
+- Browser local fixtures: wrong→hint→solve, replay return, reload/resume, praise/look,
+  explicit Finish/saved results and knight underpromotion. All fixtures removed.
+- Fresh whole-branch review found two important issues: permanent cancellation
+  after a same-account refresh, and illegal persisted moves crashing render.
+  Both fixed in one RED→GREEN regression pass; the full mobile suite is green.
+- Native Device Hub controls did not respond. Guided native/live acceptance,
+  320px/large-text guided layouts, drag, VoiceOver and Reduce Motion remain unverified.
+  Exports are compilation evidence only. No deployment or paid build was started.
+
+Rulings made during implementation:
+
+1. Use a focused review controller instead of changing daily PracticePosition;
+   daily queue behavior stays separate. Cost: duplicated interaction code, reduced
+   by shared board/hint/promotion helpers.
+2. Put the backend regression beside existing deck API fixtures in `test_deck.py`;
+   they grade without Stockfish. Cost: the test file differs from the plan, with
+   the same endpoint coverage.
+3. Wire completion/results alongside the guided screen to keep Finish functional
+   in the journey commit. Cost: a larger combined journey/results commit.
+
+Next release action: deploy the backward-compatible server-day guard before
+shipping the mobile client, then validate one authenticated imported game on iPhone.
