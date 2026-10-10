@@ -19,8 +19,7 @@ support consolidation; platform services and phone/desktop shells can differ.
 The four bottom tabs are Home, Games, Play and Progress. The top-bar gear opens
 Settings as a separate stack screen. Home launches
 Practice; Practice, Puzzles and game review run outside the tabs. Settings opens
-the Welcome → Link Account → Import Progress preview. Game routes now open read-only All Moves replay; guided review and Review Complete
-remain unfinished.
+the Welcome → Link Account → Import Progress preview. Game routes open guided find/look/praise review; All moves retains replay and Done shows saved results. Unanalysed games remain replay-only.
 
 Without a hosted API URL, Home offers sample practice and Games offers a review
 preview. Home uses an explicitly labeled design-preview unit and sample positions. Games offers
@@ -93,8 +92,7 @@ Connected screens:
   daily summary. Local state is scoped by server/user/day; only the server grades.
 - Games: paginated imported-game list with Open game actions. Game replay reads
   `/api/games/{id}` and supports initial/previous/next/final positions, move selection,
-  flipping and last-move highlights, including unanalysed games. Guided game review
-  and importing/analysing games remain on the web while those flows are migrated.
+  flipping and last-move highlights, including unanalysed games. Guided review adds server-graded answers, hints, scoped resume and explicit saved completion/results. Importing/analysing games, clocks, graphs and interactive variations remain migration work.
 
 Failed requests show errors and retry controls. They do not silently switch to
 sample data. A sign-in rejection requires signing in again (or correcting server
@@ -199,3 +197,17 @@ updates it, `pnpm tokens:check` detects drift. Reanimated/worklets are pinned to
 SDK-compatible versions. ESLint 9 matches Expo's lint plugin. The pnpm build
 allowlist permits the lint resolver's native binding and skips two dependencies'
 optional postinstall messages.
+
+
+## Guided-review slice verification
+
+The backend adds `GET /api/deck`'s `server_day` and optional answer `expected_day`.
+Deploy that backward-compatible server change before distributing this client;
+older servers show an explicit preparation error rather than guessing a day.
+
+Browser checks used temporary local fixtures for wrong answer, hint/solve,
+replay return, reload resume, praise/look, saved results and knight promotion.
+The fixtures were removed; sample mode remains read-only. Guided native/real-account
+acceptance is still required: Device Hub controls did not respond during this run.
+See [the screen spec](../docs/screens/review.md#mobile-guided-review--october-10-2026)
+for recovery rules and current screenshots.

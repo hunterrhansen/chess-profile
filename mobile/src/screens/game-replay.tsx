@@ -13,8 +13,11 @@ import type { Api } from "@/lib/api";
 import { useTheme } from "@/lib/theme";
 import { replayGame, replayIndex, sampleGame, type GameDetail } from "@/lib/game-replay";
 
-function exit() {
-  router.dismissTo("/games");
+function exit(id?:string, lesson?:string) {
+  if (lesson === '1' && id) {
+    if (router.canGoBack()) router.back();
+    else router.replace({pathname:'/games/[id]',params:{id}});
+  } else router.dismissTo('/games');
 }
 
 export default function GameReplay() {
@@ -78,11 +81,12 @@ export function GameReplayLoader({ id, api }: { id: string; api: Api }) {
 
 function Frame({ children, flip }: { children: ReactNode; flip?: () => void }) {
   const { colors, isDark } = useTheme();
+  const {id,lesson}=useLocalSearchParams<{id:string;lesson:string}>();
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.page }}>
       <StatusBar style={isDark ? "light" : "dark"} />
       <View style={{ width: "100%", maxWidth: 640, alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 12, padding: 16 }}>
-        <Button label="Games" accessibilityLabel="Back to Games" variant="secondary" onPress={exit} />
+        <Button label={lesson === "1" ? "Lesson" : "Games"} accessibilityLabel={lesson === "1" ? "Back to lesson" : "Back to Games"} variant="secondary" onPress={()=>exit(id,lesson)} />
         <Text heading accessibilityRole="header" style={{ flex: 1, fontSize: 22 }}>All moves</Text>
         {flip && <Button label="Flip" accessibilityLabel="Flip board" variant="secondary" onPress={flip} />}
       </View>
@@ -94,7 +98,8 @@ function Frame({ children, flip }: { children: ReactNode; flip?: () => void }) {
 function ReplayView({ game, sample = false }: { game: GameDetail; sample?: boolean }) {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
-  const [ply, setPly] = useState(0);
+  const {ply:initialPly}=useLocalSearchParams<{ply:string}>();
+  const [ply, setPly] = useState(()=>replayIndex(Number(initialPly??0),game.san.length));
   const [flipped, setFlipped] = useState(game.color === "black");
   const strip = useRef<ScrollView>(null);
   const offsets = useRef(new Map<number, number>());

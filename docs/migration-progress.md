@@ -4,14 +4,14 @@
 for source-verified coverage and ranked delivery slices at `631ba88`. The sections
 below preserve earlier milestones and contain historical route counts/gaps.
 
-**Latest slice, October 10:** read-only game replay is now implemented. Game rows
-open All moves with SAN replay, orientation/flip, last-move highlights, selected
-move navigation and pinned start/back/forward/end controls. Unanalysed games work;
-loading, invalid/empty/corrupt games and retry have explicit states. See the
-[review spec and current picture](screens/review.md#mobile-read-only-replay--october-10-2026).
-Guided review, completion marks, clocks/evaluation graphs and variations are next.
-Browser/sample/fixture checks, 71 mobile tests, lint, types, tokens and iOS/web
-exports passed; native interaction was blocked by a locked Mac.
+**Latest slice, October 10:** guided game review is implemented on the feature
+branch: find/look/praise, hints, authoritative answers, scoped resume, replay
+round-trip, explicit Finish and saved results. The board remains full width and
+square-edged. Browser fixture journeys passed; guided native/live acceptance
+remains because Device Hub controls did not respond. No paid build or deployment
+was started. See the [review spec and pictures](screens/review.md#mobile-guided-review--october-10-2026).
+The backend must deploy `server_day`/`expected_day` before distributing the client.
+Verification: 99 mobile tests, lint, types, tokens, iOS/web exports and 166 backend tests passed. Clocks, graphs and interactive variations remain follow-up work.
 
 Initial audit: October 9, 2026, commit `13c6111`. Historical sections below
 record earlier slices; the latest status is this Practice follow-up.
@@ -304,6 +304,4 @@ Expo Doctor and iOS export. Record the tested platform, account environment,
 screens and outcomes for native acceptance; do not mark a route complete solely
 because it exports successfully.
 
-**Next bounded task:** deliver these Practice changes through a PR and a fresh
-iPhone preview. Check connected recovery and accessibility on that preview; then
-port read-only game replay before the guided review lessons.
+**Next bounded task:** validate one guided imported-game review on iPhone, including replay return and saved results. Connected recovery and accessibility remain release checks.

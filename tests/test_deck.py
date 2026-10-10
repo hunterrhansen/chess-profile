@@ -263,3 +263,22 @@ def test_the_deck_uses_tuned_parameters_once_there_are_enough_reviews(conn):
     conn.execute("INSERT INTO settings (key, value) VALUES ('fsrs_parameters', ?)", (json.dumps(tuned),))
     assert deck.tuning(conn)["personal"]
     assert list(deck.scheduler(conn).parameters) == tuned
+
+
+def test_api_server_day_guards_answer_before_mutation(db_url):
+    with db.connect(db_url) as c:
+        add_game(c, 1)
+        add_move(c, 1, 2)
+    client = TestClient(api.create_app(db_url))
+    info = client.get('/api/deck').json()
+    assert info['server_day'] == date.today().isoformat()
+    body = {'game_id': 1, 'ply': 2, 'uci': 'e7e5',
+            'expected_day': (date.today() - timedelta(days=1)).isoformat()}
+    assert client.post('/api/deck/answer', json=body).status_code == 409
+    with db.connect(db_url) as c:
+        assert c.execute('SELECT count(*) FROM card_reviews').fetchone()[0] == 0
+    body['expected_day'] = info['server_day']
+    result = client.post('/api/deck/answer', json=body)
+    assert result.status_code == 200 and result.json()['rating'] is not None
+    body.pop('expected_day')
+    assert client.post('/api/deck/answer', json=body).json()['rating'] is None
