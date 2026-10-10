@@ -10,7 +10,6 @@ import {
   LessonBar,
   LessonAction,
 } from "@/components/lesson-screen";
-import { PromotionChoice } from "@/components/promotion-choice";
 import {
   isMoveClassification,
 } from "@/components/move-classification";
@@ -21,6 +20,7 @@ import {
   type Promotion,
 } from "@/lib/practice-flow";
 import { preparedQuality, practiceFlash } from "@/lib/practice-feedback";
+import { useVerdictHaptics } from "@/lib/board-haptics";
 import { checkPracticeAttempt } from "@/lib/practice-attempt";
 import { legalTargets } from "@/lib/practice";
 import type { Api, DeckToday, DeckCard, DeckAnswer, PracticeFeedback, FeedbackQuality } from "@/lib/api";
@@ -34,6 +34,7 @@ export default function PracticePosition({
   againLeft,
   previousPosition,
   advancing = false,
+  advanceError,
 }: {
   api: Api;
   card: DeckCard;
@@ -44,7 +45,13 @@ export default function PracticePosition({
   againLeft: number;
   previousPosition?: { fen: string; flipped: boolean };
   advancing?: boolean;
+  advanceError?: string;
 }) {
+  const acknowledge = useVerdictHaptics();
+  function showFeedback(cue: ReturnType<typeof practiceFlash>) {
+    acknowledge(cue);
+    setFlash(cue);
+  }
   const attemptSequence = useRef(0);
   const [selected, setSelected] = useState<Square | null>(null);
   const [flipped, setFlipped] = useState(card.color === "black");
@@ -162,7 +169,7 @@ export default function PracticePosition({
             setLastMove({ from: uci.slice(0, 2), to: uci.slice(2, 4) });
             const quality = preparedQuality({ ...card, feedback }, uci);
             setPreviewQuality(quality);
-            if (quality) setFlash(practiceFlash(attempt, uci, quality !== "wrong"));
+            if (quality) showFeedback(practiceFlash(attempt, uci, quality !== "wrong"));
           }
         },
         prepare: async () => {
@@ -191,6 +198,10 @@ export default function PracticePosition({
           redo,
           seconds,
         }),
+        verdict: (result) => {
+          if (alive.current && uci !== "0000")
+            showFeedback(practiceFlash(attempt, uci, result.correct));
+        },
         settle: async (result) => {
           if (!redo)
             await practice
@@ -223,7 +234,7 @@ export default function PracticePosition({
             });
             announce(`The best move is ${result.best_san}.`);
           } else {
-            setFlash(practiceFlash(attempt, uci, result.correct));
+            showFeedback(practiceFlash(attempt, uci, result.correct));
             if (result.correct) {
               setOutcome(
                 !first && hints === 0 && (redo || result.rating !== null)
@@ -355,28 +366,12 @@ export default function PracticePosition({
                 ? "retry"
                 : busy && previewQuality ? "right" : "idle"
           }
-          title={promotion ? "Promote your pawn" : title}
+          title={title}
           detail={
-            promotion
-              ? "Choose the piece your pawn becomes."
-              : busy ? (previewQuality ? "Saving your attempt…" : "Checking move…") : (error ?? detail)
+            advanceError ?? (busy ? (previewQuality ? "Saving your attempt…" : "Checking move…") : (error ?? detail))
           }
         >
-          {promotion ? (
-            <PromotionChoice
-              choices={promotion.choices}
-              onCancel={() => setPromotion(null)}
-              onChoose={(kind) => {
-                const chess = new Chess(card.fen_before);
-                const move = chess.move({ ...promotion, promotion: kind });
-                setPromotion(null);
-                void submit(
-                  move.from + move.to + (move.promotion ?? ""),
-                  chess.fen(),
-                );
-              }}
-            />
-          ) : outcome ? (
+          {outcome ? (
             <>
               <View style={{ flex: 1 }}>
                 <HelpDialog textTrigger label="Why this move?" title={first?.best_san ? `Best move: ${first.best_san}` : "Why this move?"}
@@ -390,18 +385,19 @@ export default function PracticePosition({
                 quiet
                 glyph="hint"
                 label={guidance.label}
-                disabled={!hintReady || busy || returning || !guidance.next}
+                disabled={!!promotion || !hintReady || busy || returning || !guidance.next}
                 onPress={() => void hint()}
               />
               <LessonAction
                 quiet
                 label="Show me"
-                disabled={busy || returning}
+                disabled={!!promotion || busy || returning}
                 onPress={() => void submit("0000")}
               />
               <LessonAction
                 quiet
                 label="Flip"
+                disabled={!!promotion}
                 onPress={() => setFlipped((value) => !value)}
               />
             </>
@@ -416,6 +412,16 @@ export default function PracticePosition({
         />
       }>
         <Board
+          promotion={promotion ? {
+            ...promotion,
+            onCancel: () => setPromotion(null),
+            onChoose: (kind) => {
+              const chess = new Chess(card.fen_before);
+              const move = chess.move({ from: promotion.from, to: promotion.to, promotion: kind });
+              setPromotion(null);
+              void submit(move.from + move.to + (move.promotion ?? ""), chess.fen());
+            },
+          } : undefined}
           fen={fen}
           ledge={false}
           animatePositions
@@ -430,6 +436,7 @@ export default function PracticePosition({
           }
           disabled={busy || !!outcome || returning || !!promotion}
           onSquare={onSquare}
+          verdictHaptics={false}
           flash={flash}
           lastMove={lastMove}
           arrows={

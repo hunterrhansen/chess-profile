@@ -392,3 +392,15 @@ Rules:
 Mobile practice omits the board’s 4px ledge so its last rank is the footer
 boundary. Position rearrangements use the web board’s 200ms CSS ease curve,
 movement-pattern matching, and end-of-slide addition/removal without extra fades.
+
+Mobile practice promotion uses a vertical on-board piece picker, anchored to the
+promotion file and extending inward from the destination rank. Queen, knight,
+rook, bishop and cancel follow Chess.com’s observed analysis-board order. Tap a
+piece to submit; cancel or an outside board tap restores the pending pawn. The
+footer remains stable and its controls are disabled during selection.
+
+
+Practice geometry is independent of message length and puzzle content. Reserve
+fixed prompt/status/action regions; scroll excess wording inside its region.
+Only viewport, system text scale and safe-area changes may resize the board.
+Status entrances animate within their region; action controls stay anchored.

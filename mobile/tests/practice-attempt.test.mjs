@@ -46,3 +46,22 @@ test('a failed attempt can be retried and diagnostics cannot change the saved gr
   await checkPracticeAttempt(steps);
   assert.deepEqual(events, ['moved','restored','moved','settled','graded']);
 });
+
+test('authoritative verdict acknowledges before local settlement completes', async () => {
+  const response = deferred(), settled = deferred();
+  const events = [];
+  const run = checkPracticeAttempt({
+    preview: () => events.push('preview'), prepare: async () => {},
+    request: () => response.promise,
+    verdict: result => events.push(result.correct ? 'haptic' : 'wrong'),
+    settle: () => { events.push('settling'); return settled.promise; },
+    accept: () => events.push('complete'), restore: () => {}, report: () => {},
+  });
+  await new Promise(r => setImmediate(r));
+  assert.deepEqual(events, ['preview']);
+  response.resolve({correct:true});
+  await new Promise(r => setImmediate(r));
+  assert.deepEqual(events, ['preview','haptic','settling']);
+  settled.resolve(); await run;
+  assert.deepEqual(events, ['preview','haptic','settling','complete']);
+});

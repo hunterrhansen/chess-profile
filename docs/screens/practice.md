@@ -288,8 +288,8 @@ The Expo board has square outer corners. Sample and connected practice anchor
 the board toward the bottom of the lesson area, with the short side-to-move prompt
 directly above it. At a 390×844 browser viewport the board is 390px wide, beginning
 at y=274 (32.5% of the viewport). The practice footer reserves 160px so normal idle
-and result transitions keep that anchor stable. Hints, errors and promotion can
-grow the footer as needed; the board shrinks to remaining height on short screens.
+and result transitions keep that anchor stable. This minimum-height reservation was replaced by the fixed geometry described
+in “Stable practice layout” below; message length no longer resizes the board.
 The supplied Chess.com and Lichess phone screenshots are the placement reference.
 
 ![Lower square board and short prompt](img/practice-lower-board-phone.png)
@@ -350,3 +350,75 @@ of the 200ms piece animation. A mating move plays its single victory sound at th
 same immediate point. Prepared and server-confirmed copies of the same verdict
 retain one reward identity, so saving does not replay feedback. Ordinary replay
 sounds retain their animation timing; silent mode and haptic settings still apply.
+
+
+Practice invokes verdict haptics directly in the verdict handler, before the board
+render; its Board effect is disabled for verdicts while pickup ticks remain.
+Correct answers use one rigid impact instead of the system success notification
+pattern. Server-only verdicts acknowledge before local recovery settlement;
+Continue still waits for settlement. Prepared and confirmed copies share the same
+haptic identity. Physical onset and crispness require a phone acceptance check.
+
+
+## On-board promotion — October 10, 2026
+
+Promotion replaces the footer picker with a vertical stack on the destination
+file: queen, knight, rook, bishop, then ×. The queen sits at the promotion edge;
+the stack grows inward, including when the board faces Black. Targets are at
+least 44px on small boards; on boards shorter than the stack, it scrolls within
+the board (opening at the promotion edge). Web keyboard focus stays within the
+choices and returns to the prior board target on dismiss. It uses Knightly’s pieces in the moving pawn’s color.
+Only legal choices are included. A piece tap commits the chosen promotion; ×,
+an outside board tap, Escape on web, or Android Back cancels without grading.
+The pending pawn is held at the destination until choose/cancel. Other board
+interaction and footer controls are disabled during the choice; footer height
+and board position remain stable. Native accessibility escape cancels too.
+
+The reference was observed directly on
+[Chess.com’s analysis board](https://www.chess.com/analysis?fen=7k%2FP7%2F8%2F8%2F8%2F8%2F8%2F4K3%20w%20-%20-%200%201).
+Its [promotion help article](https://support.chess.com/en/articles/8588160-how-can-i-turn-my-pawn-into-a-queen)
+explains the four choices; the stack placement/order came from the live board.
+This is a custom board overlay because a native form Picker/Menu does not place
+four chess-piece targets along a board file.
+
+![On-board promotion picker](img/practice-promotion-phone.png)
+
+Browser verification covers cancellation, a 390×844 board, a flipped board at
+320×568, and one-tap knight underpromotion. Unit tests cover both pawn colors,
+orientation, legal choice filtering, and edge-file geometry. Native VoiceOver,
+TalkBack, Android Back, and drag cancellation remain physical-device checks.
+
+
+## Stable practice layout — October 10, 2026
+
+Practice uses a fixed 160px footer, with extra space based only on system text
+scale and bottom safe area. A pinned 64px action band never moves when hints,
+saving, retries, errors, or results appear. Long status messages scroll in the
+remaining space; only the status content animates, not the action band.
+The prompt occupies a fixed 54px space (scaled for system text), with scrolling
+for long wording. Progress/title stay on one row. Explanations and promotion
+remain overlays. Board bounds are retained across keyed connected-practice cards
+so a new puzzle can render at the measured size immediately, including its pieces.
+A failed next-puzzle fetch keeps the solved board visible and shows a retry
+message; Continue retries fetching without grading the answer again. Rotation, window
+resizing, and changing system text size legitimately recalculate geometry.
+
+![Practice with anchored board and controls](img/practice-stable-layout-phone.png)
+
+A temporary browser regression fixture reproduced a disappearing board with a
+long error before this change. Afterward, 15 measurements across five states
+(idle, saving, long hint, long error/prompt, success) at 320×460, 320×568 and
+390×844 had identical board bounds and action-band vertical bounds, including
+keyed board remounts. The fixture was removed. The real sample flow also verified
+success, explanation open/close, next puzzle and promotion open/cancel with the
+390px board anchored at y=294. Native Dynamic Type, safe areas and VoiceOver
+remain physical-device acceptance checks.
+
+
+The “Why this move?” trigger fills the action band through the dialog root and
+uses the same 4px ledge, padding and press offset as the other lesson buttons.
+Browser measurements at 390×844 and 320×568 confirm both result buttons have
+60px faces inside 64px bases, with identical top edges. Explanation open/close
+and focus restoration remain functional.
+
+![Matching result button heights](img/practice-matched-buttons-phone.png)

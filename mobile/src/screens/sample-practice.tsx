@@ -13,10 +13,11 @@ import {
   LessonAction,
 } from "@/components/lesson-screen";
 import { exercises, legalTargets, evaluateMove } from "@/lib/practice";
-import { PromotionChoice } from "@/components/promotion-choice";
 import { promotionChoices, type Promotion } from "@/lib/practice-flow";
+import { useVerdictHaptics } from "@/lib/board-haptics";
 import { KnIcon } from "@/components/kn-icon";
 export default function PracticePreview() {
+  const acknowledge = useVerdictHaptics();
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<Square | null>(null);
   const [flipped, setFlipped] = useState(false);
@@ -91,6 +92,13 @@ export default function PracticePreview() {
   }
   function answerMove(from: Square, square: Square, piece: Promotion = "q") {
     const answer = evaluateMove(exercise, from, square, piece);
+    const cue = {
+      square,
+      tone: answer.correct ? "right" as const : "wrong" as const,
+      id: Date.now(),
+    };
+    acknowledge(cue);
+    setFlash(cue);
     setSelected(null);
     setWrong(!answer.correct);
     if (Platform.OS !== "web")
@@ -99,11 +107,6 @@ export default function PracticePreview() {
           ? "You found checkmate."
           : "Try another move. The position will reset.",
       );
-    setFlash({
-      square,
-      tone: answer.correct ? "right" : "wrong",
-      id: Date.now(),
-    });
     setLastMove({ from, to: square });
     setPlayedFen(answer.fen);
     if (!answer.correct) setReturning(true);
@@ -128,7 +131,7 @@ export default function PracticePreview() {
     setWrong(false);
   }
   const footer = done ? (
-    <LessonBar detail="Sample positions · Your review progress is unchanged">
+    <LessonBar reservedHeight={160} detail="Sample positions · Your review progress is unchanged">
       <LessonAction quiet label="Practice again" onPress={() => reset()} />
       <LessonAction label="Back home" onPress={() => router.dismissTo("/")} />
     </LessonBar>
@@ -138,9 +141,7 @@ export default function PracticePreview() {
       reservedHeight={160}
       tone={correct ? "right" : shown ? "wrong" : wrong ? "retry" : "idle"}
       title={
-        promotion
-          ? "Promote your pawn"
-          : correct
+        correct
             ? hint
               ? "Found it, with help!"
               : "You found it!"
@@ -151,9 +152,7 @@ export default function PracticePreview() {
                 : undefined
       }
       detail={
-        promotion
-          ? "Choose the piece your pawn becomes."
-          : answered
+        answered
             ? ""
             : wrong
               ? "Try again, or use a hint."
@@ -166,16 +165,7 @@ export default function PracticePreview() {
                 : ""
       }
     >
-      {promotion ? (
-        <PromotionChoice
-          choices={promotion.choices}
-          onCancel={() => setPromotion(null)}
-          onChoose={(kind) => {
-            answerMove(promotion.from, promotion.to, kind);
-            setPromotion(null);
-          }}
-        />
-      ) : answered ? (
+      {answered ? (
         <>
           <View style={{ flex: 1 }}>
             <HelpDialog textTrigger label="Why this move?" title="The idea" description={exercise.explanation} />
@@ -196,7 +186,7 @@ export default function PracticePreview() {
                     ? "Show move"
                     : "Hint shown"
             }
-            disabled={!hintReady || hints >= 3 || returning}
+            disabled={!!promotion || !hintReady || hints >= 3 || returning}
             onPress={() => {
               setHints((n) => n + 1);
               setWrong(false);
@@ -205,12 +195,13 @@ export default function PracticePreview() {
           <LessonAction
             quiet
             label="Show me"
-            disabled={returning}
+            disabled={!!promotion || returning}
             onPress={showMove}
           />
           <LessonAction
             quiet
             label="Flip"
+            disabled={!!promotion}
             onPress={() => setFlipped(!flipped)}
           />
         </>
@@ -247,8 +238,17 @@ export default function PracticePreview() {
             <LessonPrompt title="White to move" detail="Find checkmate." />
           }>
             <Board
+              promotion={promotion ? {
+                ...promotion,
+                onCancel: () => setPromotion(null),
+                onChoose: (kind) => {
+                  answerMove(promotion.from, promotion.to, kind);
+                  setPromotion(null);
+                },
+              } : undefined}
               ledge={false}
           animatePositions
+              verdictHaptics={false}
               flash={flash}
               lastMove={lastMove}
               fen={playedFen ?? exercise.fen}

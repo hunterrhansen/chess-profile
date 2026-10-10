@@ -7,8 +7,8 @@ export function subtleHaptic() {
   void Haptics.selectionAsync().catch(() => {});
 }
 
-/** One short result pattern, guarded just like the selection tick. */
+/** A single crisp impact; notification success is a longer system pattern. */
 export function successHaptic() {
   if (Platform.OS === "web" || AppState.currentState !== "active") return;
-  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid).catch(() => {});
 }

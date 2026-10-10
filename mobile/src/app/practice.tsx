@@ -6,6 +6,7 @@ import { Text } from "@/components/ui";
 import { KnIcon } from "@/components/kn-icon";
 import {
   LessonScreen,
+  LessonGeometry,
   LessonBar,
   LessonAction,
 } from "@/components/lesson-screen";
@@ -17,7 +18,7 @@ import PracticePosition from "@/screens/practice-position";
 import SamplePractice from "@/screens/sample-practice";
 export default function Practice() {
   const { connected } = useSession();
-  return connected ? <DailyPractice /> : <SamplePractice />;
+  return <LessonGeometry>{connected ? <DailyPractice /> : <SamplePractice />}</LessonGeometry>;
 }
 function DailyPractice() {
   const [previousPosition, setPreviousPosition] = useState<{ fen: string; flipped: boolean }>();
@@ -74,12 +75,13 @@ function DailyPractice() {
       setRefresh((n) => n + 1);
     }
   }
-  if (!error && deck && card)
+  if (deck && card)
     return (
       <PracticePosition
         api={api}
         previousPosition={previousPosition}
         advancing={loading}
+        advanceError={error ? "Couldn’t load the next position. Try Continue again." : undefined}
         key={`${card.game_id}-${card.ply}-${redo ? "redo" : "first"}`}
         card={card}
         deck={deck}
@@ -95,6 +97,7 @@ function DailyPractice() {
       total={deck?.today.total ?? 0}
       footer={
         <LessonBar
+          reservedHeight={160}
           detail={
             loading
               ? "Picking your due positions…"

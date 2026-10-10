@@ -1,10 +1,11 @@
 import { Chess, type Square, type Color } from "chess.js";
-import { Pressable, View, StyleSheet } from "react-native";
+import { Pressable, View, StyleSheet, Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useReducedMotion } from "react-native-reanimated";
 import { boardSquares, legalTargets } from "../lib/practice";
 import { useTheme } from "../lib/theme";
+import { BoardSizeContext } from "./board-size";
 import { MovingPiece } from "./board-piece";
 import { BoardFeedback } from "./board-feedback";
 import {
@@ -26,6 +27,7 @@ import {
 import { useBoardSound } from "../lib/board-sound";
 import { useBoardHaptics } from "../lib/board-haptics";
 import { Text } from "./ui";
+import { PromotionChoice, type PromotionRequest } from "./promotion-choice";
 export type { BoardArrow, Classification } from "./board-marks";
 const names = {
   k: "king",
@@ -45,6 +47,7 @@ type Drop = {
 };
 export function Board({
   fen,
+  promotion,
   initialFen,
   initialFlipped,
   animatePositions = false,
@@ -64,10 +67,12 @@ export function Board({
   movable,
   soundEnabled = true,
   hapticsEnabled = true,
+  verdictHaptics = true,
   edgeInset = 0,
   onMove,
 }: {
   fen: string;
+  promotion?: PromotionRequest;
   initialFen?: string;
   initialFlipped?: boolean;
   animatePositions?: boolean;
@@ -87,12 +92,15 @@ export function Board({
   movable?: Color;
   soundEnabled?: boolean;
   hapticsEnabled?: boolean;
+  /** Practice dispatches verdict haptics before rendering; pickup still stays enabled. */
+  verdictHaptics?: boolean;
   /** Extend into the screen's horizontal padding while controls stay inset. */
   edgeInset?: number;
   /** Optional direct move callback; existing onSquare consumers also support drag. */
   onMove?: (from: Square, to: Square) => boolean | void;
 }) {
   const { colors: c } = useTheme();
+  const squareRefs = useRef(new Map<Square, View>());
   const chess = useMemo(() => new Chess(fen), [fen]);
   const check = useMemo(() => checkSquares(fen), [fen]);
   const moves = useMemo(() => {
@@ -106,7 +114,8 @@ export function Board({
   }, [chess]);
   const squares = useMemo(() => boardSquares(flipped), [flipped]);
   const reduced = useReducedMotion();
-  const [width, setWidth] = useState(0);
+  const measuredSize = useContext(BoardSizeContext);
+  const [width, setWidth] = useState(measuredSize);
   const [drag, setDrag] = useState<{ from: Square; fen: string } | null>(null);
   const [drop, setDrop] = useState<Drop | null>(null);
   const [dropped, setDropped] = useState<{
@@ -154,7 +163,7 @@ export function Board({
   );
   const pickup = useBoardHaptics(
     hapticsEnabled,
-    flash,
+    verdictHaptics ? flash : undefined,
   );
   const onTapSquare = useCallback(
     (square: Square) => {
@@ -245,6 +254,9 @@ export function Board({
         style={[styles.grid, edgeInset > 0 && { borderRadius: 0 }]}
         onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
       >
+        <View style={{ flex: 1 }} accessibilityElementsHidden={!!promotion} aria-hidden={!!promotion}
+          importantForAccessibility={promotion ? "no-hide-descendants" : "auto"}
+          pointerEvents={promotion ? "none" : "auto"}>
         {Array.from({ length: 8 }, (_, row) => (
           <View key={row} style={styles.row}>
             {squares.slice(row * 8, row * 8 + 8).map((square, column) => {
@@ -259,6 +271,7 @@ export function Board({
               return (
                 <Pressable
                   key={square}
+                  ref={view => { if (view) squareRefs.current.set(square, view); else squareRefs.current.delete(square); }}
                   accessibilityRole="button"
                   accessibilityLabel={`${square}${piece ? `, ${piece.color === "w" ? "white" : "black"} ${names[piece.type]}` : ", empty"}${target ? ", legal destination" : ""}${check?.king === square ? ", in check" : ""}`}
                   accessibilityState={{
@@ -380,6 +393,7 @@ export function Board({
               }
               destinations={moves.get(piece.square)}
               landing={
+                promotion?.from === piece.square ? promotion.to :
                 drop?.fen === fen && drop.from === piece.square
                   ? drop.to
                   : undefined
@@ -443,6 +457,14 @@ export function Board({
             kind="winner"
             delay={shown.mate.fall ? MOVE_MS + 980 : undefined}
           />
+        )}
+        </View>
+        {promotion && width > 0 && (
+          <PromotionChoice request={{ ...promotion, onCancel: () => {
+            promotion.onCancel();
+            if (Platform.OS === "web") requestAnimationFrame(() => squareRefs.current.get(promotion.from)?.focus());
+          } }} size={width} flipped={flipped}
+            side={chess.get(promotion.from)?.color ?? chess.turn()} />
         )}
       </View>
     </GestureHandlerRootView>

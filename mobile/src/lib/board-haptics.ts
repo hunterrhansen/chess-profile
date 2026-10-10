@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Platform } from "react-native";
 import { subtleHaptic, successHaptic } from "./haptics";
+import { createVerdictHaptics } from "./verdict-haptics";
 
 /** User interaction only: position replays and board flips are silent. */
 export function useBoardHaptics(
@@ -25,4 +26,13 @@ export function useBoardHaptics(
       return;
     subtleHaptic();
   }, [enabled]);
+}
+
+/** Practice invokes this before setState, not from the board's render effect. */
+export function useVerdictHaptics() {
+  const [acknowledge] = useState(() => createVerdictHaptics(tone => {
+    if (tone === "right") successHaptic();
+    else subtleHaptic();
+  }));
+  return acknowledge;
 }
