@@ -1,5 +1,8 @@
 # Game review
 
+The Expo replay's initial game fetch uses the shared [Knight hop loader](loading.md)
+with “Opening your game…” below the existing Games/All moves header.
+
 A game's review is a lesson: one step per key moment, in the same shell as Practice. All moves
 is the whole game for browsing. Review complete ends it.
 

@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { router, useLocalSearchParams } from "expo-router";
 import { Board } from "@/components/board";
+import { LoadingScreen } from "@/components/knight-loader";
 import { BoardSizeContext } from "@/components/board-size";
 import { MoveClassification } from "@/components/move-classification";
 import { Text, Button, Card } from "@/components/ui";
@@ -52,6 +53,7 @@ export function GameReplayLoader({ id, api }: { id: string; api: Api }) {
     return () => abort.abort();
   }, [api, validId, id, attempt]);
   if (game) return <ReplayView game={game} />;
+  if (validId && !error) return <Frame><LoadingScreen title="Opening your game…" detail="Setting up the board." /></Frame>;
   return (
     <Frame>
       <View style={{ padding: 16, flex: 1, justifyContent: "center", gap: 16 }}>

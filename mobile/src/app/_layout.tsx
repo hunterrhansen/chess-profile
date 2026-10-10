@@ -6,7 +6,7 @@ import { Fredoka_600SemiBold } from "@expo-google-fonts/fredoka/600SemiBold";
 import { PortalHost } from "@rn-primitives/portal";
 import { ThemeProvider, useTheme } from "@/lib/theme";
 import { SessionProvider } from "@/lib/session";
-import { Text } from "@/components/ui";
+import { LoadingScreen } from "@/components/knight-loader";
 export const unstable_settings = { initialRouteName: "(tabs)" };
 function Navigation() {
   const { colors } = useTheme();
@@ -40,7 +40,7 @@ export default function RootLayout() {
           <Navigation />
         </SessionProvider>
       ) : (
-        <Text style={{ padding: 24 }}>Opening Knightly…</Text>
+        <LoadingScreen title="Opening Knightly…" detail="Getting everything ready." systemFont />
       )}
     </ThemeProvider>
   );

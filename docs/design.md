@@ -40,6 +40,13 @@ The mark also carries the waits and the gaps:
   what's missing, one line on how to get it, and the action that does ("Reset filters", "Go to
   Settings"). `compact` for a gap inside a card.
 
+The mobile app uses the approved [Knight hop loader](screens/loading.md): its
+existing knight piece follows a legal, two-leg L-shaped tour of a 3×3 board in
+Knightly's board colors. `LoadingScreen` adds the logo and scrolls at larger text
+sizes; `KnightLoader` fits inside an existing screen. Reduced motion holds the
+knight still, backgrounding pauses it, and loaded content never waits on a loop.
+The web client's existing `LogoLoader` remains its own implementation.
+
 ## Color
 
 - Use tokens as Tailwind colors (`bg-brand`, `text-on-brand`, `border-line`,

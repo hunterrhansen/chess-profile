@@ -1,5 +1,8 @@
 # Home
 
+The Expo client's initial path fetch uses the shared [Knight hop loader](loading.md)
+with “Laying out your path…”; errors retain the existing retry state.
+
 Today's goal and your path. The first thing you see after sign-in: what to do today, in order,
 and why it's the thing that will help most.
 
