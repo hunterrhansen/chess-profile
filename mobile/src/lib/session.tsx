@@ -16,6 +16,7 @@ import { createApi, serverUrl, type Api } from "./api";
 import { useTheme } from "./theme";
 import { Button, Text } from "../components/ui";
 import { Logo } from "../components/logo";
+import { LoadingScreen } from "../components/knight-loader";
 const configured = process.env.EXPO_PUBLIC_API_URL;
 type Session = {
   connected: boolean;
@@ -69,6 +70,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return (
       <SessionContext.Provider value={demo}>{children}</SessionContext.Provider>
     );
+  if (!key && !error) return <LoadingScreen title="Connecting to Knightly…" detail="Opening your practice account." />;
   if (!key)
     return (
       <SessionPanel>
@@ -125,11 +127,7 @@ function AccountSession({ children }: { children: ReactNode }) {
     [api, user, signOut],
   );
   if (!isLoaded)
-    return (
-      <SessionPanel>
-        <Text>Opening your account…</Text>
-      </SessionPanel>
-    );
+    return <LoadingScreen title="Opening your account…" detail="Getting your practice ready." />;
   if (!isSignedIn) return <SignIn />;
   return (
     <SessionContext.Provider value={session}>

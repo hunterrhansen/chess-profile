@@ -1,5 +1,8 @@
 # Games
 
+The Expo client's initial games fetch uses the shared [Knight hop loader](loading.md).
+Fetching more games keeps the small inline wait; errors retain retry controls.
+
 The library of every game, and the way into a review.
 
 **Code:** `web/src/pages/games.tsx`, `components/filter-pill.tsx`, `components/game-bits.tsx`.

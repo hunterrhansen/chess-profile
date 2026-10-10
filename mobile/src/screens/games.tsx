@@ -6,6 +6,7 @@ import { useSession } from "@/lib/session";
 import { useTheme } from "@/lib/theme";
 import { Placeholder } from "@/components/page";
 import { Text, Button, Card } from "@/components/ui";
+import { LoadingScreen } from "@/components/knight-loader";
 type Game = {
   id: number;
   opponent: string | null;
@@ -68,6 +69,11 @@ function ConnectedGames() {
       });
     return () => abort.abort();
   }, [api, page, attempt]);
+  if (busy && games.length === 0 && !error) return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.page }}>
+      <LoadingScreen title="Opening your games…" detail="Bringing your games to the board." />
+    </SafeAreaView>
+  );
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.page }}>
       <FlatList

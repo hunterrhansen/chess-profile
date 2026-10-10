@@ -30,6 +30,7 @@ a design is decided, its spec and pictures land here, and the repo is the copy e
 | Your data, Privacy, Admin | [account.md](account.md) | `/settings`, `/privacy`, `/settings/admin` |
 | Onboarding | [onboarding.md](onboarding.md) | `/welcome` |
 | The shell: navigation and the account row | [shell.md](shell.md) | every signed-in page |
+| Mobile loading: Knight hop | [loading.md](loading.md) | startup and initial data waits |
 
 The logo's three directions are in [img/brand-logo.png](img/brand-logo.png); the chosen one
 is described in design.md's Logo section.

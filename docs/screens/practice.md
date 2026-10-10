@@ -1,5 +1,9 @@
 # Practice
 
+The Expo client's first deck fetch uses the shared [Knight hop loader](loading.md)
+inside the lesson, retaining exit and footer actions. Advancing an existing
+position retains its stable board and existing pending state.
+
 Today's positions from your own games: find the move you missed. A lesson, full screen, no
 navigation. Puzzles (`/puzzles`) use the same screen and rules.
 

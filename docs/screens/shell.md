@@ -20,6 +20,9 @@ The account status/menu described below is still pending in the Expo client.
 The phone shell and Settings/back were verified in the local iPhone simulator
 on October 9, 2026; the current capture is in [Home](home.md).
 
+Mobile startup and initial account/data waits use the shared
+[Knight hop loading design](loading.md), including its native reference picture.
+
 ## The account row
 
 ![The chosen account row](img/shell-accounts-chosen.png)

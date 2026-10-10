@@ -8,6 +8,7 @@ import { unitCopy } from "@/lib/units";
 import { Text, Button, Card, Progress } from "@/components/ui";
 import { KnIcon, type Glyph } from "@/components/kn-icon";
 import { usePhoneGoal } from "@/components/app-shell";
+import { LoadingScreen } from "@/components/knight-loader";
 // Explicit design preview; never a fallback for failed account requests.
 const example: HomeData = {
   units: [
@@ -109,11 +110,7 @@ export default function Home() {
       </View>
     );
   if (!data)
-    return (
-      <View style={{ padding: 24 }}>
-        <Text>Laying out your path…</Text>
-      </View>
-    );
+    return <LoadingScreen title="Laying out your path…" detail="Finding your next step." />;
   const lead = data.units[0];
   const copy = lead ? unitCopy(lead) : null;
   const { game, positions, reviewed_today, deck_total, puzzles } = data.today;

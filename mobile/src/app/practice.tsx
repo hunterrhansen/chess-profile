@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { View } from "react-native";
+import { ScrollView } from "react-native";
+import { KnightLoader } from "@/components/knight-loader";
 import { Text } from "@/components/ui";
 import {
   LessonScreen,
@@ -121,9 +122,9 @@ function DailyPractice() {
         />
       }
     >
-      <View
-        style={{
-          flex: 1,
+      <ScrollView
+        contentContainerStyle={{
+          flexGrow: 1,
           paddingHorizontal: 16,
           justifyContent: "center",
           alignItems: "center",
@@ -131,7 +132,7 @@ function DailyPractice() {
         }}
       >
         {loading ? (
-          <Text>Loading your practice…</Text>
+          <KnightLoader />
         ) : error ? (
           <Text tone="danger" accessibilityRole="alert">
             {error}
@@ -148,7 +149,7 @@ function DailyPractice() {
             </>
           )
         )}
-      </View>
+      </ScrollView>
     </LessonScreen>
   );
 }
