@@ -10,3 +10,17 @@ test('prepared and saved verdicts share one reward, while retries and correction
   assert.equal(prepared.square, 'e4');
   assert.equal(prepared.tone, 'right');
 });
+
+test('verdict haptics fire synchronously and only once per verdict identity', async () => {
+  const { createVerdictHaptics } = await import('../src/lib/verdict-haptics.ts');
+  const events = [];
+  const acknowledge = createVerdictHaptics(tone => events.push(tone));
+  const prepared = practiceFlash(1, 'e2e4', true);
+  acknowledge(prepared);
+  assert.deepEqual(events, ['right']);
+  acknowledge(practiceFlash(1, 'e2e4', true));
+  assert.deepEqual(events, ['right']);
+  acknowledge(practiceFlash(1, 'e2e4', false));
+  acknowledge(practiceFlash(2, 'e2e4', true));
+  assert.deepEqual(events, ['right', 'wrong', 'right']);
+});

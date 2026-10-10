@@ -10,6 +10,7 @@ export async function checkPracticeAttempt<T>(steps: {
   preview: () => void;
   prepare: () => Promise<unknown>;
   request: () => Promise<T>;
+  verdict?: (result: T) => void;
   settle: (result: T) => Promise<unknown>;
   accept: (result: T) => void;
   restore: () => void;
@@ -38,6 +39,7 @@ export async function checkPracticeAttempt<T>(steps: {
     steps.preview();
     await measure("prepare_ms", steps.prepare);
     const result = await measure("request_ms", steps.request);
+    steps.verdict?.(result);
     await measure("settle_ms", () => steps.settle(result));
     steps.accept(result);
     timing.status = "saved";
