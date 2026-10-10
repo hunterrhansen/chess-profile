@@ -95,38 +95,13 @@ export function LessonScreen({
               ×
             </Text>
           </Pressable>
-          <View style={{ flex: 1, gap: 6 }}>
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                gap: 8,
-                minHeight: 30,
-              }}
-            >
-              <Text
-                maxFontSizeMultiplier={1.5}
-                numberOfLines={1}
-                style={{ flexShrink: 1, fontFamily: fonts.bold, fontSize: 14, lineHeight: 20 }}
-              >
-                {title}
-              </Text>
-              <Text
-                style={{
-                  fontFamily: fonts.bold,
-                  fontSize: 14,
-                  lineHeight: 20,
-                  fontVariant: ["tabular-nums"],
-                  flexShrink: 0,
-                }}
-                maxFontSizeMultiplier={1.5}
-                numberOfLines={1}
-              >
-                {done} of {total}
-              </Text>
-            </View>
-            <Progress value={done} total={total} />
+          <View style={{ flex: 1 }}>
+            <Progress value={done} total={total} label={`${title} progress`} />
           </View>
+          <Text tone="muted" style={{ fontFamily: fonts.bold, fontSize: 14, lineHeight: 20,
+            fontVariant: ["tabular-nums"], flexShrink: 0 }} maxFontSizeMultiplier={1.5} numberOfLines={1}>
+            {done} of {total}
+          </Text>
           {onFlip && <Pressable accessibilityRole="button" accessibilityLabel="Flip board" accessibilityState={{ disabled: flipDisabled }}
             disabled={flipDisabled} onPress={onFlip} style={({ pressed }) => ({ minWidth: 44, minHeight: 44,
               justifyContent: "center", alignItems: "center", opacity: flipDisabled ? 0.4 : pressed ? 0.6 : 1 })}>
@@ -209,12 +184,13 @@ export function LessonBoard({ children, prompt, ledge = true }: { children: Reac
   );
 }
 
-export function LessonBar({ feedbackKey, tone = "idle", title, detail, note, primary, secondary }: {
+export function LessonBar({ feedbackKey, tone = "idle", title, detail, note, explanation, primary, secondary }: {
   feedbackKey?: number;
   tone?: "idle" | "retry" | "right" | "wrong";
   title?: string;
   detail: string;
   note?: string;
+  explanation?: ReactNode;
   primary: ReactNode;
   secondary?: ReactNode;
 }) {
@@ -224,14 +200,15 @@ export function LessonBar({ feedbackKey, tone = "idle", title, detail, note, pri
     .easing(Easing.bezier(0.23, 1, 0.32, 1)).reduceMotion(ReduceMotion.System);
   const right = tone === "right", wrong = tone === "wrong" || tone === "retry";
   const color = right ? c.brandText : wrong ? c.dangerText : c.inkMuted;
-  return <BottomActions tone={tone} primary={primary} secondary={secondary} feedback={
+  return <BottomActions tone={tone} reservedHeight={208} primaryFullWidth={!secondary} primary={primary} secondary={secondary} feedback={
     <Animated.View key={feedbackKey ?? "idle"} entering={feedbackKey === undefined ? undefined : entrance} accessibilityLiveRegion="polite">
-      {!!(title || detail || note) && <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
+      {!!(title || detail || note || explanation) && <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
         {right && <KnIcon glyph="check" size={36} />}
         <View style={{ flex: 1, gap: 2 }}>
           {title && <Text heading style={{ color, fontSize: 22, lineHeight: 28 }} maxFontSizeMultiplier={1.4}>{title}</Text>}
           {!!detail && <Text style={{ color, fontSize: 14, lineHeight: 20 }} maxFontSizeMultiplier={1.4}>{detail}</Text>}
           {note && <Text tone="muted" style={{ fontSize: 12, lineHeight: 18 }} maxFontSizeMultiplier={1.3}>{note}</Text>}
+          {explanation}
         </View>
       </View>}
     </Animated.View>

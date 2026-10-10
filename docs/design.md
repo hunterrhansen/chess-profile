@@ -408,7 +408,7 @@ Status entrances animate within their region; action controls stay anchored.
 ## Mobile bottom actions
 
 Practice and completion use `mobile/src/components/bottom-actions.tsx` for a
-shared, pinned footer outside scrolling page content. The secondary action owns
+shared, pinned footer outside scrolling page content. By default the secondary action owns
 the left slot, and the forward/finish action owns the right; an absent secondary
 leaves its slot empty rather than resizing or moving the primary action. Both
 slots have equal width, an 8px gap, 16px screen margins and a 64px button band
@@ -421,7 +421,21 @@ Feedback scrolls above the actions; wording, outcomes and entrance animations
 never reposition buttons. Flip is a header utility, preserving two stable slots.
 Use `BottomAction` for the shared appearance; dialog triggers match its geometry,
 typography and press offset. `LessonBar` supplies verdict content to this footer.
+The approved practice result is an exception to the two-slot arrangement:
+its explanation is inline below the verdict and Continue spans the action row.
+Practice reserves 208px at default text size for unclipped feedback; other
+footers keep their existing reservation. Feedback starts at the top of its
+scroll region, with 16px spacing below the board.
 
 This follows the consistency-with-purpose principle described in
 [Duolingo's design-system account](https://blog.duolingo.com/core-tabs-redesign/).
 The sizes above are Knightly's choices, not published Duolingo measurements.
+
+Mobile practice follows the approved Chess.com board layout and Duolingo lesson
+feedback pattern: exit, progress and count share one header row; the short
+side-to-move prompt sits directly above the square board. The lesson title is
+available in the progress accessibility label rather than as another visible
+heading. After an answer, “Why this move?” is an underlined text action beneath
+the verdict, and Continue alone spans the fixed bottom action row. The feedback
+band fills the viewport width, without a floating card. Knightly's existing
+tokens, typography, pieces, hints and grading still apply.

@@ -121,12 +121,12 @@ export default function PracticePreview() {
     }
   }
   const answered = correct || shown;
-  function next() {
-    const solution = new Chess(exercise.fen).move({
+  const solution = new Chess(exercise.fen).move({
       from: exercise.solution.slice(0, 2),
       to: exercise.solution.slice(2, 4),
       promotion: exercise.solution[4],
     });
+  function next() {
     setResults((previous) => [...previous, {
       mark: sampleCompletionMark(shown, hint, hadWrong),
       name: `Position ${index + 1}`,
@@ -155,7 +155,7 @@ export default function PracticePreview() {
         correct
             ? hint
               ? "Found it, with help!"
-              : "You found it!"
+              : `Found it: ${solution.san}`
             : shown
               ? "Here's the move"
               : wrong
@@ -175,9 +175,10 @@ export default function PracticePreview() {
                     : "The arrow shows the move. Play it."
                 : ""
       }
-      secondary={answered ? (
+      explanation={answered && (
         <HelpDialog textTrigger label="Why this move?" title="The idea" description={exercise.explanation} />
-      ) : (
+      )}
+      secondary={!answered && (
         <LessonAction quiet glyph="hint" label={hints === 0 ? "Hint" : hints === 1 ? "Show piece" : hints === 2 ? "Show move" : "Hint shown"}
           disabled={!!promotion || !hintReady || hints >= 3 || returning}
           onPress={() => { setHints((n) => n + 1); setWrong(false); }} />
