@@ -2,15 +2,17 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from "re
 import { Pressable, ScrollView, View, useWindowDimensions } from "react-native";
 import {
   SafeAreaView,
-  useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import Animated, { FadeIn, FadeInUp, Easing, ReduceMotion, useReducedMotion } from "react-native-reanimated";
 import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
 import { fonts, useTheme } from "@/lib/theme";
 import { Text, Progress } from "./ui";
-import { KnIcon, type Glyph } from "./kn-icon";
+import { KnIcon } from "./kn-icon";
+import { BottomActions } from "./bottom-actions";
 import { BoardSizeContext } from "./board-size";
+
+export { BottomAction as LessonAction } from "./bottom-actions";
 
 type BoardBounds = { width: number; height: number };
 const BoardBoundsContext = createContext<{ bounds?: BoardBounds; save: (bounds: BoardBounds) => void } | null>(null);
@@ -36,12 +38,16 @@ export function LessonScreen({
   total,
   children,
   footer,
+  onFlip,
+  flipDisabled = false,
 }: {
   title?: string;
   done: number;
   total: number;
   children: ReactNode;
   footer: ReactNode;
+  onFlip?: () => void;
+  flipDisabled?: boolean;
 }) {
   const { colors: c, isDark } = useTheme();
   return (
@@ -121,6 +127,11 @@ export function LessonScreen({
             </View>
             <Progress value={done} total={total} />
           </View>
+          {onFlip && <Pressable accessibilityRole="button" accessibilityLabel="Flip board" accessibilityState={{ disabled: flipDisabled }}
+            disabled={flipDisabled} onPress={onFlip} style={({ pressed }) => ({ minWidth: 44, minHeight: 44,
+              justifyContent: "center", alignItems: "center", opacity: flipDisabled ? 0.4 : pressed ? 0.6 : 1 })}>
+            <Text style={{ fontFamily: fonts.bold, fontSize: 12 }}>Flip</Text>
+          </Pressable>}
         </View>
         {children}
       </View>
@@ -198,199 +209,31 @@ export function LessonBoard({ children, prompt, ledge = true }: { children: Reac
   );
 }
 
-export function LessonBar({
-  feedbackKey,
-  reservedHeight = 0,
-  tone = "idle",
-  title,
-  detail,
-  note,
-  children,
-}: {
+export function LessonBar({ feedbackKey, tone = "idle", title, detail, note, primary, secondary }: {
   feedbackKey?: number;
-  reservedHeight?: number;
   tone?: "idle" | "retry" | "right" | "wrong";
   title?: string;
   detail: string;
   note?: string;
-  children: ReactNode;
+  primary: ReactNode;
+  secondary?: ReactNode;
 }) {
   const { colors: c } = useTheme();
-  const inset = useSafeAreaInsets();
-  const { fontScale } = useWindowDimensions();
-  const bottomPadding = Math.max(16, inset.bottom);
-  const fixedHeight = reservedHeight > 0
-    ? reservedHeight + Math.ceil(48 * (Math.max(1, Math.min(fontScale, 1.4)) - 1)) + bottomPadding - 16
-    : undefined;
   const reduced = useReducedMotion();
   const entrance = (reduced ? FadeIn.duration(180) : FadeInUp.duration(180).withInitialValues({ opacity: 0, transform: [{ translateY: 12 }] }))
     .easing(Easing.bezier(0.23, 1, 0.32, 1)).reduceMotion(ReduceMotion.System);
-  const right = tone === "right",
-    wrong = tone === "wrong" || tone === "retry";
+  const right = tone === "right", wrong = tone === "wrong" || tone === "retry";
   const color = right ? c.brandText : wrong ? c.dangerText : c.inkMuted;
-  return (
-    <View
-      style={{
-        flexShrink: 0,
-        height: fixedHeight,
-        backgroundColor: c.page,
-      }}
-    >
-      <View
-        style={{
-          flex: fixedHeight ? 1 : undefined,
-          justifyContent: "flex-end",
-          backgroundColor: right
-            ? `${c.brand}33`
-            : wrong
-              ? `${c.danger}1a`
-              : c.page,
-          paddingBottom: bottomPadding,
-        }}
-      >
-        <View
-          style={{
-            width: "100%",
-            maxWidth: 560,
-            alignSelf: "center",
-            flex: fixedHeight ? 1 : undefined,
-            minHeight: 0,
-            paddingHorizontal: 16,
-            paddingTop: 16,
-            gap: 12,
-          }}
-        >
-          <ScrollView
-            key={feedbackKey ?? "idle"}
-            bounces={false}
-            style={{ flex: fixedHeight ? 1 : undefined, minHeight: 0 }}
-            contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end" }}
-          >
-          <Animated.View
-            entering={feedbackKey === undefined ? undefined : entrance}
-            accessibilityLiveRegion="polite"
-          >
-          {!!(title || detail || note) && <View
-            style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}
-          >
-            {right && <KnIcon glyph="check" size={36} />}
-            <View style={{ flex: 1, gap: 2 }}>
-              {title && (
-                <Text
-                  heading
-                  style={{ color, fontSize: 22, lineHeight: 28 }}
-                  maxFontSizeMultiplier={1.4}
-                >
-                  {title}
-                </Text>
-              )}
-              {!!detail && <Text
-                style={{ color, fontSize: 14, lineHeight: 20 }}
-                maxFontSizeMultiplier={1.4}
-              >
-                {detail}
-              </Text>}
-              {note && (
-                <Text
-                  tone="muted"
-                  style={{ fontSize: 12, lineHeight: 18 }}
-                  maxFontSizeMultiplier={1.3}
-                >
-                  {note}
-                </Text>
-              )}
-            </View>
-          </View>}
-          </Animated.View>
-          </ScrollView>
-          <View style={{ flexDirection: "row", gap: 8, height: fixedHeight ? 64 : undefined, flexShrink: 0 }}>{children}</View>
+  return <BottomActions tone={tone} primary={primary} secondary={secondary} feedback={
+    <Animated.View key={feedbackKey ?? "idle"} entering={feedbackKey === undefined ? undefined : entrance} accessibilityLiveRegion="polite">
+      {!!(title || detail || note) && <View style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
+        {right && <KnIcon glyph="check" size={36} />}
+        <View style={{ flex: 1, gap: 2 }}>
+          {title && <Text heading style={{ color, fontSize: 22, lineHeight: 28 }} maxFontSizeMultiplier={1.4}>{title}</Text>}
+          {!!detail && <Text style={{ color, fontSize: 14, lineHeight: 20 }} maxFontSizeMultiplier={1.4}>{detail}</Text>}
+          {note && <Text tone="muted" style={{ fontSize: 12, lineHeight: 18 }} maxFontSizeMultiplier={1.3}>{note}</Text>}
         </View>
-      </View>
-    </View>
-  );
-}
-export function LessonAction({
-  label,
-  glyph,
-  quiet = false,
-  danger = false,
-  disabled = false,
-  onPress,
-}: {
-  label: string;
-  glyph?: Glyph;
-  quiet?: boolean;
-  danger?: boolean;
-  disabled?: boolean;
-  onPress: () => void;
-}) {
-  const { colors: c } = useTheme();
-  const fill = disabled
-    ? c.surfaceMuted
-    : quiet
-      ? c.surface
-      : danger
-        ? c.danger
-        : c.brand;
-  const lip = disabled
-    ? c.line
-    : quiet
-      ? c.line
-      : danger
-        ? c.dangerLip
-        : c.brandLip;
-  return (
-    <View
-      style={{
-        flex: 1,
-        borderRadius: 16,
-        backgroundColor: lip,
-        paddingBottom: 4,
-      }}
-    >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={label}
-        accessibilityState={{ disabled }}
-        disabled={disabled}
-        onPress={onPress}
-        style={({ pressed }) => ({
-          flexGrow: 1,
-          minHeight: 48,
-          paddingHorizontal: 8,
-          paddingVertical: 10,
-          borderWidth: 2,
-          borderColor: quiet ? c.line : fill,
-          backgroundColor: fill,
-          borderRadius: 16,
-          flexDirection: "row",
-          justifyContent: "center",
-          alignItems: "center",
-          gap: 6,
-          transform: [{ translateY: pressed ? 4 : 0 }],
-        })}
-      >
-        {glyph && <KnIcon glyph={glyph} size={22} />}
-        <Text
-          style={{
-            flexShrink: 1,
-            textAlign: "center",
-            fontFamily: fonts.bold,
-            fontSize: 13,
-            lineHeight: 18,
-            color: disabled
-              ? c.inkMuted
-              : quiet
-                ? c.ink
-                : danger
-                  ? c.onDanger
-                  : c.onBrand,
-          }}
-          maxFontSizeMultiplier={1.4}
-        >
-          {label.toUpperCase()}
-        </Text>
-      </Pressable>
-    </View>
-  );
+      </View>}
+    </Animated.View>
+  } />;
 }

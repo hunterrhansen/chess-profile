@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Chess, type Square } from "chess.js";
-import { AccessibilityInfo, Platform, View } from "react-native";
+import { AccessibilityInfo, Platform } from "react-native";
 import { HelpDialog } from "@/components/help-dialog";
 import { Board } from "@/components/board";
 import {
@@ -351,12 +351,13 @@ export default function PracticePosition({
         : "";
   return (
     <LessonScreen
+      onFlip={() => setFlipped((value) => !value)}
+      flipDisabled={!!promotion}
       done={done}
       total={Math.max(1, deck.today.total)}
       footer={
         <LessonBar
           feedbackKey={flash?.id}
-          reservedHeight={160}
           tone={
             outcome
               ? right
@@ -370,39 +371,19 @@ export default function PracticePosition({
           detail={
             advanceError ?? (busy ? (previewQuality ? "Saving your attempt…" : "Checking move…") : (error ?? detail))
           }
-        >
-          {outcome ? (
-            <>
-              <View style={{ flex: 1 }}>
-                <HelpDialog textTrigger label="Why this move?" title={first?.best_san ? `Best move: ${first.best_san}` : "Why this move?"}
+          secondary={outcome ? (
+            <HelpDialog textTrigger label="Why this move?" title={first?.best_san ? `Best move: ${first.best_san}` : "Why this move?"}
                   description={`${why ?? "A stronger move for this position."}\n\nYou played ${card.san} against ${card.opponent ?? "your opponent"}, move ${card.move_number}.${card.win_pct_before === null ? "" : ` Winning chance: ${Math.round(card.win_pct_before)}%.`}\n\n${redo ? `One more go · ${againLeft} remaining. Your schedule is unchanged.` : first?.due ? `Next review: ${first.due}` : "Your first answer is saved."}`} />
-              </View>
-              <LessonAction label={advancing ? "Next…" : "Continue"} disabled={advancing} danger={!right} onPress={() => onNext({ fen, flipped })} />
-            </>
           ) : (
-            <>
-              <LessonAction
-                quiet
-                glyph="hint"
-                label={guidance.label}
-                disabled={!!promotion || !hintReady || busy || returning || !guidance.next}
-                onPress={() => void hint()}
-              />
-              <LessonAction
-                quiet
-                label="Show me"
-                disabled={!!promotion || busy || returning}
-                onPress={() => void submit("0000")}
-              />
-              <LessonAction
-                quiet
-                label="Flip"
-                disabled={!!promotion}
-                onPress={() => setFlipped((value) => !value)}
-              />
-            </>
+            <LessonAction quiet glyph="hint" label={guidance.label}
+              disabled={!!promotion || !hintReady || busy || returning || !guidance.next} onPress={() => void hint()} />
           )}
-        </LessonBar>
+          primary={outcome ? (
+            <LessonAction label={advancing ? "Next…" : "Continue"} disabled={advancing} danger={!right} onPress={() => onNext({ fen, flipped })} />
+          ) : (
+            <LessonAction quiet label="Show me" disabled={!!promotion || busy || returning} onPress={() => void submit("0000")} />
+          )}
+        />
       }
     >
       <LessonBoard ledge={false} prompt={

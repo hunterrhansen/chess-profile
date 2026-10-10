@@ -21,7 +21,7 @@ export function HelpDialog({ label = "How to practice", title = "Make your move"
             textTrigger && { transform: [{ translateY: pressed ? 4 : 0 }] },
           ])}
         >
-          <Text maxFontSizeMultiplier={1.4} style={{ fontFamily: fonts.bold, textAlign: "center", fontSize: 13, lineHeight: 18 }}>{textTrigger ? label : "?"}</Text>
+          <Text maxFontSizeMultiplier={textTrigger ? undefined : 1.4} style={{ fontFamily: fonts.bold, textAlign: "center", fontSize: 13, lineHeight: 18 }}>{textTrigger ? label.toUpperCase() : "?"}</Text>
         </Pressable>
       </Dialog.Trigger>
       <Dialog.Portal>
