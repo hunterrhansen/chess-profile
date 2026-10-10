@@ -8,6 +8,10 @@ export type CompletionResult = {
   name?: string;
 };
 
+export function sampleCompletionMark(shown: boolean, hinted: boolean, retried: boolean) {
+  return shown ? "missed" : hinted || retried ? "helped" : "found";
+}
+
 export function completionSummary(done: number, results: { mark: string }[]) {
   const counts = practiceSummary(results);
   const summary = ([

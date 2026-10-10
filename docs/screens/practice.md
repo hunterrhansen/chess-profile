@@ -50,7 +50,7 @@ request failures retain their existing separate states.
 Sample practice shares the completion styling and records its actual local
 outcomes. It labels the page “Sample complete,” omits account deck totals and
 offers Practice again. Recovering after a wrong sample attempt stays marked as
-missed; hints are counted as help. Sample moves to revisit are named by position
+helped, matching connected practice; hints are also counted as help. Sample moves to revisit are named by position
 because they have no source game.
 
 ![Expo completion in a dark 390×844 browser phone viewport](img/practice-complete-phone.jpg)

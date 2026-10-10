@@ -14,7 +14,7 @@ import { exercises, legalTargets, evaluateMove } from "@/lib/practice";
 import { promotionChoices, type Promotion } from "@/lib/practice-flow";
 import { useVerdictHaptics } from "@/lib/board-haptics";
 import PracticeComplete from "@/screens/practice-complete";
-import type { CompletionResult } from "@/lib/practice-completion";
+import { sampleCompletionMark, type CompletionResult } from "@/lib/practice-completion";
 export default function PracticePreview() {
   const acknowledge = useVerdictHaptics();
   const [index, setIndex] = useState(0);
@@ -128,7 +128,7 @@ export default function PracticePreview() {
       promotion: exercise.solution[4],
     });
     setResults((previous) => [...previous, {
-      mark: shown || hadWrong ? "missed" : hint ? "helped" : "found",
+      mark: sampleCompletionMark(shown, hint, hadWrong),
       name: `Position ${index + 1}`,
       ply: 1,
       san: solution.san,

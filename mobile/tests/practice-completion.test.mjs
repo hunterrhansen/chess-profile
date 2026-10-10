@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { completionSummary, revisitMoves } from "../src/lib/practice-completion.ts";
+import { completionSummary, revisitMoves, sampleCompletionMark } from "../src/lib/practice-completion.ts";
+
+test("sample outcomes match connected completion: recovery is helped, showing is missed", () => {
+  assert.equal(sampleCompletionMark(false, false, false), "found");
+  assert.equal(sampleCompletionMark(false, true, false), "helped");
+  assert.equal(sampleCompletionMark(false, false, true), "helped");
+  assert.equal(sampleCompletionMark(true, true, true), "missed");
+});
 
 test("completion keeps independent, helped and missed first attempts separate", () => {
   assert.equal(completionSummary(4, ["found", "good", "helped", "missed"].map(mark => ({ mark }))),
