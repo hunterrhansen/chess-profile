@@ -168,3 +168,72 @@ test("move sounds distinguish captures, castles, promotion, mate and undo", () =
     assert.equal(transitionPieces(result.pieces, after, fen).sound, "move");
   }
 });
+
+test('practice rearranges unrelated positions silently, preserving matching pieces without duplicate IDs', () => {
+  const from = '6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1';
+  const to = '7k/6pp/8/8/8/8/5PPP/R5K1 w - - 0 1';
+  const before = piecesAt(from);
+  const result = transitionPieces(before, from, to, true);
+  assert.equal(result.animate, true);
+  assert.equal(result.sound, null);
+  assert.equal(result.pieces.find(p => p.square === 'a1').id, before.find(p => p.square === 'e1').id);
+  assert.equal(result.pieces.find(p => p.square === 'a1').fromSquare, 'e1');
+  assert.equal(result.pieces.find(p => p.square === 'g2').id, before.find(p => p.square === 'g2').id);
+  assert.equal(new Set(result.pieces.map(p => p.id)).size, result.pieces.length);
+  assert.equal(result.captured.length, 1);
+  assert.ok(result.captured.every(p => !result.pieces.some(n => n.id === p.id)));
+});
+
+test('rearrangement does not reuse an old identity for an added piece or morph piece types', () => {
+  const from = '4k3/8/8/8/8/8/8/R3K3 w - - 0 1';
+  const to = '4k3/8/8/8/8/8/R7/R2QK3 w - - 0 1';
+  const result = transitionPieces(piecesAt(from), from, to, true);
+  assert.equal(result.pieces.find(p => p.square === 'a1').id, 'wr-a1');
+  assert.notEqual(result.pieces.find(p => p.square === 'a2').id, 'wr-a1');
+  assert.equal(result.pieces.find(p => p.kind === 'q').fromSquare, undefined);
+  assert.equal(new Set(result.pieces.map(p => p.id)).size, result.pieces.length);
+});
+
+test('capturing a rearranged piece fades it on its current square, not the preceding lesson origin', () => {
+  const from = '7k/8/8/8/8/8/1r6/R6K w - - 0 1';
+  const to = '7k/8/8/8/8/8/r7/R6K w - - 0 1';
+  const rearranged = transitionPieces(piecesAt(from), from, to, 'always');
+  assert.equal(rearranged.pieces.find(p => p.square === 'a2').fromSquare, 'b2');
+  const chess = new Chess(to);
+  chess.move('Rxa2');
+  const captured = transitionPieces(rearranged.pieces, to, chess.fen()).captured[0];
+  assert.equal(captured.square, 'a2');
+  assert.equal(captured.fromSquare, undefined);
+});
+
+test('a next-card seed is silent even if its position happens to be one legal move away', () => {
+  const chess = new Chess();
+  const from = chess.fen();
+  chess.move('e4');
+  const result = transitionPieces(piecesAt(from), from, chess.fen(), 'always');
+  assert.equal(result.animate, true);
+  assert.equal(result.sound, null);
+  assert.equal(result.pieces.find(p => p.square === 'e4').fromSquare, 'e2');
+});
+
+test('rearrangement prefers chess movement patterns over the nearest matching piece', () => {
+  const from = '4k3/8/8/8/8/8/8/R3K2R w - - 0 1';
+  const to = '4k3/8/8/8/8/8/6R1/4K3 w - - 0 1';
+  const result = transitionPieces(piecesAt(from), from, to, 'always');
+  // Neither rook can move straight to g2; web falls back to board order (a1).
+  assert.equal(result.pieces.find(p => p.square === 'g2').fromSquare, 'a1');
+  assert.equal(result.pieces.find(p => p.square === 'g2').positionTransition, true);
+  assert.equal(result.captured[0].positionTransition, true);
+});
+
+
+test('removed seed pieces keep their old screen position when the next card flips', () => {
+  const removed = { id: 'wr-a1', square: 'a1', side: 'w', kind: 'r', positionTransition: true };
+  assert.deepEqual(board.pieceCoordinates(removed, true, false, true), {
+    point: { x: 0, y: 7 }, origin: { x: 0, y: 7 },
+  });
+  const moving = { ...removed, square: 'a2', fromSquare: 'a1' };
+  assert.deepEqual(board.pieceCoordinates(moving, true, false), {
+    point: { x: 7, y: 1 }, origin: { x: 0, y: 7 },
+  });
+});

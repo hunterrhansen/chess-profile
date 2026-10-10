@@ -1,3 +1,11 @@
+export type FeedbackQuality = "best" | "excellent" | "good" | "wrong";
+export type PracticeFeedback = {
+  version: number;
+  key: string;
+  fen: string;
+  grades: Record<string, FeedbackQuality>;
+  complete: boolean;
+};
 export type DeckCard = {
   game_id: number;
   ply: number;
@@ -13,6 +21,7 @@ export type DeckCard = {
   played_at: string;
   win_pct_before: number | null;
   prev_uci: string | null;
+  feedback?: PracticeFeedback | null;
 };
 export type DeckToday = {
   total: number;
@@ -58,47 +67,72 @@ export function serverUrl(value: string) {
     );
   return url.origin;
 }
+export type ApiTiming = {
+  token_ms: number;
+  request_ms: number;
+  server_timing: string | null;
+};
 export function createApi(
   base: string,
   getToken: () => Promise<string | null>,
   fetcher: typeof fetch = fetch,
+  onTiming?: (timing: ApiTiming) => void,
 ): Api {
   return async <T>(path: string, body?: unknown, signal?: AbortSignal) => {
     if (!path.startsWith("/api/")) throw new Error("Invalid Knightly API path");
+    const tokenStart = performance.now();
     const token = await getToken();
+    const tokenMs = performance.now() - tokenStart;
     if (!token)
       throw new Error("Sign in to Knightly before accessing your data.");
-    const response = await request(
-      `${base}${path}`,
-      {
-        method: body === undefined ? "GET" : "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+    const requestStart = performance.now();
+    let serverTiming: string | null = null;
+    try {
+      const response = await request(
+        `${base}${path}`,
+        {
+          method: body === undefined ? "GET" : "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+          },
+          body: body === undefined ? undefined : JSON.stringify(body),
+          signal,
         },
-        body: body === undefined ? undefined : JSON.stringify(body),
-        signal,
-      },
-      fetcher,
-    );
-    if (!response.ok) {
-      if (response.status === 401)
-        throw new Error(
-          "Your session wasn't accepted. Sign out and sign in again. The server may need native-app authentication enabled.",
-        );
-      let detail = "";
-      try {
-        const value = await response.json();
-        if (typeof value.detail === "string") detail = value.detail;
-      } catch {
-        /* Non-JSON error page. */
-      }
-      throw new Error(
-        detail ||
-          `Knightly couldn't complete the request (${response.status}). Try again.`,
+        fetcher,
       );
+      serverTiming = response.headers.get("Server-Timing");
+      if (!response.ok) {
+        if (response.status === 401)
+          throw new Error(
+            "Your session wasn't accepted. Sign out and sign in again. The server may need native-app authentication enabled.",
+          );
+        let detail = "";
+        try {
+          const value = await response.json();
+          if (typeof value.detail === "string") detail = value.detail;
+        } catch {
+          /* Non-JSON error page. */
+        }
+        throw new Error(
+          detail ||
+            `Knightly couldn't complete the request (${response.status}). Try again.`,
+        );
+      }
+      return (await response.json()) as T;
+    } finally {
+      if (path === "/api/deck/answer" && onTiming) {
+        try {
+          onTiming({
+            token_ms: tokenMs,
+            request_ms: performance.now() - requestStart,
+            server_timing: serverTiming,
+          });
+        } catch {
+          /* Diagnostics must never change the save result. */
+        }
+      }
     }
-    return response.json() as Promise<T>;
   };
 }
 

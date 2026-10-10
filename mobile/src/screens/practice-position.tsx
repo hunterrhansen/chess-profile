@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Chess, type Square } from "chess.js";
-import { AccessibilityInfo, Platform } from "react-native";
+import { AccessibilityInfo, Platform, View } from "react-native";
+import { HelpDialog } from "@/components/help-dialog";
 import { Board } from "@/components/board";
 import {
   LessonScreen,
@@ -10,15 +11,19 @@ import {
   LessonAction,
 } from "@/components/lesson-screen";
 import { PromotionChoice } from "@/components/promotion-choice";
-import { MoveClassification } from "@/components/move-classification";
+import {
+  isMoveClassification,
+} from "@/components/move-classification";
 import {
   PracticeSession,
   practiceHint,
   promotionChoices,
   type Promotion,
 } from "@/lib/practice-flow";
+import { preparedQuality, practiceFlash } from "@/lib/practice-feedback";
+import { checkPracticeAttempt } from "@/lib/practice-attempt";
 import { legalTargets } from "@/lib/practice";
-import type { Api, DeckToday, DeckCard, DeckAnswer } from "@/lib/api";
+import type { Api, DeckToday, DeckCard, DeckAnswer, PracticeFeedback, FeedbackQuality } from "@/lib/api";
 export default function PracticePosition({
   api,
   card,
@@ -27,15 +32,20 @@ export default function PracticePosition({
   onNext,
   practice,
   againLeft,
+  previousPosition,
+  advancing = false,
 }: {
   api: Api;
   card: DeckCard;
   deck: DeckToday;
   redo: boolean;
-  onNext: () => void;
+  onNext: (position: { fen: string; flipped: boolean }) => void;
   practice: PracticeSession;
   againLeft: number;
+  previousPosition?: { fen: string; flipped: boolean };
+  advancing?: boolean;
 }) {
+  const attemptSequence = useRef(0);
   const [selected, setSelected] = useState<Square | null>(null);
   const [flipped, setFlipped] = useState(card.color === "black");
   const [fen, setFen] = useState(card.fen_before);
@@ -44,6 +54,8 @@ export default function PracticePosition({
   const [first, setFirst] = useState<DeckAnswer>();
   const [outcome, setOutcome] = useState<string>();
   const [error, setError] = useState<string>();
+  const [feedback, setFeedback] = useState(card.feedback);
+  const [previewQuality, setPreviewQuality] = useState<FeedbackQuality>();
   const savedHint = practice.hint(card);
   const [hints, setHints] = useState(savedHint?.count ?? 0),
     [hintMove, setHintMove] = useState<string | undefined>(savedHint?.bestMove);
@@ -67,6 +79,11 @@ export default function PracticePosition({
   }>();
   const [returning, setReturning] = useState(false);
   const [why, setWhy] = useState<string>();
+  // Don't let the original classification appear to grade a new attempt.
+  const showPlayedMove =
+    !selected && !busy && !returning && !promotion && !outcome &&
+    !guidance.showPiece && !guidance.showMove && fen === card.fen_before &&
+    /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(card.uci);
   const [started] = useState(() => savedHint?.startedAt ?? Date.now());
   const [hintReady, setHintReady] = useState(false);
   useEffect(() => {
@@ -105,92 +122,136 @@ export default function PracticePosition({
       .catch(() => {});
     return () => abort.abort();
   }, [outcome, api, card.game_id, card.ply]);
+  useEffect(() => {
+    if (feedback || outcome || redo) return;
+    const abort = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    let attempts = 0;
+    async function poll() {
+      try {
+        const result = await api<{ feedback: PracticeFeedback | null }>(
+          `/api/deck/feedback/${card.game_id}/${card.ply}`, undefined, abort.signal,
+        );
+        if (abort.signal.aborted) return;
+        if (result.feedback) { setFeedback(result.feedback); return; }
+        if (++attempts < 12) timer = setTimeout(() => void poll(), 5000);
+      } catch { /* Preparation is optional; live grading still works. */ }
+    }
+    timer = setTimeout(() => void poll(), 5000);
+    return () => { clearTimeout(timer); abort.abort(); };
+  }, [api, card.game_id, card.ply, feedback, outcome, redo]);
   function announce(text: string) {
     if (Platform.OS !== "web") AccessibilityInfo.announceForAccessibility(text);
   }
   async function submit(uci: string, after?: string) {
     if (busyRef.current || outcome || returning) return;
+    const attempt = ++attemptSequence.current;
     busyRef.current = true;
     setBusy(true);
     setSelected(null);
     setError(undefined);
+    setFlash(undefined);
+    setPreviewQuality(undefined);
+    // Count thinking time at the tap, excluding storage, network and engine waits.
+    const seconds = !first ? Math.min(86400, (Date.now() - started) / 1000) : undefined;
     try {
-      if (!practice.isCurrentDay())
-        throw new Error(
-          "A new practice day has started. Return Home and reopen Practice.",
-        );
-      if (redo) {
-        const current = await api<DeckToday>("/api/deck");
-        if (
-          !current.results.some(
-            (r) => r.game_id === card.game_id && r.ply === card.ply,
-          )
-        )
-          throw new Error(
-            "This retry is no longer available. Return Home and reopen Practice.",
-          );
-      }
-      if (!redo) await practice.beginAnswer(card, started).catch(() => {});
-      const result = await api<DeckAnswer>("/api/deck/answer", {
-        game_id: card.game_id,
-        ply: card.ply,
-        uci,
-        hinted: !first && hints > 0,
-        redo,
-        seconds: !first
-          ? Math.min(86400, (Date.now() - started) / 1000)
-          : undefined,
+      await checkPracticeAttempt({
+        preview: () => {
+          if (after) {
+            setFen(after);
+            setLastMove({ from: uci.slice(0, 2), to: uci.slice(2, 4) });
+            const quality = preparedQuality({ ...card, feedback }, uci);
+            setPreviewQuality(quality);
+            if (quality) setFlash(practiceFlash(attempt, uci, quality !== "wrong"));
+          }
+        },
+        prepare: async () => {
+          if (!practice.isCurrentDay())
+            throw new Error(
+              "A new practice day has started. Return Home and reopen Practice.",
+            );
+          if (redo) {
+            const current = await api<DeckToday>("/api/deck");
+            if (
+              !current.results.some(
+                (r) => r.game_id === card.game_id && r.ply === card.ply,
+              )
+            )
+              throw new Error(
+                "This retry is no longer available. Return Home and reopen Practice.",
+              );
+          }
+          if (!redo) await practice.beginAnswer(card, started).catch(() => {});
+        },
+        request: () => api<DeckAnswer>("/api/deck/answer", {
+          game_id: card.game_id,
+          ply: card.ply,
+          uci,
+          hinted: !first && hints > 0,
+          redo,
+          seconds,
+        }),
+        settle: async (result) => {
+          if (!redo)
+            await practice
+              .finishAnswer(
+                card,
+                !result.correct ||
+                  hints > 0 ||
+                  !!first ||
+                  result.rating === null ||
+                  uci === "0000",
+              )
+              .catch(() => {});
+        },
+        accept: (result) => {
+          if (!alive.current) return;
+          if (!first) setFirst(result);
+          if (uci === "0000") {
+            setOutcome("shown");
+            setHintMove(result.best_uci);
+            const shown = new Chess(card.fen_before);
+            shown.move({
+              from: result.best_uci.slice(0, 2),
+              to: result.best_uci.slice(2, 4),
+              promotion: result.best_uci[4],
+            });
+            setFen(shown.fen());
+            setLastMove({
+              from: result.best_uci.slice(0, 2),
+              to: result.best_uci.slice(2, 4),
+            });
+            announce(`The best move is ${result.best_san}.`);
+          } else {
+            setFlash(practiceFlash(attempt, uci, result.correct));
+            if (result.correct) {
+              setOutcome(
+                !first && hints === 0 && (redo || result.rating !== null)
+                  ? result.quality === "good"
+                    ? "good"
+                    : "found"
+                  : "helped",
+              );
+              announce("You found it. Your answer is saved.");
+            } else {
+              setReturning(true);
+              announce("Try another move. The position will reset.");
+            }
+          }
+        },
+        restore: () => {
+          if (!alive.current) return;
+          setFen(card.fen_before);
+          setPreviewQuality(undefined);
+          setFlash(undefined);
+          setLastMove(card.prev_uci
+            ? { from: card.prev_uci.slice(0, 2), to: card.prev_uci.slice(2, 4) }
+            : undefined);
+        },
+        report: (timing) => {
+          if (__DEV__) console.info("Practice attempt timing", timing);
+        },
       });
-      if (!redo)
-        await practice
-          .finishAnswer(
-            card,
-            !result.correct ||
-              hints > 0 ||
-              !!first ||
-              result.rating === null ||
-              uci === "0000",
-          )
-          .catch(() => {});
-      if (!alive.current) return;
-      if (!first) setFirst(result);
-      if (uci === "0000") {
-        setOutcome("shown");
-        setHintMove(result.best_uci);
-        const shown = new Chess(card.fen_before);
-        shown.move({
-          from: result.best_uci.slice(0, 2),
-          to: result.best_uci.slice(2, 4),
-          promotion: result.best_uci[4],
-        });
-        setFen(shown.fen());
-        setLastMove({
-          from: result.best_uci.slice(0, 2),
-          to: result.best_uci.slice(2, 4),
-        });
-        announce(`The best move is ${result.best_san}.`);
-      } else {
-        setFen(after!);
-        setLastMove({ from: uci.slice(0, 2), to: uci.slice(2, 4) });
-        setFlash({
-          square: uci.slice(2, 4),
-          tone: result.correct ? "right" : "wrong",
-          id: Date.now(),
-        });
-        if (result.correct) {
-          setOutcome(
-            !first && hints === 0 && (redo || result.rating !== null)
-              ? result.quality === "good"
-                ? "good"
-                : "found"
-              : "helped",
-          );
-          announce("You found it. Your answer is saved.");
-        } else {
-          setReturning(true);
-          announce("Try another move. The position will reset.");
-        }
-      }
     } catch (err) {
       if (alive.current)
         setError(
@@ -260,34 +321,31 @@ export default function PracticePosition({
     outcome === "shown"
       ? `The move was ${first?.best_san ?? "…"}`
       : outcome === "good"
-        ? `Good move! Best was ${first?.best_san ?? "…"}`
+        ? "Good move!"
         : outcome === "helped"
           ? "Found it, with help!"
           : outcome
             ? "You found it!"
             : busy
-              ? "Checking…"
+              ? previewQuality ? (previewQuality === "wrong" ? "Not quite" : "Good move!") : "Checking…"
               : flash?.tone === "wrong"
                 ? "Not quite"
                 : undefined;
   const detail = outcome
-    ? (why ??
-      (outcome === "shown"
-        ? "Try this position again at the end of the session."
-        : "A stronger move for this position."))
+    ? ""
     : guidance.text
       ? guidance.text
       : flash?.tone === "wrong"
         ? "Try again, or use a hint."
-        : selected
-          ? "Now pick where it goes."
-          : "Tap a piece, then where it goes.";
+        : "";
   return (
     <LessonScreen
       done={done}
       total={Math.max(1, deck.today.total)}
       footer={
         <LessonBar
+          feedbackKey={flash?.id}
+          reservedHeight={160}
           tone={
             outcome
               ? right
@@ -295,22 +353,13 @@ export default function PracticePosition({
                 : "wrong"
               : flash?.tone === "wrong"
                 ? "retry"
-                : "idle"
+                : busy && previewQuality ? "right" : "idle"
           }
           title={promotion ? "Promote your pawn" : title}
           detail={
             promotion
               ? "Choose the piece your pawn becomes."
-              : (error ?? detail)
-          }
-          note={
-            redo
-              ? `One more go · ${againLeft} remaining · Your schedule is unchanged`
-              : outcome && first
-                ? first.due
-                  ? `Next review: ${first.due}`
-                  : "Your first answer is saved."
-                : undefined
+              : busy ? (previewQuality ? "Saving your attempt…" : "Checking move…") : (error ?? detail)
           }
         >
           {promotion ? (
@@ -328,7 +377,13 @@ export default function PracticePosition({
               }}
             />
           ) : outcome ? (
-            <LessonAction label="Continue" danger={!right} onPress={onNext} />
+            <>
+              <View style={{ flex: 1 }}>
+                <HelpDialog textTrigger label="Why this move?" title={first?.best_san ? `Best move: ${first.best_san}` : "Why this move?"}
+                  description={`${why ?? "A stronger move for this position."}\n\nYou played ${card.san} against ${card.opponent ?? "your opponent"}, move ${card.move_number}.${card.win_pct_before === null ? "" : ` Winning chance: ${Math.round(card.win_pct_before)}%.`}\n\n${redo ? `One more go · ${againLeft} remaining. Your schedule is unchanged.` : first?.due ? `Next review: ${first.due}` : "Your first answer is saved."}`} />
+              </View>
+              <LessonAction label={advancing ? "Next…" : "Continue"} disabled={advancing} danger={!right} onPress={() => onNext({ fen, flipped })} />
+            </>
           ) : (
             <>
               <LessonAction
@@ -354,19 +409,18 @@ export default function PracticePosition({
         </LessonBar>
       }
     >
-      <LessonPrompt
-        tag={`${redo ? "ONE MORE GO" : card.reviews === 0 ? "NEW" : "REVIEW"} · vs ${card.opponent ?? "opponent"} · move ${card.move_number}`}
-        badge={<MoveClassification kind={card.classification} />}
-        title={
-          redo
-            ? "You missed this one earlier. Find the move again."
-            : `You played ${card.san} here. Find a better move.`
-        }
-        detail={`${card.color === "white" ? "White" : "Black"} to move${card.win_pct_before === null ? "" : ` · Winning chance was ${Math.round(card.win_pct_before)}%`}`}
-      />
-      <LessonBoard>
+      <LessonBoard ledge={false} prompt={
+        <LessonPrompt
+          title={`${card.color === "white" ? "White" : "Black"} to move`}
+          detail={redo ? "Find the move again." : `Improve on ${card.san}.`}
+        />
+      }>
         <Board
           fen={fen}
+          ledge={false}
+          animatePositions
+          initialFen={previousPosition?.fen}
+          initialFlipped={previousPosition?.flipped}
           selected={selected}
           targets={selected ? legalTargets(card.fen_before, selected) : []}
           flipped={flipped}
@@ -378,6 +432,16 @@ export default function PracticePosition({
           onSquare={onSquare}
           flash={flash}
           lastMove={lastMove}
+          arrows={
+            showPlayedMove
+              ? [{ from: card.uci.slice(0, 2), to: card.uci.slice(2, 4), tone: "line" }]
+              : []
+          }
+          badge={
+            showPlayedMove && isMoveClassification(card.classification)
+              ? { square: card.uci.slice(2, 4) as Square, kind: card.classification }
+              : null
+          }
         />
       </LessonBoard>
     </LessonScreen>

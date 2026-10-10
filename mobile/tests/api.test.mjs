@@ -73,3 +73,15 @@ test("an aborted screen request propagates cancellation to fetch", async () => {
     name: "AbortError",
   });
 });
+test('answer timings separate token and network waits without exposing credentials', async () => {
+  let sample;
+  const api = createApi('https://knightly.example', async () => 'private-token',
+    async () => new Response(JSON.stringify({correct:true}), {headers:{'Server-Timing':'engine_search;dur=300'}}),
+    timing => { sample = timing; });
+  await api('/api/deck/answer', {uci:'e2e4', game_id:7});
+  assert.ok(sample.token_ms >= 0);
+  assert.ok(sample.request_ms >= 0);
+  assert.equal(sample.server_timing, 'engine_search;dur=300');
+  assert.equal(JSON.stringify(sample).includes('private-token'), false);
+  assert.equal(JSON.stringify(sample).includes('e2e4'), false);
+});

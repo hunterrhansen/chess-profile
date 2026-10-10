@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { AppState } from "react-native";
 import { useAudioPlayer } from "expo-audio";
 import type { MoveSound } from "./board-motion";
-import { answerSound } from "./board-cues";
+import { answerSound, moveSoundDelay } from "./board-cues";
 /** Bundled motifs work offline. The default audio session respects silent mode.
  * Player hooks release native resources when the board unmounts. */
 export function useBoardSound(
@@ -44,7 +44,7 @@ export function useBoardSound(
               ? checkmate
               : move;
   const id = cue?.id,
-    delay = cue?.delay ?? 0;
+    delay = moveSoundDelay(feedback?.tone, cue?.delay ?? 0);
   const playedMove = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!sound || playedMove.current === id) return;
@@ -72,16 +72,13 @@ export function useBoardSound(
       playedAnswer.current = feedbackId;
       return;
     }
-    const timer = setTimeout(() => {
-      playedAnswer.current = feedbackId;
-      if (AppState.currentState !== "active") return;
-      void feedbackPlayer
-        .seekTo(0)
-        .then(() => feedbackPlayer.play())
-        .catch(() => {});
-    }, delay);
-    return () => clearTimeout(timer);
-  }, [feedbackId, feedbackPlayer, tone, delay, enabled]);
+    playedAnswer.current = feedbackId;
+    if (AppState.currentState !== "active") return;
+    void feedbackPlayer
+      .seekTo(0)
+      .then(() => feedbackPlayer.play())
+      .catch(() => {});
+  }, [feedbackId, feedbackPlayer, tone, enabled]);
   const specialId = special?.id,
     specialDelay = special?.delay;
   const playedSpecial = useRef<string | undefined>(specialId);

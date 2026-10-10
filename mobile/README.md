@@ -53,7 +53,14 @@ connection. Expo Go isn't an installed release of Knightly.
 ## Hosted account and real practice
 
 Without `EXPO_PUBLIC_API_URL`, the app opens the three-position sample practice.
-Sample answers never change real progress. To connect your account, put your
+Sample answers never change real progress. For a quick Expo Go reward preview,
+run `EXPO_NO_DOTENV=1 EXPO_PUBLIC_API_URL= pnpm start --go --tunnel --port 8084`.
+This does not sign in to the hosted account. Expo Go hosted-auth callbacks use a
+session-specific `exp://` URL rather than the installed app's callback below;
+production Clerk rejects callbacks that are not registered. Prefer the installed
+preview for real-account sign-in, or inspect and register the exact development
+callback intentionally. Do not replace the callback with the installed app's
+scheme while running inside Expo Go. To connect your account, put your
 existing hosted app's HTTPS origin in `.env.local` (production is
 `https://knightlychess.app`, from `infra/cloudflare/variables.tf`):
 

@@ -20,6 +20,7 @@ export default function Practice() {
   return connected ? <DailyPractice /> : <SamplePractice />;
 }
 function DailyPractice() {
+  const [previousPosition, setPreviousPosition] = useState<{ fen: string; flipped: boolean }>();
   const { api, practiceScope } = useSession();
   const practice = useMemo(
     () =>
@@ -62,7 +63,8 @@ function DailyPractice() {
   const redo = !!deck && !deck.card && missed.length > 0;
   const card = deck?.card ?? (redo ? missed[0] : null);
   const summary = practiceSummary(deck?.results ?? []);
-  function next() {
+  function next(position: { fen: string; flipped: boolean }) {
+    setPreviousPosition(position);
     if (redo && card) {
       void practice.complete(card).catch(() => {});
       setMissed([...practice.queue]);
@@ -72,10 +74,12 @@ function DailyPractice() {
       setRefresh((n) => n + 1);
     }
   }
-  if (!loading && !error && deck && card)
+  if (!error && deck && card)
     return (
       <PracticePosition
         api={api}
+        previousPosition={previousPosition}
+        advancing={loading}
         key={`${card.game_id}-${card.ply}-${redo ? "redo" : "first"}`}
         card={card}
         deck={deck}
@@ -120,6 +124,7 @@ function DailyPractice() {
       <View
         style={{
           flex: 1,
+          paddingHorizontal: 16,
           justifyContent: "center",
           alignItems: "center",
           gap: 16,
