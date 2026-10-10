@@ -247,6 +247,7 @@ class PuzzleAnswerIn(BaseModel):
 
 
 class AnswerIn(BaseModel):
+    expected_day: date | None = None  # opt-in guard for interrupted native answers
     game_id: int
     ply: int
     uci: str = Field(pattern=r"^([a-h][1-8][a-h][1-8][qrbn]?|0000)$")  # 0000: Show me / Skip
@@ -644,9 +645,11 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
         with write() as conn, conn:
             deck.sync(conn)
             patterns.tag_all(conn)
-            info = deck.stats(conn)
-            info["results"] = deck.today_results(conn)
-            nxt = deck.queue(conn)[:1]
+            today = date.today()
+            info = deck.stats(conn, today=today)
+            info["server_day"] = today.isoformat()
+            info["results"] = deck.today_results(conn, today=today)
+            nxt = deck.queue(conn, today=today)[:1]
         card = None
         if nxt:
             rows = query(
@@ -682,11 +685,14 @@ def create_app(database_url: str = db.DEFAULT_URL, static_dir: Path | None = Non
 
     @api.post("/api/deck/answer")
     def deck_answer(body: AnswerIn, response: Response):
+        today = date.today()
+        if body.expected_day is not None and body.expected_day != today:
+            raise HTTPException(409, "A new review day has started. Reopen this position before answering.")
         with timing.collect() as sample:
             try:
                 with timing.stage("answer_total"), write() as conn, conn:
                     result = timing.call("answer", deck.answer, conn, body.game_id, body.ply,
-                                         body.uci, hinted=body.hinted, redo=body.redo, seconds=body.seconds)
+                                         body.uci, hinted=body.hinted, redo=body.redo, seconds=body.seconds, today=today)
             except KeyError:
                 raise HTTPException(404, "No card for that position.") from None
             except deck.GradeUnavailable as error:

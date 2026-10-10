@@ -24,6 +24,7 @@ export type DeckCard = {
   feedback?: PracticeFeedback | null;
 };
 export type DeckToday = {
+  server_day: string;
   total: number;
   mastered: number;
   learning: number;
