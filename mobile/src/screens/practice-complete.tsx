@@ -3,10 +3,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
 import Svg, { Path } from "react-native-svg";
-import { Button, Card, Text } from "@/components/ui";
+import { Card, Text } from "@/components/ui";
 import { fonts, useTheme } from "@/lib/theme";
 import { completionSummary, revisitMoves, type CompletionResult } from "@/lib/practice-completion";
 import { CompletionEntrance, CompletionConfetti, completionDelays } from "@/components/completion-motion";
+import { BottomActions, BottomAction } from "@/components/bottom-actions";
 import { CompletionCount } from "@/components/completion-count";
 
 /** Web's completion page, with safe areas and overflow for compact phones/large text. */
@@ -21,9 +22,9 @@ export default function PracticeComplete({
   const { colors: c, isDark } = useTheme();
   const revisit = revisitMoves(results);
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: c.page }}>
+    <SafeAreaView edges={["top", "left", "right"]} style={{ flex: 1, backgroundColor: c.page }}>
       <StatusBar style={isDark ? "light" : "dark"} />
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scroll}>
         <View style={styles.content}>
           <View style={{ alignSelf: "center" }}>
             <CompletionConfetti />
@@ -61,7 +62,7 @@ export default function PracticeComplete({
                 ["Learning", stats.learning],
                 ["Not seen yet", stats.new],
               ] as const).map(([label, value], order) => <CompletionEntrance key={label} delay={completionDelays.stat(order)} style={{ flex: 1 }}>
-                <Card style={styles.stat}>
+                <Card containerStyle={{ flex: 1 }} style={styles.stat}>
                   <Text tone="muted" style={styles.label}>{label}</Text>
                   <CompletionCount value={value} delay={completionDelays.stat(order)} style={styles.value} />
                 </Card>
@@ -69,13 +70,15 @@ export default function PracticeComplete({
             </View>
             <Text tone="muted" style={styles.note}>Mastered: you&apos;re expected to still know it two months from now. It still comes back, just rarely.</Text>
           </> : <Text tone="muted" style={styles.note}>Sample positions · Your review progress is unchanged.</Text>}
-          <View style={[styles.actions, { borderTopColor: c.line }]}>
-            <Button variant="secondary" label={stats ? "See your deck" : "Practice again"}
-              onPress={stats ? () => router.dismissTo("/progress") : onRestart} />
-            <Button label="BACK HOME" onPress={() => router.dismissTo("/")} />
-          </View>
+
         </View>
       </ScrollView>
+      <BottomActions
+        secondary={stats
+          ? <BottomAction quiet label="See your deck" onPress={() => router.dismissTo("/progress")} />
+          : onRestart && <BottomAction quiet label="Practice again" onPress={onRestart} />}
+        primary={<BottomAction label="Back home" onPress={() => router.dismissTo("/")} />}
+      />
     </SafeAreaView>
   );
 }
@@ -93,8 +96,7 @@ const styles = StyleSheet.create({
   mark: { flex: 1, height: 14, borderRadius: 7 },
   revisit: { fontSize: 14, lineHeight: 20 },
   stats: { flexDirection: "row", gap: 16, alignItems: "stretch" },
-  stat: { minHeight: 108, height: "100%", padding: 16, gap: 8 },
+  stat: { minHeight: 108, flex: 1, padding: 16, gap: 8 },
   value: { fontSize: 30, lineHeight: 36, fontVariant: ["tabular-nums"] },
   note: { textAlign: "center", fontSize: 14, lineHeight: 20, marginTop: -8 },
-  actions: { borderTopWidth: 2, paddingTop: 20, flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 12 },
 });

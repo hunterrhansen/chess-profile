@@ -404,3 +404,21 @@ Practice geometry is independent of message length and puzzle content. Reserve
 fixed prompt/status/action regions; scroll excess wording inside its region.
 Only viewport, system text scale and safe-area changes may resize the board.
 Status entrances animate within their region; action controls stay anchored.
+
+## Mobile bottom actions
+
+Practice and completion use `mobile/src/components/bottom-actions.tsx` for a
+shared, pinned footer outside scrolling page content. The secondary action owns
+the left slot, and the forward/finish action owns the right; an absent secondary
+leaves its slot empty rather than resizing or moving the primary action. Both
+slots have equal width, an 8px gap, 16px screen margins and a 64px button band
+including the 4px ledge at default text size. Bottom spacing is the greater of
+16px or the device safe area. Font scaling expands the shared band consistently.
+Feedback scrolls above the actions; wording, outcomes and entrance animations
+never reposition buttons. Flip is a header utility, preserving two stable slots.
+Use `BottomAction` for the shared appearance; dialog triggers match its geometry,
+typography and press offset. `LessonBar` supplies verdict content to this footer.
+
+This follows the consistency-with-purpose principle described in
+[Duolingo's design-system account](https://blog.duolingo.com/core-tabs-redesign/).
+The sizes above are Knightly's choices, not published Duolingo measurements.

@@ -96,7 +96,6 @@ function DailyPractice() {
       total={deck?.today.total ?? 0}
       footer={
         <LessonBar
-          reservedHeight={160}
           detail={
             loading
               ? "Picking your due positions…"
@@ -104,8 +103,7 @@ function DailyPractice() {
                 ? "Couldn’t load your positions. Try again."
                 : "Your next review dates are saved to your account."
           }
-        >
-          {error ? (
+          primary={error ? (
             <LessonAction
               label="Try again"
               onPress={() => {
@@ -120,7 +118,7 @@ function DailyPractice() {
               onPress={() => router.dismissTo("/")}
             />
           )}
-        </LessonBar>
+        />
       }
     >
       <View

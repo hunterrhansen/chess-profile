@@ -105,10 +105,10 @@ export function Button({
     </View>
   );
 }
-export function Card({ style, ...props }: ViewProps) {
+export function Card({ style, containerStyle, ...props }: ViewProps & { containerStyle?: ViewProps["style"] }) {
   const { colors: c } = useTheme();
   return (
-    <View style={[styles.cardBase, { backgroundColor: c.lip }]}>
+    <View style={[styles.cardBase, { backgroundColor: c.lip }, containerStyle]}>
       <View
         {...props}
         style={[

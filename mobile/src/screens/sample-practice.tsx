@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Chess, type Square } from "chess.js";
-import { View, AccessibilityInfo, Platform } from "react-native";
+import { AccessibilityInfo, Platform } from "react-native";
 import { HelpDialog } from "@/components/help-dialog";
 import { Board } from "@/components/board";
 import {
@@ -150,7 +150,6 @@ export default function PracticePreview() {
   const footer = (
     <LessonBar
       feedbackKey={flash?.id}
-      reservedHeight={160}
       tone={correct ? "right" : shown ? "wrong" : wrong ? "retry" : "idle"}
       title={
         correct
@@ -176,49 +175,19 @@ export default function PracticePreview() {
                     : "The arrow shows the move. Play it."
                 : ""
       }
-    >
-      {answered ? (
-        <>
-          <View style={{ flex: 1 }}>
-            <HelpDialog textTrigger label="Why this move?" title="The idea" description={exercise.explanation} />
-          </View>
-          <LessonAction label="Continue" danger={shown} onPress={next} />
-        </>
+      secondary={answered ? (
+        <HelpDialog textTrigger label="Why this move?" title="The idea" description={exercise.explanation} />
       ) : (
-        <>
-          <LessonAction
-            quiet
-            glyph="hint"
-            label={
-              hints === 0
-                ? "Hint"
-                : hints === 1
-                  ? "Show piece"
-                  : hints === 2
-                    ? "Show move"
-                    : "Hint shown"
-            }
-            disabled={!!promotion || !hintReady || hints >= 3 || returning}
-            onPress={() => {
-              setHints((n) => n + 1);
-              setWrong(false);
-            }}
-          />
-          <LessonAction
-            quiet
-            label="Show me"
-            disabled={!!promotion || returning}
-            onPress={showMove}
-          />
-          <LessonAction
-            quiet
-            label="Flip"
-            disabled={!!promotion}
-            onPress={() => setFlipped(!flipped)}
-          />
-        </>
+        <LessonAction quiet glyph="hint" label={hints === 0 ? "Hint" : hints === 1 ? "Show piece" : hints === 2 ? "Show move" : "Hint shown"}
+          disabled={!!promotion || !hintReady || hints >= 3 || returning}
+          onPress={() => { setHints((n) => n + 1); setWrong(false); }} />
       )}
-    </LessonBar>
+      primary={answered ? (
+        <LessonAction label="Continue" danger={shown} onPress={next} />
+      ) : (
+        <LessonAction quiet label="Show me" disabled={!!promotion || returning} onPress={showMove} />
+      )}
+    />
   );
   if (done) return (
     <PracticeComplete
@@ -235,6 +204,8 @@ export default function PracticePreview() {
       title="Sample practice"
       done={index + (answered ? 1 : 0)}
       total={exercises.length}
+      onFlip={() => setFlipped(!flipped)}
+      flipDisabled={!!promotion}
       footer={footer}
     >
       <>

@@ -38,7 +38,7 @@ a 96px gold check medal on its solid ledge, centered title and first-attempt
 summary, a “Today, one by one” card with accessible result bars and the original
 game moves to revisit, and three equal-width Mastered / Learning / Not seen yet
 tiles. The FSRS explanation uses the current web wording. Filled green Back home
-and outlined See your deck actions follow a divider. Completion removes the
+and outlined See your deck actions occupy the pinned bottom slots. Completion removes the
 active lesson's exit/progress header. Theme colors come from the shared tokens.
 
 Completion scrolls within the safe area when result text, system text size or a
@@ -92,6 +92,34 @@ device; the Mac remained locked during verification. This pass adds visual motio
 the web completion fanfare is not included.
 Final mobile lint, typecheck, token consistency, 58 tests and iOS/web exports
 passed after the motion changes.
+
+### iOS simulator acceptance — October 10, 2026
+
+Verified in Expo Go on the iPhone 18 Pro simulator, iOS 27: the real three-position
+sample reaches completion, and a temporary local fixture exercises the full
+10-result screen with deck counts 0 / 12 / 812 in light and dark themes. No account
+results were written. The fixture and root-layout override were removed afterward.
+The real sample's Practice again resets to 0 of 3; Back home returns to Home.
+
+Native inspection caught two issues: percentage-height stat cards expanded within
+the ScrollView, and TextInput counters reset after unrelated React renders. Cards
+now stretch through their wrapper using flex, preserving equal heights and natural
+text sizing. Counters keep their settled fallback after the UI-thread animation
+finishes, with one JS update instead of a JS update on every frame.
+
+Observed the medal bounce, confetti burst and staggered card entrances. A temporary
+4-second counter diagnostic visibly progressed through intermediate values
+(including 4 / 236), then settled at 12 / 812; the production 400ms duration was
+restored. Hiding fixture controls after settlement preserves the final numbers.
+All content and both actions fit the simulator's full-height viewport.
+
+![Dark completion on the iPhone simulator, local fixture](img/practice-complete-ios.png)
+
+System Reduce Motion, VoiceOver, physical-device feel and release-build frame
+performance remain acceptance checks. Expo Go's floating gear is development UI.
+The earlier browser checks cover emulated Reduce Motion; this native check does
+not claim authenticated completion or deck-view parity.
+Mobile lint, typecheck and all 59 tests passed after these native fixes.
 
 ## Forgiving practice (decided Oct 7, replaces "one answer a day")
 
@@ -484,3 +512,40 @@ Browser measurements at 390×844 and 320×568 confirm both result buttons have
 and focus restoration remain functional.
 
 ![Matching result button heights](img/practice-matched-buttons-phone.png)
+
+## Shared bottom actions — October 10, 2026
+
+The bottom actions now keep the same size and location from solving through
+completion. `BottomActions` owns two equal-width slots, safe-area spacing,
+font-scale growth and the reserved feedback region. `LessonBar` supplies its
+verdict content; completion keeps its results in a separate ScrollView above the
+same footer. A missing secondary action leaves an empty left slot. Primary actions
+remain on the right, even for loading, empty and retry screens.
+
+Hint / Show me becomes Why this move? / Continue, then See your deck / Back home
+(or Practice again / Back home for the sample). Flip moved beside the practice
+header, with its promotion lock preserved. Default action-band height is 64px,
+including the 4px ledge; margins are 16px and the slot gap is 8px. Shared buttons
+and the explanation trigger allow system font scaling; the band grows with it.
+Animations affect content above the controls, preserving immediate access.
+The footer uses whitespace alone to separate actions from content; no divider.
+
+![Completion without a divider, browser phone viewport](img/practice-complete-no-divider-web.png)
+
+![Native practice with two stable action slots](img/practice-bottom-actions-ios.png)
+![Native verdict using the same action slots](img/practice-result-actions-ios.png)
+![Earlier native completion capture before divider removal](img/practice-complete-pinned-actions-ios.png)
+
+The iPhone 18 Pro simulator verified the real sample through Show me, Continue
+and completion. Browser measurements at 320×568 found identical primary button
+bounds in solving, verdict and completion: x=164, y=488, width=140, height=60
+(the 64px base includes its ledge). A local full-results fixture verified the
+same bounds with ten results and deck counts, then 175×60 at x=199, y=764 on a
+390×844 viewport. Content scrolls above the footer; the fixture was removed.
+System Dynamic Type, VoiceOver and physical-device ergonomics remain acceptance
+checks. Connected grading is unchanged; authenticated interaction was not tested.
+Browser interaction also verified header Flip changes board orientation and the
+explanation dialog opens/closes without moving Continue. Mobile lint, typecheck,
+all 59 tests and the web export passed after the shared-footer changes.
+
+![Earlier full completion capture before divider removal](img/practice-complete-pinned-actions-web.png)
