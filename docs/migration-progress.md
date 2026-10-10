@@ -1,5 +1,18 @@
 # Mobile migration progress and next steps
 
+**Current inventory:** see [the October 10 parity audit](mobile-parity-audit.md)
+for source-verified coverage and ranked delivery slices at `631ba88`. The sections
+below preserve earlier milestones and contain historical route counts/gaps.
+
+**Latest slice, October 10:** read-only game replay is now implemented. Game rows
+open All moves with SAN replay, orientation/flip, last-move highlights, selected
+move navigation and pinned start/back/forward/end controls. Unanalysed games work;
+loading, invalid/empty/corrupt games and retry have explicit states. See the
+[review spec and current picture](screens/review.md#mobile-read-only-replay--october-10-2026).
+Guided review, completion marks, clocks/evaluation graphs and variations are next.
+Browser/sample/fixture checks, 71 mobile tests, lint, types, tokens and iOS/web
+exports passed; native interaction was blocked by a locked Mac.
+
 Initial audit: October 9, 2026, commit `13c6111`. Historical sections below
 record earlier slices; the latest status is this Practice follow-up.
 

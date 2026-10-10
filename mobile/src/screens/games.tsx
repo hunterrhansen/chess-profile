@@ -29,7 +29,7 @@ export default function Games() {
         onPress={() => router.push("/welcome")}
       />
       <Button
-        label="Explore review screens"
+        label="Try sample replay"
         variant="secondary"
         onPress={() => router.push("/games/preview")}
       />
@@ -80,7 +80,7 @@ function ConnectedGames() {
               Your games
             </Text>
             <Text tone="muted">
-              {total} imported games. Native game review is coming next.
+              {total} imported games. Open a game to replay its moves.
             </Text>
           </View>
         }
@@ -101,7 +101,7 @@ function ConnectedGames() {
                 : "Awaiting analysis"}
             </Text>
             <Button
-              label="Review game"
+              label="Open game"
               variant="secondary"
               onPress={() =>
                 router.push({

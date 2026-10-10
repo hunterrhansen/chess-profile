@@ -29,3 +29,14 @@ The library of every game, and the way into a review.
 - **New:** quick filters with To review first; badges per game; review status per game.
 - **To review** = analysed, not reviewed, played in the last 7 days. Finish review sets the
   game's reviewed flag.
+
+
+## Mobile replay entry — October 10, 2026
+
+The mobile connected list remains paginated, with an **Open game** button per row
+opening read-only All moves replay. Its header now describes this action.
+Unconfigured Games offers **Try sample replay**, explicitly using a sample game.
+Returning via replay's Games button selects the Games tab. See
+[the replay specification and picture](review.md#mobile-read-only-replay--october-10-2026).
+Search, filters, grouping and connected list-return position verification remain
+follow-up work.

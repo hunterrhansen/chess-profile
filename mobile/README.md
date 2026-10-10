@@ -19,11 +19,12 @@ support consolidation; platform services and phone/desktop shells can differ.
 The four bottom tabs are Home, Games, Play and Progress. The top-bar gear opens
 Settings as a separate stack screen. Home launches
 Practice; Practice, Puzzles and game review run outside the tabs. Settings opens
-the Welcome → Link Account → Import Progress preview. Game review has separate
-All Moves and Review Complete placeholders.
+the Welcome → Link Account → Import Progress preview. Game routes now open read-only All Moves replay; guided review and Review Complete
+remain unfinished.
 
 Without a hosted API URL, Home offers sample practice and Games offers a review
-preview. Home uses an explicitly labeled design-preview unit and sample positions.
+preview. Home uses an explicitly labeled design-preview unit and sample positions. Games offers
+an explicitly labeled sample replay.
 With a configured server, Home reads the existing `/api/home` learning-path contract;
 sign-in and the existing real practice and
 games list remain active. Placeholder actions do not import games or save reviews.
@@ -90,8 +91,10 @@ Connected screens:
 - Practice: server cards, answers, tactic/piece/move hints, Show me, next review dates,
   promotion selection, durable ungraded end-of-session retries and hints, and the
   daily summary. Local state is scoped by server/user/day; only the server grades.
-- Games: paginated imported-game list. Full game review and importing/analysing
-  games remain on the web while those screens are migrated.
+- Games: paginated imported-game list with Open game actions. Game replay reads
+  `/api/games/{id}` and supports initial/previous/next/final positions, move selection,
+  flipping and last-move highlights, including unanalysed games. Guided game review
+  and importing/analysing games remain on the web while those flows are migrated.
 
 Failed requests show errors and retry controls. They do not silently switch to
 sample data. A sign-in rejection requires signing in again (or correcting server
